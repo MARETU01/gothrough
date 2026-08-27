@@ -1,4 +1,5 @@
 import { Routes, Route, Link } from 'react-router-dom';
+import './Navigation.css';
 import HomePage from '../pages/Home/HomePage.tsx';
 import UploadPage from '../pages/Upload/UploadPage.tsx';
 
