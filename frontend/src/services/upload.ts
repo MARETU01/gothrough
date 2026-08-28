@@ -1,10 +1,10 @@
 import axios, { isAxiosError } from 'axios';
-import api from './api';
+import api from './http';
 
 /**
  * 大文件分块上传相关接口。
  *
- * 统一复用 src/api/api.ts 中封装的 axios 实例：
+ * 统一复用 src/services/http.ts 中封装的 axios 实例：
  *   - baseURL: '/api'  → 实际请求 /api/upload/init、/api/upload/chunk、
  *                        /api/upload/complete、/api/upload/cancel
  *   - 响应拦截器已取出 data，所以这里用 post<T, T> 让返回值直接是业务数据

@@ -1,17 +1,14 @@
 import { BrowserRouter as Router } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Navigation, AppRoutes } from './router/Routes';
+import { AppRoutes } from './router';
 
-// 主应用包装器
+// 主应用包装器：<div className="app"> + 导航 已移入 RootLayout（布局路由模式）
 const App: React.FC = () => {
   return (
     <Router>
       <TooltipProvider>
-        <div className="app">
-          <Navigation />
-          <AppRoutes />
-        </div>
+        <AppRoutes />
         <Toaster />
       </TooltipProvider>
     </Router>
@@ -19,3 +16,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
