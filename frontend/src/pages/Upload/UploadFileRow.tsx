@@ -23,11 +23,11 @@ export const UploadFileRow = memo(function UploadFileRow({ item, retryDisabled, 
           <div className="file-name" title={item.file.name}>{item.file.name}</div>
           <div className="file-size">{formatSize(item.file.size)}</div>
         </div>
-        <button type="button" className="remove-btn" disabled={item.state === 'canceling'} onClick={() => onRemove(key)}>移除</button>
+        <button type="button" className="remove-btn" aria-label={`移除 ${item.file.name}`} disabled={item.state === 'canceling'} onClick={() => onRemove(key)}>移除</button>
       </div>
       {item.error && <p className="file-error" role="alert">{item.error}</p>}
       {item.state === 'error' && (
-        <button type="button" className="retry-btn" disabled={retryDisabled} onClick={() => void onRetry(key)}>重试此文件</button>
+        <button type="button" className="retry-btn" aria-label={`重试 ${item.file.name}`} disabled={retryDisabled} onClick={() => void onRetry(key)}>重试此文件</button>
       )}
       <div className="file-status">
         <span>{STATE_LABELS[item.state]}</span>
@@ -35,7 +35,7 @@ export const UploadFileRow = memo(function UploadFileRow({ item, retryDisabled, 
         {eta && <span className="eta">剩余 {eta}</span>}
         {item.session && <span className="chunks">分块 {item.session.receivedChunks}/{item.session.totalChunks}</span>}
       </div>
-      <div className="progress-bar">
+      <div className="progress-bar" role="progressbar" aria-label={`${item.file.name} 传输进度`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${progress}%，${STATE_LABELS[item.state]}`}>
         <div className="progress" style={{ width: `${progress}%` }} />
       </div>
       <div className="progress-text">

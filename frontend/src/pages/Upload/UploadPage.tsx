@@ -32,49 +32,51 @@ const UploadPage: React.FC = () => {
   } = useUploadQueue();
 
   useEffect(() => {
+    const previousTitle = document.title;
     document.title = '文件上传 - 分块上传';
+    return () => { document.title = previousTitle; };
   }, []);
 
   return (
-    <div className="upload-page">
+    <main className="upload-page">
       <div className="container">
         <h1>文件上传</h1>
         <p className="subtitle">支持大文件分块上传，可在当前页面暂停和恢复</p>
 
         <div className="nav-links">
-          <a href="/uploads">📦 查看 / 下载已上传文件</a>
+          <span className="unavailable-link">📦 文件列表暂未开放</span>
         </div>
 
         <div
           className={`upload-area${dragOver ? ' dragover' : ''}`}
-          onClick={openFilePicker}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
           }}
-          onDragLeave={() => setDragOver(false)}
+          onDragLeave={(e) => {
+            if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+          }}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
             if (e.dataTransfer.files.length) handleSelection(e.dataTransfer.files);
           }}
         >
-          <div className="upload-icon">📁</div>
-          <p className="upload-text">拖放文件到此处或点击浏览</p>
           <button
             type="button"
-            className="browse-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              openFilePicker();
-            }}
+            className="upload-trigger"
+            onClick={openFilePicker}
+            aria-label="选择要上传的文件，支持多选"
           >
-            选择文件
+            <span className="upload-icon" aria-hidden="true">📁</span>
+            <span className="upload-text">拖放文件到此处或点击浏览</span>
+            <span className="browse-btn">选择文件</span>
           </button>
           <input
             ref={fileInputRef}
             type="file"
             name="files"
+            aria-label="上传文件"
             multiple
             onChange={(e) => {
               const files = e.target.files;
@@ -96,7 +98,9 @@ const UploadPage: React.FC = () => {
         </div>
 
 
-        {status && <div className={`status-message ${status.type}`}>{status.text}</div>}
+        <div role="status" aria-live="polite" aria-atomic="true">
+          {status && <div className={`status-message ${status.type}`}>{status.text}</div>}
+        </div>
         <div className="button-container">
           {items.length > 0 &&
             (activeCount > 0 ? (
@@ -137,7 +141,7 @@ const UploadPage: React.FC = () => {
         )}
 
       </div>
-    </div>
+    </main>
   );
 };
 

@@ -1,5 +1,5 @@
-.home-page {
-  min-height: 100vh;
+﻿.home-page {
+  flex: 1;
   background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }

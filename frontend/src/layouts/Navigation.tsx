@@ -1,17 +1,17 @@
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import './Navigation.css';
 
 // 顶部导航组件
 export const Navigation: React.FC = () => {
   return (
-    <nav className="navigation">
+    <nav className="navigation" aria-label="主导航">
       <div className="nav-container">
-        <a href="/" className="nav-link">
+        <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           主页
-        </a>
-        <Link to="/upload" className="nav-link">
+        </NavLink>
+        <NavLink to="/upload" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           文件上传
-        </Link>
+        </NavLink>
       </div>
     </nav>
   );

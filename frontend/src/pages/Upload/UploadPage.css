@@ -1,6 +1,7 @@
-.upload-page {
+﻿.upload-page {
   background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
-  min-height: 100vh;
+  min-height: 0;
+  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -365,5 +366,36 @@
     flex-direction: column;
     gap: 8px;
   }
+}
+
+
+/* Whole drop area is a native button so Enter and Space work without custom handlers. */
+.upload-page .upload-area { padding: 0; }
+.upload-page .upload-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 32px 16px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.upload-page .file-status { flex-wrap: wrap; color: #546e6a; }
+.upload-page .file-status .chunks { color: #546e6a; }
+.upload-page .progress-text { gap: 12px; }
+.upload-page .progress-text > :first-child { flex-shrink: 0; }
+.upload-page .progress-text > :last-child { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.upload-page .file-error { color: #9d2020; overflow-wrap: anywhere; margin: 8px 0; }
+.upload-page .retry-btn { padding: 6px 12px; border: 1px solid #00796b; border-radius: 6px; color: #00695c; background: white; cursor: pointer; }
+.upload-page .unavailable-link { color: #546e6a; font-size: 14px; }
+.upload-page .empty-hint { color: #546e6a; }
+.upload-page .file-row.canceling { opacity: 0.7; }
+
+@media (max-width: 600px) {
+  .upload-page { padding: 12px; }
+  .upload-page .container { padding: 20px 14px; }
+  .upload-page .subtitle { font-size: 14px; }
 }
 

@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Link } from 'react-router-dom';
 import { RootLayout } from './layouts/RootLayout';
 import HomePage from './pages/Home/HomePage';
 import UploadPage from './pages/Upload/UploadPage';
@@ -10,6 +10,7 @@ export const AppRoutes: React.FC = () => {
       <Route element={<RootLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/upload" element={<UploadPage />} />
+        <Route path="*" element={<main className="not-found"><h1>页面不存在</h1><Link to="/">返回主页</Link></main>} />
       </Route>
     </Routes>
   );
