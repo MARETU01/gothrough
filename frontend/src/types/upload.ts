@@ -4,7 +4,7 @@
  */
 
 /** 单个文件的上传状态机 */
-export type UploadState = 'pending' | 'uploading' | 'paused' | 'success' | 'error';
+export type UploadState = 'pending' | 'initializing' | 'uploading' | 'paused' | 'completing' | 'canceling' | 'success' | 'error';
 
 /** 服务端初始化会话后的本地会话快照 */
 export interface UploadSession {
@@ -26,6 +26,7 @@ export interface UploadController {
 
 /** 队列中的单个上传项（itemsRef / items 数组元素） */
 export interface UploadItem {
+  error: string;
   file: File;
   state: UploadState;
   session: UploadSession | null;
@@ -51,6 +52,9 @@ export interface StatusMessage {
 /** 状态对应的中文标签（供 UI 直接渲染） */
 export const STATE_LABELS: Record<UploadState, string> = {
   pending: '⏳ 待上传',
+  initializing: '正在准备上传',
+  completing: '正在合并文件',
+  canceling: '正在取消',
   uploading: '📤 上传中',
   paused: '⏸ 已暂停',
   success: '✅ 上传成功',

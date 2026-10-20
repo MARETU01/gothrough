@@ -17,6 +17,9 @@ const UploadPage: React.FC = () => {
     errorCount,
     successCount,
     activeCount,
+    running,
+    canceling,
+    retryItem,
     fileInputRef,
     startAllUploads,
     pauseAll,
@@ -36,7 +39,7 @@ const UploadPage: React.FC = () => {
     <div className="upload-page">
       <div className="container">
         <h1>文件上传</h1>
-        <p className="subtitle">支持大文件分块上传，可暂停/恢复，断点续传</p>
+        <p className="subtitle">支持大文件分块上传，可在当前页面暂停和恢复</p>
 
         <div className="nav-links">
           <a href="/uploads">📦 查看 / 下载已上传文件</a>
@@ -89,7 +92,7 @@ const UploadPage: React.FC = () => {
             items.map((item, index) => {
               const session = item.session;
               // 字节级进度：服务端已确认的分块 + 正在传输分块的实时已发送字节
-              const progress = item.file.size
+              const progress = item.state === 'success' ? 100 : item.file.size
                 ? Math.min(100, Math.round((item.loadedBytes / item.file.size) * 100))
                 : 0;
               const speedText = item.speed ? formatSpeed(item.speed) : '';
@@ -108,12 +111,16 @@ const UploadPage: React.FC = () => {
                     <button
                       type="button"
                       className="remove-btn"
-                      disabled={item.state === 'uploading'}
+                      disabled={item.state === 'canceling'}
                       onClick={() => removeItem(index)}
                     >
                       移除
                     </button>
                   </div>
+                  {item.error && <p className="file-error" role="alert">{item.error}</p>}
+                  {item.state === 'error' && (
+                    <button type="button" disabled={running} onClick={() => retryItem(getFileKey(item.file))}>重试此文件</button>
+                  )}
                   <div className="file-status">
                     <span>{STATE_LABELS[item.state] || ''}</span>
                     {speedText && <span className="speed">{speedText}</span>}
@@ -143,7 +150,7 @@ const UploadPage: React.FC = () => {
           {items.length > 0 &&
             (activeCount > 0 ? (
               <>
-                {globalPaused ? (
+                {canceling ? <span role="status">正在取消，请稍候…</span> : globalPaused ? (
                   <button type="button" className="resume-btn" onClick={resumeAll}>
                     ▶ 全部恢复
                   </button>
@@ -152,7 +159,7 @@ const UploadPage: React.FC = () => {
                     ⏸ 全部暂停
                   </button>
                 )}
-                <button type="button" className="cancel-btn" onClick={cancelAll}>
+                <button type="button" className="cancel-btn" disabled={canceling} onClick={cancelAll}>
                   ✖ 取消全部
                 </button>
               </>

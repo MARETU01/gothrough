@@ -14,6 +14,7 @@ export const useUploadQueue = () => {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [globalPaused, setGlobalPausedState] = useState(false);
   const [running, setRunning] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const refreshFileList = useCallback(() => {
@@ -63,7 +64,7 @@ export const useUploadQueue = () => {
     Array.from(files).forEach((file) => {
       const key = getFileKey(file);
       if (keys.has(key)) return;
-      itemsRef.current.push({ file, state: 'pending', session: null, speed: 0, savedFilename: '', uploadController: null, inflightBytes: new Map(), confirmedBytes: new Map(), transferredBytes: 0, loadedBytes: 0 });
+      itemsRef.current.push({ file, state: 'pending', error: '', session: null, speed: 0, savedFilename: '', uploadController: null, inflightBytes: new Map(), confirmedBytes: new Map(), transferredBytes: 0, loadedBytes: 0 });
       keys.add(key);
     });
     refreshFileList();
@@ -82,13 +83,16 @@ export const useUploadQueue = () => {
       }
       item.state = 'uploading'; refreshFileList();
     };
-    item.state = 'uploading'; item.speed = 0; item.session = null;
+    item.state = 'initializing'; item.error = ''; item.speed = 0; item.session = null; item.savedFilename = '';
     item.inflightBytes.clear(); item.confirmedBytes.clear(); item.transferredBytes = 0; item.loadedBytes = 0; refreshFileList();
     try {
       // Observe late initialization responses so cancelled sessions can be cleaned up.
       const data = await initUpload({ filename: item.file.name, total_size: item.file.size });
       const session = { sessionId: data.session_id, totalChunks: data.total_chunks, chunkSize: data.chunk_size || CHUNK_SIZE, totalSize: item.file.size, receivedChunks: 0, finalFilename: data.final_filename };
       item.session = session; item.savedFilename = data.final_filename; checkActive();
+      if (!session.sessionId || !Number.isInteger(session.totalChunks) || session.totalChunks < 0 || !Number.isFinite(session.chunkSize) || session.chunkSize <= 0 || session.totalChunks !== Math.ceil(item.file.size / session.chunkSize)) {
+        throw new Error('服务端返回的分块配置无效');
+      }
       let chunkIndex = 0;
       let lastPaint = 0;
       let failure: unknown;
@@ -132,6 +136,7 @@ export const useUploadQueue = () => {
       await Promise.allSettled(Array.from({ length: MAX_CONCURRENT_UPLOADS }, worker));
       if (failure !== undefined) throw failure;
       checkActive(); await waitForResume();
+      item.state = 'completing'; item.speed = 0; refreshFileList();
       const complete = await completeUpload(session.sessionId, controller.abort.signal);
       checkActive(); item.state = 'success';
       item.savedFilename = complete.saved_filename || item.savedFilename;
@@ -144,13 +149,14 @@ export const useUploadQueue = () => {
         item.state = 'error';
         const body = getErrorBody<{ error?: string; missing_chunks?: number[] }>(err);
         const message = body?.missing_chunks ? `缺少 ${body.missing_chunks.length} 个分块` : body?.error ?? errorMessage(err);
+        item.error = message;
         if (mountedRef.current) setStatus({ text: `上传失败: ${item.file.name} - ${message}`, type: 'error' });
       }
     } finally { item.speed = 0; item.uploadController = null; refreshFileList(); }
   };
-  const startAllUploads = async () => {
+  const startUploads = async (fileKey?: string) => {
     if (runRef.current) return;
-    const pending = itemsRef.current.filter((i) => i.state === 'pending' || i.state === 'error');
+    const pending = itemsRef.current.filter((i) => (i.state === 'pending' || i.state === 'error') && (fileKey === undefined || getFileKey(i.file) === fileKey));
     if (!pending.length) return;
     const run = { cancelled: false }; runRef.current = run;
     setRunning(true); setGlobalPaused(false); setStatus(null);
@@ -166,7 +172,8 @@ export const useUploadQueue = () => {
     try { await Promise.allSettled(Array.from({ length: MAX_CONCURRENT_FILES }, worker)); }
     finally {
       if (runRef.current === run) runRef.current = null;
-      if (mountedRef.current) setRunning(false);
+      if (mountedRef.current) { setRunning(false); setCanceling(false); }
+      if (mountedRef.current && run.cancelled) setStatus({ text: '上传已取消', type: 'success' });
     }
   };
   const pauseAll = () => {
@@ -180,8 +187,12 @@ export const useUploadQueue = () => {
     refreshFileList();
   };
   const cancelAll = () => {
+    setCanceling(true);
     if (runRef.current) runRef.current.cancelled = true;
-    itemsRef.current.forEach(stopItem); setGlobalPaused(false);
+    itemsRef.current.forEach((item) => {
+      stopItem(item);
+      if (item.uploadController) { item.state = 'canceling'; item.speed = 0; }
+    }); setGlobalPaused(false);
     setStatus({ text: '已取消队列，正在结束当前请求', type: 'success' }); refreshFileList();
   };
   const resetAll = () => {
@@ -199,5 +210,5 @@ export const useUploadQueue = () => {
   const successCount = items.filter((i) => i.state === 'success').length;
   const errorCount = items.filter((i) => i.state === 'error').length;
   const totalSpeed = globalPaused ? 0 : items.filter((i) => i.state === 'uploading').reduce((sum, i) => sum + i.speed, 0);
-  return { items, globalPaused, running, dragOver, setDragOver, status, totalSpeed, pendingCount, uploadingCount, pausedCount, successCount, errorCount, activeCount: running ? Math.max(1, uploadingCount + pausedCount) : 0, hasUploading, fileInputRef, startAllUploads, pauseAll, resumeAll, cancelAll, resetAll, removeItem, handleSelection, openFilePicker: () => fileInputRef.current?.click() };
+  return { items, globalPaused, running, canceling, dragOver, setDragOver, status, totalSpeed, pendingCount, uploadingCount, pausedCount, successCount, errorCount, activeCount: running ? Math.max(1, uploadingCount + pausedCount) : 0, hasUploading, fileInputRef, startAllUploads: () => startUploads(), retryItem: (fileKey: string) => startUploads(fileKey), pauseAll, resumeAll, cancelAll, resetAll, removeItem, handleSelection, openFilePicker: () => fileInputRef.current?.click() };
 };

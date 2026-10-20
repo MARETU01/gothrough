@@ -30,6 +30,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('upload queue lifecycle', () => {
+  it('shows preparation and merge phases, including successful empty files', async () => {
+    const init = deferred<ReturnType<typeof session>>();
+    const complete = deferred<{ saved_filename: string }>();
+    vi.mocked(initUpload).mockReturnValue(init.promise);
+    vi.mocked(completeUpload).mockReturnValue(complete.promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1, 0);
+    let run!: Promise<void>;
+    act(() => { run = hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0].state).toBe('initializing');
+    await act(async () => { init.resolve(session('empty', 0)); });
+    expect(hook.result.current.items[0].state).toBe('completing');
+    await act(async () => { complete.resolve({ saved_filename: 'empty' }); await run; });
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(uploadChunk).not.toHaveBeenCalled();
+  });
+
+  it('keeps a file-specific error and retries only the selected file', async () => {
+    vi.mocked(initUpload).mockRejectedValue(new Error('offline'));
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 2);
+    await act(async () => { await hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items.every((item) => item.error === 'offline')).toBe(true);
+    vi.mocked(initUpload).mockResolvedValue(session());
+    const file = hook.result.current.items[0].file;
+    await act(async () => { await hook.result.current.retryItem(`${file.name}-${file.size}-${file.lastModified}`); });
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(hook.result.current.items[0].error).toBe('');
+    expect(hook.result.current.items[1].state).toBe('error');
+  });
   it('cleans up late initialization and never starts the next files after cancel', async () => {
     const init = deferred<ReturnType<typeof session>>();
     vi.mocked(initUpload).mockReturnValue(init.promise);

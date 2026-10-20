@@ -3,7 +3,7 @@ import { recalcLoadedBytes } from './upload';
 import type { UploadItem } from '@/types/upload';
 
 const itemFor = (): UploadItem => ({
-  file: new File(['123456789012'], 'test'), state: 'uploading',
+  file: new File(['123456789012'], 'test'), state: 'uploading', error: '',
   session: { sessionId: 'test', totalChunks: 3, chunkSize: 5, totalSize: 12, receivedChunks: 0, finalFilename: 'test' },
   speed: 0, savedFilename: '', uploadController: null, loadedBytes: 0,
   inflightBytes: new Map(), confirmedBytes: new Map(), transferredBytes: 0,
