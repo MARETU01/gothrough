@@ -96,10 +96,10 @@ export function uploadChunk({
 }
 
 /** 合并分块、完成上传：POST /api/upload/complete */
-export function completeUpload(sessionId: string) {
+export function completeUpload(sessionId: string, signal?: AbortSignal) {
   return api.post<CompleteUploadResponse, CompleteUploadResponse>(UPLOAD_ENDPOINTS.complete, {
     session_id: sessionId,
-  });
+  }, { signal });
 }
 
 /** 放弃上传、清理服务端会话：POST /api/upload/cancel */

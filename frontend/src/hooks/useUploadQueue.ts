@@ -1,364 +1,194 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  cancelUpload,
-  completeUpload,
-  getErrorBody,
-  initUpload,
-  isCanceledError,
-  uploadChunk,
-  type CompleteUploadResponse,
-  type InitUploadResponse,
-  type UploadChunkResponse,
-} from '@/services/upload';
-import {
-  type StatusMessage,
-  type UploadController,
-  type UploadItem,
-  type UploadSession,
-} from '@/types/upload';
-import {
-  CHUNK_SIZE,
-  MAX_CONCURRENT_FILES,
-  MAX_CONCURRENT_UPLOADS,
-  PROGRESS_REFRESH_INTERVAL,
-} from '@/config/upload';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { cancelUpload, completeUpload, getErrorBody, initUpload, isCanceledError, uploadChunk } from '@/services/upload';
+import type { UploadController, UploadItem, StatusMessage } from '@/types/upload';
+import { CHUNK_SIZE, MAX_CONCURRENT_FILES, MAX_CONCURRENT_UPLOADS, PROGRESS_REFRESH_INTERVAL } from '@/config/upload';
 import { getFileKey, recalcLoadedBytes } from '@/utils/upload';
 import { errorMessage, sleep } from '@/utils/misc';
 
-/**
- * 分块上传队列 hook：封装文件选择、并发分块上传、暂停 / 恢复 / 取消、
- * 速度与进度计算等全部逻辑。页面组件只需消费返回值做渲染。
- */
 export const useUploadQueue = () => {
-  // 上传队列：异步 worker 直接修改 itemsRef 中的元素，
-  // 修改后调用 refreshFileList() 把队列快照同步到 state 触发重绘
   const itemsRef = useRef<UploadItem[]>([]);
-  const globalPausedRef = useRef(false); // worker 循环内实时读取
+  const globalPausedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const runRef = useRef<{ cancelled: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [items, setItems] = useState<UploadItem[]>([]);
   const [globalPaused, setGlobalPausedState] = useState(false);
+  const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [totalSpeed, setTotalSpeed] = useState(0);
-
-  const refreshFileList = useCallback(() => setItems([...itemsRef.current]), []);
-
-  const setGlobalPaused = useCallback((paused: boolean) => {
+  const [sampledSpeed, setTotalSpeed] = useState(0);
+  const refreshFileList = useCallback(() => {
+    if (mountedRef.current) setItems([...itemsRef.current]);
+  }, []);
+  const setGlobalPaused = (paused: boolean) => {
     globalPausedRef.current = paused;
-    setGlobalPausedState(paused);
+    if (mountedRef.current) setGlobalPausedState(paused);
+  };
+  const cleanupSession = async (item: UploadItem) => {
+    if (!item.session) return;
+    try { await cancelUpload(item.session.sessionId); } catch { /* Server must expire abandoned sessions too. */ }
+  };
+  const stopItem = (item: UploadItem) => {
+    if (item.uploadController) {
+      item.uploadController.cancelled = true;
+      item.uploadController.abort.abort();
+    }
+  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (runRef.current) runRef.current.cancelled = true;
+      itemsRef.current.forEach(stopItem);
+    };
   }, []);
-
-  const showStatus = useCallback((message: string, type: 'success' | 'error') => {
-    setStatus({ text: message, type });
-  }, []);
-
+  const hasUploading = items.some((i) => i.state === 'uploading');
+  useEffect(() => {
+    if (!hasUploading) return;
+    const timer = setInterval(() => {
+      setTotalSpeed(itemsRef.current.filter((i) => i.state === 'uploading').reduce((sum, i) => sum + i.speed, 0));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [hasUploading]);
+  const handleSelection = (files: FileList) => {
+    const keys = new Set(itemsRef.current.map((i) => getFileKey(i.file)));
+    Array.from(files).forEach((file) => {
+      const key = getFileKey(file);
+      if (keys.has(key)) return;
+      itemsRef.current.push({ file, state: 'pending', session: null, speed: 0, savedFilename: '', uploadController: null, inflightBytes: new Map(), loadedBytes: 0 });
+      keys.add(key);
+    });
+    refreshFileList();
+    setStatus(null);
+  };
+  const uploadFileChunked = async (item: UploadItem, run: { cancelled: boolean }) => {
+    const controller: UploadController = { paused: false, cancelled: false, abort: new AbortController() };
+    item.uploadController = controller;
+    const isStopped = () => run.cancelled || controller.cancelled || !mountedRef.current || !itemsRef.current.includes(item);
+    const checkActive = () => { if (isStopped() || controller.abort.signal.aborted) throw new Error('Upload cancelled'); };
+    const waitForResume = async () => {
+      checkActive();
+      while (globalPausedRef.current || controller.paused) {
+        item.state = 'paused'; item.speed = 0; refreshFileList();
+        await sleep(100); checkActive();
+      }
+      item.state = 'uploading'; refreshFileList();
+    };
+    item.state = 'uploading'; item.speed = 0; item.session = null;
+    item.inflightBytes.clear(); item.loadedBytes = 0; refreshFileList();
+    try {
+      // Observe late initialization responses so cancelled sessions can be cleaned up.
+      const data = await initUpload({ filename: item.file.name, total_size: item.file.size });
+      const session = { sessionId: data.session_id, totalChunks: data.total_chunks, chunkSize: data.chunk_size || CHUNK_SIZE, totalSize: item.file.size, receivedChunks: 0, finalFilename: data.final_filename };
+      item.session = session; item.savedFilename = data.final_filename; checkActive();
+      let chunkIndex = 0;
+      let lastPaint = 0;
+      const speedSamples: number[] = [];
+      let failure: unknown;
+      const worker = async () => {
+        try {
+          while (chunkIndex < session.totalChunks) {
+            await waitForResume(); checkActive();
+            if (chunkIndex >= session.totalChunks) return;
+            const index = chunkIndex++;
+            const chunk = item.file.slice(index * session.chunkSize, Math.min((index + 1) * session.chunkSize, item.file.size));
+            const started = Date.now();
+            const send = () => uploadChunk({ sessionId: session.sessionId, chunkIndex: index, chunk, signal: controller.abort.signal, onProgress: (loaded) => {
+              if (isStopped() || controller.abort.signal.aborted) return;
+              item.inflightBytes.set(index, Math.min(loaded, chunk.size)); recalcLoadedBytes(item);
+              if (Date.now() - lastPaint >= PROGRESS_REFRESH_INTERVAL) { lastPaint = Date.now(); refreshFileList(); }
+            } });
+            let result;
+            try { result = await send(); } catch (err) {
+              if (isStopped() || isCanceledError(err) || controller.abort.signal.aborted) throw err;
+              item.inflightBytes.delete(index); await waitForResume(); result = await send();
+            }
+            checkActive();
+            if (controller.abort.signal.aborted) return;
+            item.inflightBytes.delete(index); session.receivedChunks = result.received;
+            const elapsed = Date.now() - started;
+            if (elapsed > 0) {
+              speedSamples.push(chunk.size / (elapsed / 1000));
+              if (speedSamples.length > 10) speedSamples.shift();
+              item.speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
+            }
+            recalcLoadedBytes(item); refreshFileList();
+          }
+        } catch (err) {
+          if (failure === undefined) failure = err;
+          controller.abort.abort(); throw err;
+        }
+      };
+      // A file slot is released only after every worker has stopped.
+      await Promise.allSettled(Array.from({ length: MAX_CONCURRENT_UPLOADS }, worker));
+      if (failure !== undefined) throw failure;
+      checkActive(); await waitForResume();
+      const complete = await completeUpload(session.sessionId, controller.abort.signal);
+      checkActive(); item.state = 'success';
+      item.savedFilename = complete.saved_filename || item.savedFilename;
+      item.inflightBytes.clear(); recalcLoadedBytes(item);
+    } catch (err) {
+      await cleanupSession(item);
+      item.session = null; item.inflightBytes.clear(); item.loadedBytes = 0;
+      if (isStopped()) item.state = 'pending';
+      else {
+        item.state = 'error';
+        const body = getErrorBody<{ error?: string; missing_chunks?: number[] }>(err);
+        const message = body?.missing_chunks ? `缺少 ${body.missing_chunks.length} 个分块` : body?.error ?? errorMessage(err);
+        if (mountedRef.current) setStatus({ text: `上传失败: ${item.file.name} - ${message}`, type: 'error' });
+      }
+    } finally { item.speed = 0; item.uploadController = null; refreshFileList(); }
+  };
+  const startAllUploads = async () => {
+    if (runRef.current) return;
+    const pending = itemsRef.current.filter((i) => i.state === 'pending' || i.state === 'error');
+    if (!pending.length) return;
+    const run = { cancelled: false }; runRef.current = run;
+    setRunning(true); setGlobalPaused(false); setStatus(null);
+    let next = 0;
+    const worker = async () => {
+      while (!run.cancelled && mountedRef.current && next < pending.length) {
+        if (globalPausedRef.current) { await sleep(100); continue; }
+        const item = pending[next++];
+        if (!itemsRef.current.includes(item)) continue;
+        await uploadFileChunked(item, run);
+      }
+    };
+    try { await Promise.allSettled(Array.from({ length: MAX_CONCURRENT_FILES }, worker)); }
+    finally {
+      if (runRef.current === run) runRef.current = null;
+      if (mountedRef.current) setRunning(false);
+    }
+  };
+  const pauseAll = () => {
+    setGlobalPaused(true);
+    itemsRef.current.forEach((i) => { if (i.uploadController) { i.uploadController.paused = true; i.speed = 0; } });
+    refreshFileList();
+  };
+  const resumeAll = () => {
+    setGlobalPaused(false);
+    itemsRef.current.forEach((i) => { if (i.uploadController) i.uploadController.paused = false; });
+    refreshFileList();
+  };
+  const cancelAll = () => {
+    if (runRef.current) runRef.current.cancelled = true;
+    itemsRef.current.forEach(stopItem); setGlobalPaused(false);
+    setStatus({ text: '已取消队列，正在结束当前请求', type: 'success' }); refreshFileList();
+  };
+  const resetAll = () => {
+    if (runRef.current) return;
+    itemsRef.current = []; setGlobalPaused(false); setStatus(null); refreshFileList();
+  };
+  const removeItem = (index: number) => {
+    const item = itemsRef.current[index];
+    if (!item) return;
+    stopItem(item); itemsRef.current.splice(index, 1); refreshFileList();
+  };
   const pendingCount = items.filter((i) => i.state === 'pending').length;
   const uploadingCount = items.filter((i) => i.state === 'uploading').length;
   const pausedCount = items.filter((i) => i.state === 'paused').length;
   const successCount = items.filter((i) => i.state === 'success').length;
   const errorCount = items.filter((i) => i.state === 'error').length;
-  const activeCount = uploadingCount + pausedCount;
-  const hasUploading = uploadingCount > 0;
-
-  /* ==================== 总速度自动刷新（500ms） ==================== */
-  useEffect(() => {
-    if (!hasUploading) return;
-    const timer = setInterval(() => {
-      const speed = itemsRef.current
-        .filter((i) => i.state === 'uploading')
-        .reduce((sum, i) => sum + i.speed, 0);
-      setTotalSpeed(speed);
-    }, 500);
-    return () => clearInterval(timer);
-  }, [hasUploading]);
-
-  /* ==================== 文件选择 ==================== */
-  const handleSelection = (fileListObj: FileList) => {
-    const existingKeys = new Set(itemsRef.current.map((i) => getFileKey(i.file)));
-    Array.from(fileListObj).forEach((file) => {
-      const key = getFileKey(file);
-      if (existingKeys.has(key)) return;
-      itemsRef.current.push({
-        file,
-        state: 'pending',
-        session: null,
-        speed: 0,
-        savedFilename: '',
-        uploadController: null,
-        inflightBytes: new Map(),
-        loadedBytes: 0,
-      });
-      existingKeys.add(key);
-    });
-    refreshFileList();
-    setStatus(null);
-  };
-
-  const openFilePicker = () => fileInputRef.current?.click();
-
-  /* ==================== 分块上传核心逻辑 ==================== */
-  const uploadFileChunked = async (item: UploadItem) => {
-    const file = item.file;
-    item.state = 'uploading';
-    item.speed = 0;
-    item.inflightBytes.clear();
-    item.loadedBytes = 0;
-    refreshFileList();
-
-    try {
-      // Step 1: 初始化会话 —— POST /api/upload/init，body: { filename, total_size }
-      let sessionData: InitUploadResponse;
-      try {
-        sessionData = await initUpload({ filename: file.name, total_size: file.size });
-      } catch (err) {
-        const body = getErrorBody<InitUploadResponse>(err);
-        item.state = 'error';
-        refreshFileList();
-        showStatus(`初始化失败: ${body?.error ?? errorMessage(err)}`, 'error');
-        return;
-      }
-
-      const session: UploadSession = {
-        sessionId: sessionData.session_id,
-        totalChunks: sessionData.total_chunks,
-        chunkSize: sessionData.chunk_size || CHUNK_SIZE,
-        totalSize: file.size,
-        receivedChunks: 0,
-        finalFilename: sessionData.final_filename,
-      };
-      item.session = session;
-      item.savedFilename = sessionData.final_filename;
-      recalcLoadedBytes(item);
-      refreshFileList();
-
-      // Step 2: 并发上传分块（带暂停 / 取消控制）
-      const uploadController: UploadController = {
-        paused: false,
-        cancelled: false,
-        abort: new AbortController(),
-      };
-      item.uploadController = uploadController;
-
-      let chunkIndex = 0;
-      const speedSamples: number[] = [];
-      let lastPaint = 0;
-
-      const uploadNextChunk = async () => {
-        while (chunkIndex < session.totalChunks) {
-          // 检查暂停 / 取消
-          if (uploadController.cancelled) throw new Error('Upload cancelled');
-          while (uploadController.paused || globalPausedRef.current) {
-            item.state = 'paused';
-            refreshFileList();
-            await sleep(300);
-            if (uploadController.cancelled) throw new Error('Upload cancelled');
-          }
-          item.state = 'uploading';
-
-          const ci = chunkIndex++;
-          const start = ci * session.chunkSize;
-          const end = Math.min(start + session.chunkSize, file.size);
-          const blob = file.slice(start, end);
-          const chunkBytes = end - start;
-
-          // multipart 字段与原页面一致：session_id / chunk_index / chunk
-          const sendChunk = () =>
-            uploadChunk({
-              sessionId: session.sessionId,
-              chunkIndex: ci,
-              chunk: blob,
-              signal: uploadController.abort.signal,
-              // axios 上传进度：本分块已发送字节，实时累加到文件级进度（节流重绘）
-              onProgress: (loaded) => {
-                if (uploadController.cancelled) return;
-                item.inflightBytes.set(ci, Math.min(loaded, chunkBytes));
-                recalcLoadedBytes(item);
-                const now = Date.now();
-                if (now - lastPaint >= PROGRESS_REFRESH_INTERVAL) {
-                  lastPaint = now;
-                  refreshFileList();
-                }
-              },
-            });
-
-          const startTime = Date.now();
-
-          let chunkResult: UploadChunkResponse;
-          try {
-            chunkResult = await sendChunk();
-          } catch (err) {
-            if (isCanceledError(err) || uploadController.cancelled) throw new Error('Upload cancelled');
-            try {
-              // 失败时重试一次
-              chunkResult = await sendChunk();
-            } catch (retryErr) {
-              if (isCanceledError(retryErr) || uploadController.cancelled) {
-                throw new Error('Upload cancelled');
-              }
-              throw new Error(`Chunk ${ci} upload failed`);
-            }
-          }
-
-          item.inflightBytes.delete(ci);
-          session.receivedChunks = chunkResult.received;
-
-          // 速度计算
-          const elapsed = Date.now() - startTime;
-          if (elapsed > 0) {
-            const chunkSpeed = chunkBytes / (elapsed / 1000);
-            speedSamples.push(chunkSpeed);
-            if (speedSamples.length > 10) speedSamples.shift();
-            item.speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
-          }
-
-          recalcLoadedBytes(item);
-          refreshFileList();
-        }
-      };
-
-      // 并发执行
-      const workers: Promise<void>[] = [];
-      for (let w = 0; w < MAX_CONCURRENT_UPLOADS; w++) {
-        workers.push(uploadNextChunk());
-      }
-      await Promise.all(workers);
-
-      // Step 3: 完成上传 —— POST /api/upload/complete，body: { session_id }
-      let completeData: CompleteUploadResponse;
-      try {
-        completeData = await completeUpload(session.sessionId);
-      } catch (err) {
-        const errData = getErrorBody<CompleteUploadResponse>(err);
-        // 分块缺失时可以重试
-        if (errData?.missing_chunks) {
-          item.state = 'error';
-          refreshFileList();
-          showStatus(`部分分块缺失，请重试: ${errData.missing_chunks.length} 个分块`, 'error');
-          return;
-        }
-        throw new Error(errData?.error ?? 'Complete failed');
-      }
-
-      item.state = 'success';
-      item.speed = 0;
-      item.savedFilename = completeData.saved_filename || item.savedFilename;
-      item.inflightBytes.clear();
-      recalcLoadedBytes(item);
-      refreshFileList();
-    } catch (err) {
-      if (errorMessage(err) === 'Upload cancelled') {
-        // 已由取消逻辑处理
-      } else {
-        item.state = 'error';
-        item.speed = 0;
-        refreshFileList();
-        showStatus(`上传失败: ${file.name} - ${errorMessage(err)}`, 'error');
-      }
-    }
-  };
-
-  const startAllUploads = async () => {
-    const toUpload = itemsRef.current.filter((i) => i.state === 'pending' || i.state === 'error');
-    if (!toUpload.length) return;
-    setGlobalPaused(false);
-    setStatus(null);
-    // 分批并发上传文件
-    for (let i = 0; i < toUpload.length; i += MAX_CONCURRENT_FILES) {
-      const batch = toUpload.slice(i, i + MAX_CONCURRENT_FILES);
-      await Promise.all(batch.map((uploadItem) => uploadFileChunked(uploadItem)));
-    }
-  };
-
-  /* ==================== 暂停 / 恢复 / 取消 ==================== */
-  const pauseAll = () => {
-    setGlobalPaused(true);
-    itemsRef.current.forEach((i) => {
-      if (i.state === 'uploading' && i.uploadController) {
-        i.uploadController.paused = true;
-      }
-    });
-    refreshFileList();
-  };
-
-  const resumeAll = () => {
-    setGlobalPaused(false);
-    itemsRef.current.forEach((i) => {
-      if (i.state === 'paused' && i.uploadController) {
-        i.uploadController.paused = false;
-      }
-    });
-    refreshFileList();
-  };
-
-  const cancelAll = async () => {
-    const activeItems = itemsRef.current.filter((i) => i.state === 'uploading' || i.state === 'paused');
-    for (const item of activeItems) {
-      if (item.uploadController) {
-        item.uploadController.cancelled = true;
-        // axios signal：立刻中断进行中的分块请求，而不是等它传完
-        item.uploadController.abort.abort();
-      }
-      if (item.session) {
-        try {
-          await cancelUpload(item.session.sessionId);
-        } catch {
-          /* ignore */
-        }
-      }
-      item.state = 'pending';
-      item.session = null;
-      item.uploadController = null;
-      item.speed = 0;
-      item.inflightBytes.clear();
-      item.loadedBytes = 0;
-    }
-    setGlobalPaused(false);
-    refreshFileList();
-    showStatus('所有上传已取消', 'error');
-  };
-
-  const resetAll = () => {
-    itemsRef.current = [];
-    setGlobalPaused(false);
-    setStatus(null);
-    refreshFileList();
-  };
-
-  /* ==================== 移除单个文件 ==================== */
-  const removeItem = (index: number) => {
-    const item = itemsRef.current[index];
-    if (!item) return;
-    if (item.uploadController) {
-      item.uploadController.cancelled = true;
-      item.uploadController.abort.abort();
-    }
-    itemsRef.current.splice(index, 1);
-    refreshFileList();
-  };
-
-  return {
-    items,
-    globalPaused,
-    dragOver,
-    setDragOver,
-    status,
-    totalSpeed,
-    pendingCount,
-    uploadingCount,
-    pausedCount,
-    successCount,
-    errorCount,
-    activeCount,
-    hasUploading,
-    fileInputRef,
-    startAllUploads,
-    pauseAll,
-    resumeAll,
-    cancelAll,
-    resetAll,
-    removeItem,
-    handleSelection,
-    openFilePicker,
-  };
+  const totalSpeed = hasUploading && !globalPaused ? sampledSpeed : 0;
+  return { items, globalPaused, running, dragOver, setDragOver, status, totalSpeed, pendingCount, uploadingCount, pausedCount, successCount, errorCount, activeCount: running ? Math.max(1, uploadingCount + pausedCount) : 0, hasUploading, fileInputRef, startAllUploads, pauseAll, resumeAll, cancelAll, resetAll, removeItem, handleSelection, openFilePicker: () => fileInputRef.current?.click() };
 };
