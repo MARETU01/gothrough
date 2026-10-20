@@ -22,6 +22,8 @@ export const recalcLoadedBytes = (item: UploadItem) => {
   item.inflightBytes.forEach((bytes) => {
     inflight += bytes;
   });
-  const confirmed = Math.min(session.receivedChunks * session.chunkSize, file.size);
-  item.loadedBytes = Math.min(file.size, confirmed + inflight);
+  let confirmed = 0;
+  item.confirmedBytes.forEach((bytes) => { confirmed += bytes; });
+  // Retrying a chunk should not make the displayed progress jump backwards.
+  item.loadedBytes = Math.min(file.size, Math.max(item.loadedBytes, confirmed + inflight));
 };

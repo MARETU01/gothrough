@@ -34,6 +34,10 @@ export interface UploadItem {
   uploadController: UploadController | null;
   /** 进行中分块的实时已发送字节：chunk_index -> loaded（来自 axios onUploadProgress） */
   inflightBytes: Map<number, number>;
+  /** 已确认分块索引及其实际字节数，避免乱序响应和尾块造成重复计算。 */
+  confirmedBytes: Map<number, number>;
+  /** 实际传输的累计字节（包含重试），用于窗口速度采样。 */
+  transferredBytes: number;
   /** 展示用已发送总字节 = 服务端已确认分块字节 + 进行中分块字节（见 recalcLoadedBytes） */
   loadedBytes: number;
 }

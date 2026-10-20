@@ -16,7 +16,6 @@ export const useUploadQueue = () => {
   const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
-  const [sampledSpeed, setTotalSpeed] = useState(0);
   const refreshFileList = useCallback(() => {
     if (mountedRef.current) setItems([...itemsRef.current]);
   }, []);
@@ -44,18 +43,27 @@ export const useUploadQueue = () => {
   }, []);
   const hasUploading = items.some((i) => i.state === 'uploading');
   useEffect(() => {
-    if (!hasUploading) return;
+    const samples = new WeakMap<UploadItem, { bytes: number; time: number }>();
     const timer = setInterval(() => {
-      setTotalSpeed(itemsRef.current.filter((i) => i.state === 'uploading').reduce((sum, i) => sum + i.speed, 0));
+      const now = Date.now();
+      let changed = false;
+      itemsRef.current.forEach((item) => {
+        const previous = samples.get(item) ?? { bytes: 0, time: now - 500 };
+        const speed = item.state === 'uploading' && !globalPausedRef.current
+          ? Math.max(0, item.transferredBytes - previous.bytes) * 1000 / Math.max(1, now - previous.time) : 0;
+        samples.set(item, { bytes: item.transferredBytes, time: now });
+        if (item.speed !== speed) { item.speed = speed; changed = true; }
+      });
+      if (changed) refreshFileList();
     }, 500);
     return () => clearInterval(timer);
-  }, [hasUploading]);
+  }, [refreshFileList]);
   const handleSelection = (files: FileList) => {
     const keys = new Set(itemsRef.current.map((i) => getFileKey(i.file)));
     Array.from(files).forEach((file) => {
       const key = getFileKey(file);
       if (keys.has(key)) return;
-      itemsRef.current.push({ file, state: 'pending', session: null, speed: 0, savedFilename: '', uploadController: null, inflightBytes: new Map(), loadedBytes: 0 });
+      itemsRef.current.push({ file, state: 'pending', session: null, speed: 0, savedFilename: '', uploadController: null, inflightBytes: new Map(), confirmedBytes: new Map(), transferredBytes: 0, loadedBytes: 0 });
       keys.add(key);
     });
     refreshFileList();
@@ -75,7 +83,7 @@ export const useUploadQueue = () => {
       item.state = 'uploading'; refreshFileList();
     };
     item.state = 'uploading'; item.speed = 0; item.session = null;
-    item.inflightBytes.clear(); item.loadedBytes = 0; refreshFileList();
+    item.inflightBytes.clear(); item.confirmedBytes.clear(); item.transferredBytes = 0; item.loadedBytes = 0; refreshFileList();
     try {
       // Observe late initialization responses so cancelled sessions can be cleaned up.
       const data = await initUpload({ filename: item.file.name, total_size: item.file.size });
@@ -83,7 +91,6 @@ export const useUploadQueue = () => {
       item.session = session; item.savedFilename = data.final_filename; checkActive();
       let chunkIndex = 0;
       let lastPaint = 0;
-      const speedSamples: number[] = [];
       let failure: unknown;
       const worker = async () => {
         try {
@@ -92,26 +99,28 @@ export const useUploadQueue = () => {
             if (chunkIndex >= session.totalChunks) return;
             const index = chunkIndex++;
             const chunk = item.file.slice(index * session.chunkSize, Math.min((index + 1) * session.chunkSize, item.file.size));
-            const started = Date.now();
-            const send = () => uploadChunk({ sessionId: session.sessionId, chunkIndex: index, chunk, signal: controller.abort.signal, onProgress: (loaded) => {
+            let attemptLoaded = 0;
+            const recordTransferred = (loaded: number) => {
+              item.transferredBytes += Math.max(0, loaded - attemptLoaded);
+              attemptLoaded = Math.max(attemptLoaded, loaded);
+            };
+            const send = () => uploadChunk({ sessionId: session.sessionId, chunkIndex: index, chunk, signal: controller.abort.signal, onProgress: (loaded, total) => {
               if (isStopped() || controller.abort.signal.aborted) return;
-              item.inflightBytes.set(index, Math.min(loaded, chunk.size)); recalcLoadedBytes(item);
+              const bytes = Math.min(chunk.size, Math.max(0, total > 0 ? loaded / total * chunk.size : loaded));
+              recordTransferred(bytes);
+              item.inflightBytes.set(index, bytes); recalcLoadedBytes(item);
               if (Date.now() - lastPaint >= PROGRESS_REFRESH_INTERVAL) { lastPaint = Date.now(); refreshFileList(); }
             } });
-            let result;
-            try { result = await send(); } catch (err) {
+            try { await send(); } catch (err) {
               if (isStopped() || isCanceledError(err) || controller.abort.signal.aborted) throw err;
-              item.inflightBytes.delete(index); await waitForResume(); result = await send();
+              item.inflightBytes.delete(index); attemptLoaded = 0; await waitForResume(); await send();
             }
             checkActive();
             if (controller.abort.signal.aborted) return;
-            item.inflightBytes.delete(index); session.receivedChunks = result.received;
-            const elapsed = Date.now() - started;
-            if (elapsed > 0) {
-              speedSamples.push(chunk.size / (elapsed / 1000));
-              if (speedSamples.length > 10) speedSamples.shift();
-              item.speed = speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length;
-            }
+            recordTransferred(chunk.size);
+            item.inflightBytes.delete(index);
+            item.confirmedBytes.set(index, chunk.size);
+            session.receivedChunks = item.confirmedBytes.size;
             recalcLoadedBytes(item); refreshFileList();
           }
         } catch (err) {
@@ -189,6 +198,6 @@ export const useUploadQueue = () => {
   const pausedCount = items.filter((i) => i.state === 'paused').length;
   const successCount = items.filter((i) => i.state === 'success').length;
   const errorCount = items.filter((i) => i.state === 'error').length;
-  const totalSpeed = hasUploading && !globalPaused ? sampledSpeed : 0;
+  const totalSpeed = globalPaused ? 0 : items.filter((i) => i.state === 'uploading').reduce((sum, i) => sum + i.speed, 0);
   return { items, globalPaused, running, dragOver, setDragOver, status, totalSpeed, pendingCount, uploadingCount, pausedCount, successCount, errorCount, activeCount: running ? Math.max(1, uploadingCount + pausedCount) : 0, hasUploading, fileInputRef, startAllUploads, pauseAll, resumeAll, cancelAll, resetAll, removeItem, handleSelection, openFilePicker: () => fileInputRef.current?.click() };
 };
