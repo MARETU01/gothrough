@@ -1,9 +1,9 @@
-﻿import React, { useEffect } from 'react';
-import { useUploadQueue } from '@/hooks/useUploadQueue';
-import { UploadFileRow } from './UploadFileRow';
-import { formatSpeed } from '@/utils/format';
-import { getFileKey } from '@/utils/upload';
-import './UploadPage.css';
+﻿import React, { useEffect } from "react";
+import { useUploadQueue } from "@/hooks/useUploadQueue";
+import { UploadFileRow } from "./UploadFileRow";
+import { formatSpeed } from "@/utils/format";
+import { getFileKey } from "@/utils/upload";
+import "./UploadPage.css";
 
 const UploadPage: React.FC = () => {
   const {
@@ -33,8 +33,10 @@ const UploadPage: React.FC = () => {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = '文件上传 - 分块上传';
-    return () => { document.title = previousTitle; };
+    document.title = "文件上传 - 分块上传";
+    return () => {
+      document.title = previousTitle;
+    };
   }, []);
 
   return (
@@ -48,18 +50,23 @@ const UploadPage: React.FC = () => {
         </div>
 
         <div
-          className={`upload-area${dragOver ? ' dragover' : ''}`}
+          className={`upload-area${dragOver ? " dragover" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={(e) => {
-            if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+            if (
+              !(e.relatedTarget instanceof Node) ||
+              !e.currentTarget.contains(e.relatedTarget)
+            )
+              setDragOver(false);
           }}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            if (e.dataTransfer.files.length) handleSelection(e.dataTransfer.files);
+            if (e.dataTransfer.files.length)
+              handleSelection(e.dataTransfer.files);
           }}
         >
           <button
@@ -68,7 +75,9 @@ const UploadPage: React.FC = () => {
             onClick={openFilePicker}
             aria-label="选择要上传的文件，支持多选"
           >
-            <span className="upload-icon" aria-hidden="true">📁</span>
+            <span className="upload-icon" aria-hidden="true">
+              📁
+            </span>
             <span className="upload-text">拖放文件到此处或点击浏览</span>
             <span className="browse-btn">选择文件</span>
           </button>
@@ -82,44 +91,72 @@ const UploadPage: React.FC = () => {
               const files = e.target.files;
               if (!files || !files.length) return;
               handleSelection(files);
-              e.target.value = '';
+              e.target.value = "";
             }}
           />
         </div>
 
         <div className="file-list">
           {items.length === 0 ? (
-            <div className="empty-hint">没有文件，拖放文件到此处或点击"选择文件"按钮</div>
+            <div className="empty-hint">
+              没有文件，拖放文件到此处或点击"选择文件"按钮
+            </div>
           ) : (
             items.map((item) => (
-              <UploadFileRow key={getFileKey(item.file)} item={item} retryDisabled={running} onRemove={removeItem} onRetry={retryItem} />
+              <UploadFileRow
+                key={getFileKey(item.file)}
+                item={item}
+                retryDisabled={running}
+                onRemove={removeItem}
+                onRetry={retryItem}
+              />
             ))
           )}
         </div>
 
-
         <div role="status" aria-live="polite" aria-atomic="true">
-          {status && <div className={`status-message ${status.type}`}>{status.text}</div>}
+          {status && (
+            <div className={`status-message ${status.type}`}>{status.text}</div>
+          )}
         </div>
         <div className="button-container">
           {items.length > 0 &&
             (activeCount > 0 ? (
               <>
-                {canceling ? <span role="status">正在取消，请稍候…</span> : globalPaused ? (
-                  <button type="button" className="resume-btn" onClick={resumeAll}>
+                {canceling ? (
+                  <span role="status">正在取消，请稍候…</span>
+                ) : globalPaused ? (
+                  <button
+                    type="button"
+                    className="resume-btn"
+                    onClick={resumeAll}
+                  >
                     ▶ 全部恢复
                   </button>
                 ) : (
-                  <button type="button" className="pause-btn" onClick={pauseAll}>
+                  <button
+                    type="button"
+                    className="pause-btn"
+                    onClick={pauseAll}
+                  >
                     ⏸ 全部暂停
                   </button>
                 )}
-                <button type="button" className="cancel-btn" disabled={canceling} onClick={cancelAll}>
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  disabled={canceling}
+                  onClick={cancelAll}
+                >
                   ✖ 取消全部
                 </button>
               </>
             ) : pendingCount > 0 || errorCount > 0 ? (
-              <button type="button" className="upload-btn" onClick={startAllUploads}>
+              <button
+                type="button"
+                className="upload-btn"
+                onClick={startAllUploads}
+              >
                 开始上传
               </button>
             ) : successCount > 0 ? (
@@ -135,15 +172,14 @@ const UploadPage: React.FC = () => {
               总速度: <span>{formatSpeed(totalSpeed)}</span>
             </div>
             <div>
-              已完成: <span>{successCount}</span> / <span>{items.length}</span> 个文件
+              已完成: <span>{successCount}</span> / <span>{items.length}</span>{" "}
+              个文件
             </div>
           </div>
         )}
-
       </div>
     </main>
   );
 };
 
 export default UploadPage;
-

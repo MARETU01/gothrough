@@ -4,7 +4,15 @@
  */
 
 /** 单个文件的上传状态机 */
-export type UploadState = 'pending' | 'initializing' | 'uploading' | 'paused' | 'completing' | 'canceling' | 'success' | 'error';
+export type UploadState =
+  | "pending"
+  | "initializing"
+  | "uploading"
+  | "paused"
+  | "completing"
+  | "canceling"
+  | "success"
+  | "error";
 
 /** 服务端初始化会话后的本地会话快照 */
 export interface UploadSession {
@@ -46,22 +54,25 @@ export interface UploadItem {
 /** 顶部状态提示消息 */
 export interface StatusMessage {
   text: string;
-  type: 'success' | 'error';
+  type: "success" | "error";
 }
 
 /** React 只消费展示快照，不暴露 worker 的可变控制器和 Map。 */
-export type UploadViewItem = Readonly<Pick<UploadItem,
-  'file' | 'state' | 'speed' | 'savedFilename' | 'loadedBytes' | 'error'
-> & { session: Readonly<UploadSession> | null }>;
+export type UploadViewItem = Readonly<
+  Pick<
+    UploadItem,
+    "file" | "state" | "speed" | "savedFilename" | "loadedBytes" | "error"
+  > & { session: Readonly<UploadSession> | null }
+>;
 
 /** 状态对应的中文标签（供 UI 直接渲染） */
 export const STATE_LABELS: Record<UploadState, string> = {
-  pending: '⏳ 待上传',
-  initializing: '正在准备上传',
-  completing: '正在合并文件',
-  canceling: '正在取消',
-  uploading: '📤 上传中',
-  paused: '⏸ 已暂停',
-  success: '✅ 上传成功',
-  error: '❌ 上传失败',
+  pending: "⏳ 待上传",
+  initializing: "正在准备上传",
+  completing: "正在合并文件",
+  canceling: "正在取消",
+  uploading: "📤 上传中",
+  paused: "⏸ 已暂停",
+  success: "✅ 上传成功",
+  error: "❌ 上传失败",
 };
