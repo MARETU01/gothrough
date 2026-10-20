@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUploadQueue } from './useUploadQueue';
-import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
+import { cancelUpload, completeUpload, initUpload, uploadChunk, type UploadChunkOptions } from '@/services/upload';
 import { getFileKey } from '@/utils/upload';
 
 vi.mock('@/services/upload', () => ({
@@ -28,9 +28,48 @@ beforeEach(() => {
   vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'saved' });
   vi.mocked(cancelUpload).mockResolvedValue({ status: 'ok' });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('upload queue lifecycle', () => {
+  it('counts local acknowledgements correctly when responses arrive out of order', async () => {
+    vi.mocked(initUpload).mockResolvedValue(session('test', 3));
+    const chunks = Array.from({ length: 3 }, () => deferred<{ received: number }>());
+    vi.mocked(uploadChunk).mockImplementation(({ chunkIndex }) => chunks[chunkIndex].promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1, 12);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    await act(async () => { chunks[2].resolve({ received: 3 }); });
+    expect(hook.result.current.items[0].loadedBytes).toBe(2);
+    expect(hook.result.current.items[0].session?.receivedChunks).toBe(1);
+    const snapshot = hook.result.current.items[0];
+    await act(async () => { chunks[0].resolve({ received: 1 }); });
+    expect(hook.result.current.items[0].loadedBytes).toBe(7);
+    expect(hook.result.current.items[0].session?.receivedChunks).toBe(2);
+    expect(snapshot.session?.receivedChunks).toBe(1);
+    await act(async () => { chunks[1].resolve({ received: 2 }); await run; });
+    expect(hook.result.current.items[0].loadedBytes).toBe(12);
+  });
+
+  it('samples transferred bytes and clears speed on pause, idle and completion', async () => {
+    vi.useFakeTimers();
+    const chunk = deferred<{ received: number }>();
+    let options!: UploadChunkOptions;
+    vi.mocked(uploadChunk).mockImplementation((value) => { options = value; return chunk.promise; });
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    act(() => { options.onProgress!(5, 5); vi.advanceTimersByTime(500); });
+    expect(hook.result.current.totalSpeed).toBe(10);
+    act(() => hook.result.current.pauseAll());
+    expect(hook.result.current.totalSpeed).toBe(0);
+    act(() => { hook.result.current.resumeAll(); vi.advanceTimersByTime(500); });
+    expect(hook.result.current.totalSpeed).toBe(0);
+    await act(async () => { chunk.resolve({ received: 1 }); await run; });
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(hook.result.current.totalSpeed).toBe(0);
+  });
   it('keeps unaffected row references stable and never mutates published snapshots', async () => {
     const init = deferred<ReturnType<typeof session>>();
     vi.mocked(initUpload).mockReturnValue(init.promise);
