@@ -2,6 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUploadQueue } from './useUploadQueue';
 import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
+import { getFileKey } from '@/utils/upload';
 
 vi.mock('@/services/upload', () => ({
   initUpload: vi.fn(), uploadChunk: vi.fn(), completeUpload: vi.fn(), cancelUpload: vi.fn(),
@@ -30,6 +31,20 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('upload queue lifecycle', () => {
+  it('keeps unaffected row references stable and never mutates published snapshots', async () => {
+    const init = deferred<ReturnType<typeof session>>();
+    vi.mocked(initUpload).mockReturnValue(init.promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 3);
+    const original = hook.result.current.items;
+    let run!: Promise<void>;
+    act(() => { run = hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0]).not.toBe(original[0]);
+    expect(original[0].state).toBe('pending');
+    expect(hook.result.current.items[2]).toBe(original[2]);
+    act(() => hook.result.current.cancelAll());
+    await act(async () => { init.resolve(session()); await run; });
+  });
   it('shows preparation and merge phases, including successful empty files', async () => {
     const init = deferred<ReturnType<typeof session>>();
     const complete = deferred<{ saved_filename: string }>();
@@ -95,7 +110,7 @@ describe('upload queue lifecycle', () => {
     selectFiles(hook, 3);
     let run!: Promise<void>;
     act(() => { run = hook.result.current.startAllUploads(); });
-    act(() => { hook.result.current.removeItem(2); void hook.result.current.startAllUploads(); });
+    act(() => { hook.result.current.removeItem(getFileKey(hook.result.current.items[2].file)); void hook.result.current.startAllUploads(); });
     await act(async () => { init.resolve(session()); await run; });
     expect(initUpload).toHaveBeenCalledTimes(2);
   });

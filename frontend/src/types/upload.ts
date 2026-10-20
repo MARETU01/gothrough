@@ -49,6 +49,11 @@ export interface StatusMessage {
   type: 'success' | 'error';
 }
 
+/** React 只消费展示快照，不暴露 worker 的可变控制器和 Map。 */
+export type UploadViewItem = Readonly<Pick<UploadItem,
+  'file' | 'state' | 'speed' | 'savedFilename' | 'loadedBytes' | 'error'
+> & { session: Readonly<UploadSession> | null }>;
+
 /** 状态对应的中文标签（供 UI 直接渲染） */
 export const STATE_LABELS: Record<UploadState, string> = {
   pending: '⏳ 待上传',

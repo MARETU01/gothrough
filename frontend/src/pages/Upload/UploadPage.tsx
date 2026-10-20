@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
-import { STATE_LABELS } from '@/types/upload';
-import { formatETA, formatSize, formatSpeed } from '@/utils/format';
+import { UploadFileRow } from './UploadFileRow';
+import { formatSpeed } from '@/utils/format';
 import { getFileKey } from '@/utils/upload';
 import './UploadPage.css';
 
@@ -89,58 +89,9 @@ const UploadPage: React.FC = () => {
           {items.length === 0 ? (
             <div className="empty-hint">没有文件，拖放文件到此处或点击"选择文件"按钮</div>
           ) : (
-            items.map((item, index) => {
-              const session = item.session;
-              // 字节级进度：服务端已确认的分块 + 正在传输分块的实时已发送字节
-              const progress = item.state === 'success' ? 100 : item.file.size
-                ? Math.min(100, Math.round((item.loadedBytes / item.file.size) * 100))
-                : 0;
-              const speedText = item.speed ? formatSpeed(item.speed) : '';
-              const etaText =
-                session && item.speed > 0
-                  ? formatETA(Math.max(0, item.file.size - item.loadedBytes), item.speed)
-                  : '';
-
-              return (
-                <div key={getFileKey(item.file)} className={`file-row ${item.state}`}>
-                  <div className="file-meta">
-                    <div className="file-label">
-                      <div className="file-name">{item.file.name}</div>
-                      <div className="file-size">{formatSize(item.file.size)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="remove-btn"
-                      disabled={item.state === 'canceling'}
-                      onClick={() => removeItem(index)}
-                    >
-                      移除
-                    </button>
-                  </div>
-                  {item.error && <p className="file-error" role="alert">{item.error}</p>}
-                  {item.state === 'error' && (
-                    <button type="button" disabled={running} onClick={() => retryItem(getFileKey(item.file))}>重试此文件</button>
-                  )}
-                  <div className="file-status">
-                    <span>{STATE_LABELS[item.state] || ''}</span>
-                    {speedText && <span className="speed">{speedText}</span>}
-                    {etaText && <span className="eta">剩余 {etaText}</span>}
-                    {session && (
-                      <span className="chunks">
-                        分块 {session.receivedChunks}/{session.totalChunks}
-                      </span>
-                    )}
-                  </div>
-                  <div className="progress-bar">
-                    <div className="progress" style={{ width: `${progress}%` }} />
-                  </div>
-                  <div className="progress-text">
-                    <span>{progress}%</span>
-                    <span>{item.savedFilename || ''}</span>
-                  </div>
-                </div>
-              );
-            })
+            items.map((item) => (
+              <UploadFileRow key={getFileKey(item.file)} item={item} retryDisabled={running} onRemove={removeItem} onRetry={retryItem} />
+            ))
           )}
         </div>
 
@@ -191,3 +142,4 @@ const UploadPage: React.FC = () => {
 };
 
 export default UploadPage;
+

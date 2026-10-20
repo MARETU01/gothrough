@@ -1,4 +1,17 @@
-import type { UploadItem } from '@/types/upload';
+import type { UploadItem, UploadViewItem } from '@/types/upload';
+
+export const createUploadSnapshot = (item: UploadItem, previous?: UploadViewItem): UploadViewItem => {
+  if (previous && previous.file === item.file && previous.state === item.state &&
+    previous.speed === item.speed && previous.savedFilename === item.savedFilename &&
+    previous.loadedBytes === item.loadedBytes && previous.error === item.error &&
+    previous.session?.sessionId === item.session?.sessionId &&
+    previous.session?.receivedChunks === item.session?.receivedChunks) return previous;
+  return {
+    file: item.file, state: item.state, speed: item.speed, savedFilename: item.savedFilename,
+    loadedBytes: item.loadedBytes, error: item.error,
+    session: item.session ? { ...item.session } : null,
+  };
+};
 
 /** 生成文件唯一 key：name + size + lastModified，用于去重与 React key */
 export const getFileKey = (file: File) => `${file.name}-${file.size}-${file.lastModified}`;
