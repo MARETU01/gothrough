@@ -1,9 +1,12 @@
 ﻿import React, { useEffect } from "react";
-import { useUploadQueue } from "@/hooks/useUploadQueue";
+import { useSharedUploadQueue } from "@/contexts/UploadQueueContext";
 import { Link } from "react-router-dom";
 import { UploadFileRow } from "./UploadFileRow";
 import { formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
+import { Button } from "@/components/ui/button";
+import { StatusMessage } from "@/components/StatusMessage";
+import { FolderOpen, Files, Play, Pause, X, Upload, Check } from "lucide-react";
 import "./UploadPage.css";
 
 const UploadPage: React.FC = () => {
@@ -30,7 +33,7 @@ const UploadPage: React.FC = () => {
     removeItem,
     handleSelection,
     openFilePicker,
-  } = useUploadQueue();
+  } = useSharedUploadQueue();
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -44,10 +47,10 @@ const UploadPage: React.FC = () => {
     <main className="upload-page">
       <div className="container">
         <h1>文件上传</h1>
-        <p className="subtitle">支持大文件分块上传，可在当前页面暂停和恢复</p>
+        <p className="subtitle">支持大文件分块上传，切换页面后仍会继续，可随时返回暂停和恢复</p>
 
         <div className="nav-links">
-          <Link to="/files">📦 查看已上传文件</Link>
+          <Button asChild variant="outline"><Link to="/files"><Files aria-hidden="true" />查看已上传文件</Link></Button>
         </div>
 
         <div
@@ -77,7 +80,7 @@ const UploadPage: React.FC = () => {
             aria-label="选择要上传的文件，支持多选"
           >
             <span className="upload-icon" aria-hidden="true">
-              📁
+              <FolderOpen size={48} aria-hidden="true" />
             </span>
             <span className="upload-text">拖放文件到此处或点击浏览</span>
             <span className="browse-btn">选择文件</span>
@@ -117,7 +120,7 @@ const UploadPage: React.FC = () => {
 
         <div role="status" aria-live="polite" aria-atomic="true">
           {status && (
-            <div className={`status-message ${status.type}`}>{status.text}</div>
+            <StatusMessage tone={status.type}>{status.text}</StatusMessage>
           )}
         </div>
         <div className="button-container">
@@ -127,43 +130,43 @@ const UploadPage: React.FC = () => {
                 {canceling ? (
                   <span role="status">正在取消，请稍候…</span>
                 ) : globalPaused ? (
-                  <button
+                  <Button
                     type="button"
-                    className="resume-btn"
+                    variant="default" size="lg"
                     onClick={resumeAll}
                   >
-                    ▶ 全部恢复
-                  </button>
+                    <Play aria-hidden="true" />全部恢复
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     type="button"
-                    className="pause-btn"
+                    variant="outline" size="lg"
                     onClick={pauseAll}
                   >
-                    ⏸ 全部暂停
-                  </button>
+                    <Pause aria-hidden="true" />全部暂停
+                  </Button>
                 )}
-                <button
+                <Button
                   type="button"
-                  className="cancel-btn"
+                  variant="destructive" size="lg"
                   disabled={canceling}
                   onClick={cancelAll}
                 >
-                  ✖ 取消全部
-                </button>
+                  <X aria-hidden="true" />取消全部
+                </Button>
               </>
             ) : pendingCount > 0 || errorCount > 0 ? (
-              <button
+              <Button
                 type="button"
-                className="upload-btn"
+                variant="default" size="lg"
                 onClick={startAllUploads}
               >
-                开始上传
-              </button>
+                <Upload aria-hidden="true" />开始上传
+              </Button>
             ) : successCount > 0 ? (
-              <button type="button" className="continue-btn" onClick={resetAll}>
-                ✓ 上传完成，继续上传更多文件
-              </button>
+              <Button type="button" variant="default" size="lg" onClick={resetAll}>
+                <Check aria-hidden="true" />继续上传更多文件
+              </Button>
             ) : null)}
         </div>
 

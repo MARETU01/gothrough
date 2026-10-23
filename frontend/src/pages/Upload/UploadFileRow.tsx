@@ -3,6 +3,9 @@ import { STATE_LABELS, type UploadViewItem } from "@/types/upload";
 import { formatETA, formatSize, formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
 
+import { Button } from "@/components/ui/button";
+import { RotateCcw, X } from "lucide-react";
+
 type Props = {
   item: UploadViewItem;
   retryDisabled: boolean;
@@ -36,15 +39,15 @@ export const UploadFileRow = memo(function UploadFileRow({
           </div>
           <div className="file-size">{formatSize(item.file.size)}</div>
         </div>
-        <button
+        <Button
           type="button"
-          className="remove-btn"
+          variant="ghost" size="sm"
           aria-label={`移除 ${item.file.name}`}
           disabled={item.state === "canceling"}
           onClick={() => onRemove(key)}
         >
-          移除
-        </button>
+          <X aria-hidden="true" />移除
+        </Button>
       </div>
       {item.error && (
         <p className="file-error" role="alert">
@@ -52,15 +55,15 @@ export const UploadFileRow = memo(function UploadFileRow({
         </p>
       )}
       {item.state === "error" && (
-        <button
+        <Button
           type="button"
-          className="retry-btn"
+          variant="outline" size="sm"
           aria-label={`重试 ${item.file.name}`}
           disabled={retryDisabled}
           onClick={() => void onRetry(key)}
         >
-          重试此文件
-        </button>
+          <RotateCcw aria-hidden="true" />重试此文件
+        </Button>
       )}
       <div className="file-status">
         <span>{STATE_LABELS[item.state]}</span>

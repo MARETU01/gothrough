@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { deleteFile, downloadFileUrl, listFiles, type FileListResponse } from '@/services/files';
 import { getErrorBody } from '@/services/upload';
 import { errorMessage } from '@/utils/misc';
+import { Button } from '@/components/ui/button';
+import { StatusMessage } from '@/components/StatusMessage';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
@@ -55,11 +59,6 @@ export default function FilesPage() {
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (confirming === null) return;
-    const timer = setTimeout(() => setConfirming(null), 3000);
-    return () => clearTimeout(timer);
-  }, [confirming]);
 
   const filtered = React.useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
@@ -81,8 +80,7 @@ export default function FilesPage() {
 
   async function handleDelete(name: string) {
     if (deleting !== null) return;
-    if (confirming !== name) { setConfirming(name); return; }
-    setConfirming(null);
+
     setDeleting(name);
     setError('');
     setNotice('');
@@ -92,10 +90,11 @@ export default function FilesPage() {
       await deleteFile(name);
       if (!mounted.current) return;
       setData(previous => previous ? { ...previous, files: previous.files.filter(file => file.name !== name) } : previous);
+      setConfirming(null);
       setNotice(`已删除 ${name}`);
       await refresh();
     } catch (err) {
-      if (mounted.current) setError(`删除失败：${getErrorBody<{ error?: string }>(err)?.error ?? errorMessage(err)}`);
+      if (mounted.current) { setConfirming(null); setError(`删除 ${name} 失败：${getErrorBody<{ error?: string }>(err)?.error ?? errorMessage(err)}`); }
     } finally {
       if (mounted.current) setDeleting(null);
     }
@@ -107,8 +106,8 @@ export default function FilesPage() {
         <header className="files-header">
           <div><h1>已上传文件</h1><p>浏览和管理已上传的文件</p></div>
           <div className="files-actions">
-            <button type="button" disabled={loading || deleting !== null} onClick={() => void refresh()}>刷新列表</button>
-            <Link className="files-primary" to="/upload">上传文件</Link>
+            <Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? 'app-spin' : undefined} />刷新列表</Button>
+            <Button asChild><Link to="/upload"><Upload aria-hidden="true" />上传文件</Link></Button>
           </div>
         </header>
         {data && <section className="files-disk" aria-label="服务器存储空间">
@@ -130,29 +129,30 @@ export default function FilesPage() {
           </select>
           <span className="files-count">{filtered.length} 个文件{query.trim() && data ? ` / 共 ${data.files.length} 个` : ''}</span>
         </div>
-        {error && <div className="files-error" role="alert">{error}<button type="button" disabled={loading || deleting !== null} onClick={() => void refresh()}>重新加载</button></div>}
-        <div role="status" aria-live="polite">{notice && <p className="files-notice">{notice}</p>}{loading && <p className="files-loading">正在加载文件列表…</p>}</div>
+        {error && <StatusMessage tone="error" action={<Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}>重新加载</Button>}>{error}</StatusMessage>}
+        <div aria-live="polite">{notice && <StatusMessage tone="success">{notice}</StatusMessage>}{loading && <StatusMessage tone="loading">正在加载文件列表…</StatusMessage>}</div>
         {data && <section aria-label="文件列表" aria-busy={loading}>
           {filtered.length > 0 ? <div className="files-table-scroll"><table>
             <thead><tr><th scope="col">文件名</th><th scope="col">大小</th><th scope="col">修改时间</th><th scope="col">操作</th></tr></thead>
             <tbody>{pageFiles.map(file => <tr key={file.name}>
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.mtime}</td>
               <td><div className="files-row-actions">
-                <a href={downloadFileUrl(file.name)} download aria-label={`下载 ${file.name}`}>下载</a>
-                <button type="button" className={`files-delete${confirming === file.name ? ' confirming' : ''}`} disabled={deleting !== null} aria-label={`${confirming === file.name ? '确认删除' : '删除'} ${file.name}`} onClick={() => void handleDelete(file.name)}>
-                  {deleting === file.name ? '删除中…' : confirming === file.name ? '确认删除？' : '删除'}
-                </button>
+                <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={`下载 ${file.name}`}><Download aria-hidden="true" />下载</a></Button>
+                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={`删除 ${file.name}`} onClick={() => setConfirming(file.name)}>
+                  <Trash2 aria-hidden="true" />删除
+                </Button>
               </div></td>
             </tr>)}</tbody>
-          </table></div> : <div className="files-empty">{data.files.length === 0 ? <>还没有上传文件，先去<Link to="/upload">上传文件</Link>吧。</> : <>没有找到匹配的文件。<button type="button" onClick={() => { setQuery(''); setPage(1); }}>清除搜索</button></>}</div>}
+          </table></div> : <div className="files-empty">{data.files.length === 0 ? <>还没有上传文件，先去<Link to="/upload">上传文件</Link>吧。</> : <>没有找到匹配的文件。<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>清除搜索</Button></>}</div>}
           {totalPages > 1 && <nav className="files-pagination" aria-label="文件列表分页">
-            <button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setConfirming(null); }}>上一页</button>
-            {pages.map(number => <button type="button" key={number} aria-label={`第 ${number} 页`} aria-current={number === currentPage ? 'page' : undefined} onClick={() => { setPage(number); setConfirming(null); }}>{number}</button>)}
-            <button type="button" disabled={currentPage === totalPages} onClick={() => { setPage(currentPage + 1); setConfirming(null); }}>下一页</button>
+            <Button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setConfirming(null); }}>上一页</Button>
+            {pages.map(number => <Button type="button" variant={number === currentPage ? "default" : "outline"} key={number} aria-label={`第 ${number} 页`} aria-current={number === currentPage ? 'page' : undefined} onClick={() => { setPage(number); setConfirming(null); }}>{number}</Button>)}
+            <Button type="button" disabled={currentPage === totalPages} onClick={() => { setPage(currentPage + 1); setConfirming(null); }}>下一页</Button>
             <span>第 {currentPage} / {totalPages} 页</span>
           </nav>}
         </section>}
       </div>
+      <ConfirmDeleteDialog filename={confirming} busy={deleting !== null} onCancel={() => setConfirming(null)} onConfirm={() => { if (confirming !== null) void handleDelete(confirming); }} />
     </main>
   );
 }

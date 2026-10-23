@@ -5,10 +5,7 @@
 .files-header p { color: #546e6a; font-size: 14px; }
 .files-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .files-page button, .files-actions a { cursor: pointer; border: 1px solid #80cbc4; border-radius: 8px; padding: 8px 14px; background: white; color: #00695c; font-size: 14px; text-decoration: none; transition: background .2s, box-shadow .2s; }
-.files-page button:hover:not(:disabled) { background: #e0f2f1; }
 .files-actions button, .files-actions a { border-radius: 50px; padding: 10px 18px; font-weight: 600; }
-.files-actions .files-primary { background: linear-gradient(to right, #00796b, #26a69a); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(0,121,107,.2); }
-.files-actions .files-primary:hover { box-shadow: 0 6px 18px rgba(0,121,107,.3); }
 .files-disk { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; background: rgba(128,203,196,.12); border: 1px solid rgba(128,203,196,.25); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
 .files-disk dl { display: flex; flex: 2; flex-wrap: wrap; gap: 24px; margin: 0; }
 .files-disk dt { font-size: 12px; color: #546e6a; margin-bottom: 6px; }
@@ -34,14 +31,8 @@
 .files-page a:not(.files-primary) { color: #00796b; font-weight: 600; }
 .files-row-actions a { text-decoration: none; }
 .files-row-actions a:hover { text-decoration: underline; }
-.files-page .files-delete { color: #c43b35; border-color: #ef9a9a; font-size: 13px; min-width: 90px; }
-.files-page .files-delete.confirming, .files-page .files-delete:hover:not(:disabled) { background: #c43b35; color: white; border-color: #c43b35; }
 .files-empty { padding: 36px 16px; text-align: center; color: #546e6a; border: 1px dashed #a7d8d2; border-radius: 10px; }
 .files-empty a, .files-empty button { margin: 0 6px; }
-.files-loading, .files-notice { padding: 12px 0; font-size: 14px; }
-.files-notice { color: #00695c; overflow-wrap: anywhere; }
-.files-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #ffebee; color: #b71c1c; border: 1px solid #ef9a9a; padding: 12px; border-radius: 8px; margin-bottom: 16px; overflow-wrap: anywhere; }
-.files-error button { flex-shrink: 0; }
 .files-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .files-pagination button[aria-current='page'] { background: #00796b; border-color: #00796b; color: white; }
 .files-pagination span { font-size: 12px; color: #546e6a; }

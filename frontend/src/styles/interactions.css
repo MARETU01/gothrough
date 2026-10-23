@@ -1,0 +1,37 @@
+/* Shared interaction styles for native buttons and links rendered by Button. */
+.app-action[data-slot='button'] {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 18px; border: 1px solid transparent; border-radius: 50px;
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1; white-space: nowrap;
+  cursor: pointer; text-decoration: none; transition: background .2s, box-shadow .2s;
+  background: linear-gradient(to right, #00796b, #26a69a); color: white;
+  box-shadow: 0 3px 10px rgba(0,121,107,.16);
+}
+.app-action[data-slot='button']:hover:not(:disabled) { background: #00695c; color: white; box-shadow: 0 4px 12px rgba(0,121,107,.24); }
+.app-action[data-slot='button'][data-variant='outline'], .app-action[data-slot='button'][data-variant='secondary'] { background: white; color: #00695c; border-color: #80cbc4; box-shadow: none; }
+.app-action[data-slot='button'][data-variant='ghost'] { background: transparent; color: #546e6a; box-shadow: none; }
+.app-action[data-slot='button'][data-variant='outline']:hover:not(:disabled), .app-action[data-slot='button'][data-variant='ghost']:hover:not(:disabled) { background: #e0f2f1; color: #00695c; }
+.app-action[data-slot='button'][data-variant='destructive'] { background: #c43b35; color: white; border-color: #c43b35; box-shadow: none; }
+.app-action[data-slot='button'][data-variant='destructive']:hover:not(:disabled) { background: #a52e29; }
+.app-action[data-slot='button'][data-size='sm'] { height: 34px; padding: 0 12px; font-size: 13px; }
+.app-action[data-slot='button'][data-size='lg'] { height: 46px; padding: 0 24px; }
+.app-action[data-slot='button']:disabled { opacity: .5; cursor: not-allowed; pointer-events: auto; box-shadow: none; }
+.app-action[data-slot='button'] svg { width: 16px; height: 16px; flex-shrink: 0; }
+.app-action[data-slot='button']:focus-visible { outline: 3px solid #00796b; outline-offset: 3px; }
+.upload-page .button-container > .app-action { flex: 1; }
+.upload-page .browse-btn { display: inline-flex; align-items: center; height: 40px; padding: 0 18px; font-size: 14px; font-weight: 600; }
+.upload-page .upload-icon { display: inline-flex; }
+.files-toolbar input, .files-toolbar select { height: 40px; }
+.app-message { display: flex; align-items: center; gap: 10px; border: 1px solid #a7d8d2; background: #eff8f6; color: #345650; padding: 12px 14px; border-radius: 10px; font-size: 14px; text-align: left; margin: 0 0 16px; }
+.app-message > svg { flex-shrink: 0; }
+.app-message > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.app-message-success { background: #e0f2f1; border-color: #80cbc4; color: #00695c; }
+.app-message-error { background: #fff1f1; border-color: #efb4b0; color: #a52e29; }
+.app-dialog-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(20,49,44,.4); backdrop-filter: blur(3px); }
+.app-dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 201; width: calc(100% - 32px); max-width: 440px; padding: 28px; background: #fff; border: 1px solid #a7d8d2; border-radius: 15px; box-shadow: 0 12px 48px rgba(0,60,50,.2); }
+.app-dialog h2 { margin: 0 0 14px; color: #00695c; font-size: 22px; }
+.app-dialog p { font-size: 14px; line-height: 1.7; color: #546e6a; overflow-wrap: anywhere; }
+.app-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.app-spin { animation: app-spin 1s linear infinite; }
+@keyframes app-spin { to { transform: rotate(360deg); } }
+@media (max-width: 600px) { .app-message { flex-wrap: wrap; } .app-dialog { padding: 22px; } }

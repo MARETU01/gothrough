@@ -67,12 +67,12 @@ export type UploadViewItem = Readonly<
 
 /** 状态对应的中文标签（供 UI 直接渲染） */
 export const STATE_LABELS: Record<UploadState, string> = {
-  pending: "⏳ 待上传",
+  pending: "待上传",
   initializing: "正在准备上传",
   completing: "正在合并文件",
   canceling: "正在取消",
-  uploading: "📤 上传中",
-  paused: "⏸ 已暂停",
-  success: "✅ 上传成功",
-  error: "❌ 上传失败",
+  uploading: "上传中",
+  paused: "已暂停",
+  success: "上传成功",
+  error: "上传失败",
 };

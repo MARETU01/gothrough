@@ -206,27 +206,6 @@
   margin-top: 4px;
 }
 
-.upload-page .remove-btn {
-  border: none;
-  background: transparent;
-  color: #ef5350;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.2s;
-  white-space: nowrap;
-}
-
-.upload-page .remove-btn:hover:not(:disabled) {
-  background-color: rgba(239, 83, 80, 0.12);
-}
-
-.upload-page .remove-btn:disabled {
-  color: #b0bec5;
-  cursor: not-allowed;
-}
-
 .upload-page .empty-hint {
   color: #90a4ae;
   font-size: 14px;
@@ -242,96 +221,11 @@
   margin-bottom: 16px;
 }
 
-.upload-page .upload-btn,
-.upload-page .pause-btn,
-.upload-page .resume-btn,
-.upload-page .cancel-btn,
-.upload-page .continue-btn {
-  border: none;
-  padding: 14px 20px;
-  border-radius: 50px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-  flex: 1;
-}
-
-.upload-page .upload-btn {
-  background: linear-gradient(to right, #00796b, #26a69a);
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 121, 107, 0.3);
-}
-
-.upload-page .upload-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 121, 107, 0.4);
-}
-
-.upload-page .upload-btn:disabled {
-  background: #b0bec5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
 /* 暂停 / 恢复 / 取消 保留功能色（橙 / 绿 / 红），与薄荷主色区分状态 */
 .upload-page .pause-btn {
   background: #ff9800;
   color: white;
   box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);
-}
-
-.upload-page .pause-btn:hover {
-  transform: translateY(-2px);
-}
-
-.upload-page .resume-btn {
-  background: #4caf50;
-  color: white;
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-}
-
-.upload-page .resume-btn:hover {
-  transform: translateY(-2px);
-}
-
-.upload-page .cancel-btn {
-  background: #f44336;
-  color: white;
-  box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
-}
-
-.upload-page .cancel-btn:hover {
-  transform: translateY(-2px);
-}
-
-.upload-page .continue-btn {
-  background: linear-gradient(to right, #00b09b, #96c93d);
-  color: white;
-  box-shadow: 0 4px 15px rgba(0, 176, 155, 0.3);
-}
-
-.upload-page .continue-btn:hover {
-  transform: translateY(-2px);
-}
-
-.upload-page .status-message {
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.upload-page .status-message.success {
-  background-color: #b2dfdb;
-  color: #004d40;
-  border: 1px solid #80cbc4;
-}
-
-.upload-page .status-message.error {
-  background-color: #ffcdd2;
-  color: #b71c1c;
-  border: 1px solid #ef9a9a;
 }
 
 .upload-page .stats-bar {
@@ -388,8 +282,6 @@
 .upload-page .progress-text > :first-child { flex-shrink: 0; }
 .upload-page .progress-text > :last-child { min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .upload-page .file-error { color: #9d2020; overflow-wrap: anywhere; margin: 8px 0; }
-.upload-page .retry-btn { padding: 6px 12px; border: 1px solid #00796b; border-radius: 6px; color: #00695c; background: white; cursor: pointer; }
-.upload-page .unavailable-link { color: #546e6a; font-size: 14px; }
 .upload-page .empty-hint { color: #546e6a; }
 .upload-page .file-row.canceling { opacity: 0.7; }
 

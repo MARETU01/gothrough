@@ -46,7 +46,12 @@ it('requires confirmation, encodes download paths, and clamps the page after del
   expect(screen.getByRole('link', { name: '下载 文件 21.txt' }).getAttribute('href')).toBe('/api/uploads/' + encodeURIComponent('文件 21.txt'));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
   expect(deleteFile).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 21.txt' }));
+  expect(screen.getByRole('alertdialog').textContent).toContain('文件 21.txt');
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(deleteFile).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
   await waitFor(() => expect(deleteFile).toHaveBeenCalledWith('文件 21.txt'));
   await screen.findByText('文件 01.txt');
   expect(screen.queryByText('文件 21.txt')).toBeNull();

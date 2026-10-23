@@ -84,6 +84,18 @@ export const useUploadQueue = () => {
     };
   }, []);
   const hasUploading = items.some((i) => i.state === "uploading");
+  const hasUnfinished = running || items.some((item) => item.state !== "success");
+  useEffect(() => {
+    if (!hasUnfinished) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Read live refs so a just-finished or just-cleared queue never warns.
+      if (!runRef.current && !itemsRef.current.some((item) => item.state !== "success")) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasUnfinished]);
   useEffect(() => {
     const samples = new WeakMap<UploadItem, { bytes: number; time: number }>();
     const timer = setInterval(() => {
