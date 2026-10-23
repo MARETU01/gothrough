@@ -1,5 +1,6 @@
 ﻿import React, { useEffect } from "react";
 import { useUploadQueue } from "@/hooks/useUploadQueue";
+import { Link } from "react-router-dom";
 import { UploadFileRow } from "./UploadFileRow";
 import { formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
@@ -46,7 +47,7 @@ const UploadPage: React.FC = () => {
         <p className="subtitle">支持大文件分块上传，可在当前页面暂停和恢复</p>
 
         <div className="nav-links">
-          <span className="unavailable-link">📦 文件列表暂未开放</span>
+          <Link to="/files">📦 查看已上传文件</Link>
         </div>
 
         <div

@@ -12,6 +12,9 @@ export const Navigation: React.FC = () => {
         <NavLink to="/upload" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           文件上传
         </NavLink>
+        <NavLink to="/files" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          文件列表
+        </NavLink>
       </div>
     </nav>
   );

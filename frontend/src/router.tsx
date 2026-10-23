@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom';
 import { RootLayout } from './layouts/RootLayout';
 import HomePage from './pages/Home/HomePage';
 import UploadPage from './pages/Upload/UploadPage';
+import FilesPage from './pages/Files/FilesPage';
 
 // 路由配置：使用布局路由模式，RootLayout 提供导航 + <Outlet/>，子路由页面在内部渲染
 export const AppRoutes: React.FC = () => {
@@ -10,6 +11,7 @@ export const AppRoutes: React.FC = () => {
       <Route element={<RootLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/upload" element={<UploadPage />} />
+        <Route path="/files" element={<FilesPage />} />
         <Route path="*" element={<main className="not-found"><h1>页面不存在</h1><Link to="/">返回主页</Link></main>} />
       </Route>
     </Routes>
