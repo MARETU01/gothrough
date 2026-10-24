@@ -18,6 +18,7 @@ const itemFor = (): UploadItem => ({
   savedFilename: "",
   uploadController: null,
   loadedBytes: 0,
+  elapsedMs: null,
   inflightBytes: new Map(),
   confirmedBytes: new Map(),
   transferredBytes: 0,

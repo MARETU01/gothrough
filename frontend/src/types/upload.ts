@@ -49,6 +49,8 @@ export interface UploadItem {
   transferredBytes: number;
   /** 展示用已发送总字节 = 服务端已确认分块字节 + 进行中分块字节（见 recalcLoadedBytes） */
   loadedBytes: number;
+  /** Current attempt elapsed time, excluding user pauses; null until started. */
+  elapsedMs: number | null;
 }
 
 /** 顶部状态提示消息 */
@@ -61,7 +63,7 @@ export interface StatusMessage {
 export type UploadViewItem = Readonly<
   Pick<
     UploadItem,
-    "file" | "state" | "speed" | "savedFilename" | "loadedBytes" | "error"
+    "file" | "state" | "speed" | "savedFilename" | "loadedBytes" | "error" | "elapsedMs"
   > & { session: Readonly<UploadSession> | null }
 >;
 
@@ -69,7 +71,7 @@ export type UploadViewItem = Readonly<
 export const STATE_LABELS: Record<UploadState, string> = {
   pending: "待上传",
   initializing: "正在准备上传",
-  completing: "正在合并文件",
+  completing: "正在校验保存",
   canceling: "正在取消",
   uploading: "上传中",
   paused: "已暂停",

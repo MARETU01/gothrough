@@ -5,7 +5,6 @@ import { getErrorBody } from '@/services/upload';
 import { errorMessage } from '@/utils/misc';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
-import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
 import './FilesPage.css';
 
@@ -60,6 +59,12 @@ export default function FilesPage() {
   }, [refresh]);
 
 
+  useEffect(() => {
+    if (confirming === null) return;
+    const timer = setTimeout(() => setConfirming(null), 3000);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+
   const filtered = React.useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
     const files = (data?.files ?? []).filter(file => file.name.toLocaleLowerCase().includes(keyword));
@@ -80,7 +85,8 @@ export default function FilesPage() {
 
   async function handleDelete(name: string) {
     if (deleting !== null) return;
-
+    if (confirming !== name) { setConfirming(name); return; }
+    setConfirming(null);
     setDeleting(name);
     setError('');
     setNotice('');
@@ -138,8 +144,8 @@ export default function FilesPage() {
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.mtime}</td>
               <td><div className="files-row-actions">
                 <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={`下载 ${file.name}`}><Download aria-hidden="true" />下载</a></Button>
-                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={`删除 ${file.name}`} onClick={() => setConfirming(file.name)}>
-                  <Trash2 aria-hidden="true" />删除
+                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={`${confirming === file.name ? '确认删除' : '删除'} ${file.name}`} onClick={() => void handleDelete(file.name)}>
+                  <Trash2 aria-hidden="true" />{deleting === file.name ? '删除中…' : confirming === file.name ? '确认删除？' : '删除'}
                 </Button>
               </div></td>
             </tr>)}</tbody>
@@ -152,7 +158,6 @@ export default function FilesPage() {
           </nav>}
         </section>}
       </div>
-      <ConfirmDeleteDialog filename={confirming} busy={deleting !== null} onCancel={() => setConfirming(null)} onConfirm={() => { if (confirming !== null) void handleDelete(confirming); }} />
     </main>
   );
 }

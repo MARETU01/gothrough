@@ -13,6 +13,7 @@ it("announces successful empty files as 100 percent", () => {
     error: "",
     speed: 0,
     savedFilename: "empty.txt",
+    elapsedMs: 1250,
     loadedBytes: 0,
     session: null,
   };
@@ -30,6 +31,7 @@ it("announces successful empty files as 100 percent", () => {
   expect(
     screen.getByRole("progressbar").getAttribute("aria-valuetext"),
   ).toContain("上传成功");
+  expect(screen.getByText("耗时 1.2秒")).toBeTruthy();
 });
 
 it("associates errors and retry actions with the file, and blocks retries while the queue is running", () => {
@@ -39,6 +41,7 @@ it("associates errors and retry actions with the file, and blocks retries while 
     error: "网络断开",
     speed: 0,
     savedFilename: "",
+    elapsedMs: null,
     loadedBytes: 0,
     session: null,
   };

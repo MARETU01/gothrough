@@ -10,6 +10,15 @@ export const formatSize = (bytes: number) => {
 /** 速度（字节/秒）格式化为 1.5 MB/s */
 export const formatSpeed = (bytesPerSec: number) => `${formatSize(bytesPerSec)}/s`;
 
+/** Elapsed duration keeps tenths of a second so short uploads remain visible. */
+export const formatElapsed = (milliseconds: number) => {
+  const tenths = Math.floor(Math.max(0, milliseconds) / 100);
+  const seconds = (tenths % 600) / 10;
+  const minutes = Math.floor(tenths / 600) % 60;
+  const hours = Math.floor(tenths / 36000);
+  return `${hours ? `${hours}时` : ''}${hours || minutes ? `${minutes}分` : ''}${seconds.toFixed(1)}秒`;
+};
+
 /** 剩余时间（ETA）格式化：剩余字节 + 当前速度 → "12秒" / "3分5秒" / "1时12分" */
 export const formatETA = (remainingBytes: number, bytesPerSec: number) => {
   if (bytesPerSec <= 0) return '--';

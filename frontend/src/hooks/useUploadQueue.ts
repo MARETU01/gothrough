@@ -25,6 +25,7 @@ import {
   recalcLoadedBytes,
 } from "@/utils/upload";
 import { errorMessage, sleep } from "@/utils/misc";
+import { createElapsedClock } from "@/utils/elapsed";
 
 const cleanupSession = async (item: UploadItem) => {
   if (!item.session) return;
@@ -48,6 +49,9 @@ export const useUploadQueue = () => {
   const runRef = useRef<{ cancelled: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotsRef = useRef(new WeakMap<UploadItem, UploadViewItem>());
+  const clocksRef = useRef(new WeakMap<UploadItem, ReturnType<typeof createElapsedClock>>());
+  const queueClockRef = useRef<ReturnType<typeof createElapsedClock> | null>(null);
+  const [queueElapsedMs, setQueueElapsedMs] = useState<number | null>(null);
   const [items, setItems] = useState<UploadViewItem[]>([]);
   const [globalPaused, setGlobalPausedState] = useState(false);
   const [running, setRunning] = useState(false);
@@ -56,7 +60,10 @@ export const useUploadQueue = () => {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const refreshFileList = useCallback(() => {
     if (!mountedRef.current) return;
+    if (queueClockRef.current) setQueueElapsedMs(queueClockRef.current.read());
     const next = itemsRef.current.map((item) => {
+      const clock = clocksRef.current.get(item);
+      if (clock) item.elapsedMs = clock.read();
       const snapshot = createUploadSnapshot(
         item,
         snapshotsRef.current.get(item),
@@ -114,7 +121,7 @@ export const useUploadQueue = () => {
           changed = true;
         }
       });
-      if (changed) refreshFileList();
+      if (changed || runRef.current) refreshFileList();
     }, 500);
     return () => clearInterval(timer);
   }, [refreshFileList]);
@@ -135,6 +142,7 @@ export const useUploadQueue = () => {
         confirmedBytes: new Map(),
         transferredBytes: 0,
         loadedBytes: 0,
+        elapsedMs: null,
       });
       keys.add(key);
     });
@@ -149,6 +157,9 @@ export const useUploadQueue = () => {
         abort: new AbortController(),
       };
       item.uploadController = controller;
+      const clock = createElapsedClock();
+      clocksRef.current.set(item, clock);
+      clock.resume();
       const isStopped = () =>
         run.cancelled ||
         controller.cancelled ||
@@ -231,6 +242,7 @@ export const useUploadQueue = () => {
                   sessionId: session.sessionId,
                   chunkIndex: index,
                   chunk,
+                  transport: data.upload_transport,
                   signal: controller.abort.signal,
                   onProgress: (loaded, total) => {
                     if (isStopped() || controller.abort.signal.aborted) return;
@@ -243,9 +255,9 @@ export const useUploadQueue = () => {
                     );
                     recordTransferred(bytes);
                     item.inflightBytes.set(index, bytes);
-                    recalcLoadedBytes(item);
                     if (Date.now() - lastPaint >= PROGRESS_REFRESH_INTERVAL) {
                       lastPaint = Date.now();
+                      recalcLoadedBytes(item);
                       refreshFileList();
                     }
                   },
@@ -299,6 +311,7 @@ export const useUploadQueue = () => {
         item.inflightBytes.clear();
         recalcLoadedBytes(item);
       } catch (err) {
+        clock.pause();
         await cleanupSession(item);
         item.session = null;
         item.inflightBytes.clear();
@@ -321,6 +334,7 @@ export const useUploadQueue = () => {
             });
         }
       } finally {
+        clock.pause();
         item.speed = 0;
         item.uploadController = null;
         refreshFileList();
@@ -338,6 +352,9 @@ export const useUploadQueue = () => {
       );
       if (!pending.length) return;
       const run = { cancelled: false };
+      queueClockRef.current = createElapsedClock();
+      queueClockRef.current.resume();
+      setQueueElapsedMs(0);
       runRef.current = run;
       setRunning(true);
       setGlobalPaused(false);
@@ -359,6 +376,8 @@ export const useUploadQueue = () => {
           Array.from({ length: MAX_CONCURRENT_FILES }, worker),
         );
       } finally {
+        queueClockRef.current?.pause();
+        refreshFileList();
         if (runRef.current === run) runRef.current = null;
         if (mountedRef.current) {
           setRunning(false);
@@ -368,12 +387,14 @@ export const useUploadQueue = () => {
           setStatus({ text: "上传已取消", type: "success" });
       }
     },
-    [uploadFileChunked, setGlobalPaused],
+    [uploadFileChunked, setGlobalPaused, refreshFileList],
   );
   const pauseAll = () => {
+    queueClockRef.current?.pause();
     setGlobalPaused(true);
     itemsRef.current.forEach((i) => {
       if (i.uploadController) {
+        clocksRef.current.get(i)?.pause();
         i.uploadController.paused = true;
         i.speed = 0;
       }
@@ -381,16 +402,22 @@ export const useUploadQueue = () => {
     refreshFileList();
   };
   const resumeAll = () => {
+    if (runRef.current && !runRef.current.cancelled) queueClockRef.current?.resume();
     setGlobalPaused(false);
     itemsRef.current.forEach((i) => {
-      if (i.uploadController) i.uploadController.paused = false;
+      if (i.uploadController) {
+        i.uploadController.paused = false;
+        if (!i.uploadController.cancelled) clocksRef.current.get(i)?.resume();
+      }
     });
     refreshFileList();
   };
   const cancelAll = () => {
+    queueClockRef.current?.pause();
     setCanceling(true);
     if (runRef.current) runRef.current.cancelled = true;
     itemsRef.current.forEach((item) => {
+      clocksRef.current.get(item)?.pause();
       stopItem(item);
       if (item.uploadController) {
         item.state = "canceling";
@@ -404,6 +431,8 @@ export const useUploadQueue = () => {
   const resetAll = () => {
     if (runRef.current) return;
     itemsRef.current = [];
+    queueClockRef.current = null;
+    setQueueElapsedMs(null);
     setGlobalPaused(false);
     setStatus(null);
     refreshFileList();
@@ -415,6 +444,7 @@ export const useUploadQueue = () => {
       );
       const item = itemsRef.current[index];
       if (!item) return;
+      clocksRef.current.get(item)?.pause();
       stopItem(item);
       itemsRef.current.splice(index, 1);
       refreshFileList();
@@ -444,6 +474,7 @@ export const useUploadQueue = () => {
     setDragOver,
     status,
     totalSpeed,
+    queueElapsedMs,
     pendingCount,
     uploadingCount,
     pausedCount,

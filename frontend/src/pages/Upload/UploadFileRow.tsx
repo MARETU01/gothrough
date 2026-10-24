@@ -1,6 +1,6 @@
 ﻿import { memo } from "react";
 import { STATE_LABELS, type UploadViewItem } from "@/types/upload";
-import { formatETA, formatSize, formatSpeed } from "@/utils/format";
+import { formatElapsed, formatETA, formatSize, formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
 
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ export const UploadFileRow = memo(function UploadFileRow({
       )}
       <div className="file-status">
         <span>{STATE_LABELS[item.state]}</span>
+        {item.elapsedMs !== null && <span title="不含暂停时间；重试后重新计时">耗时 {formatElapsed(item.elapsedMs)}</span>}
         {item.speed > 0 && (
           <span className="speed">{formatSpeed(item.speed)}</span>
         )}

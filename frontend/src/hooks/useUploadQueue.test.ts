@@ -67,6 +67,79 @@ afterEach(() => {
 });
 
 describe("upload queue lifecycle", () => {
+  it("excludes repeated pauses during initialization and completion and freezes final elapsed time", async () => {
+    vi.useFakeTimers();
+    const init = deferred<ReturnType<typeof session>>();
+    const chunk = deferred<{ received: number }>();
+    const complete = deferred<{ saved_filename: string }>();
+    vi.mocked(initUpload).mockReturnValue(init.promise);
+    vi.mocked(uploadChunk).mockReturnValue(chunk.promise);
+    vi.mocked(completeUpload).mockReturnValue(complete.promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    act(() => { run = hook.result.current.startAllUploads(); });
+    act(() => { vi.advanceTimersByTime(1000); hook.result.current.pauseAll(); hook.result.current.pauseAll(); });
+    act(() => { vi.advanceTimersByTime(7000); });
+    expect(hook.result.current.items[0].elapsedMs).toBe(1000);
+    expect(hook.result.current.queueElapsedMs).toBe(1000);
+    act(() => { hook.result.current.resumeAll(); hook.result.current.resumeAll(); vi.advanceTimersByTime(2000); });
+    await act(async () => { init.resolve(session()); });
+    expect(hook.result.current.items[0].elapsedMs).toBe(3000);
+    await act(async () => { chunk.resolve({ received: 1 }); });
+    expect(hook.result.current.items[0].state).toBe("completing");
+    act(() => { vi.advanceTimersByTime(500); hook.result.current.pauseAll(); });
+    act(() => { vi.advanceTimersByTime(5000); hook.result.current.resumeAll(); vi.advanceTimersByTime(100); });
+    await act(async () => { complete.resolve({ saved_filename: "saved" }); await run; });
+    expect(hook.result.current.items[0].elapsedMs).toBe(3600);
+    expect(hook.result.current.queueElapsedMs).toBe(3600);
+    act(() => { vi.advanceTimersByTime(10000); });
+    expect(hook.result.current.items[0].elapsedMs).toBe(3600);
+    expect(hook.result.current.queueElapsedMs).toBe(3600);
+    act(() => hook.result.current.resetAll());
+    expect(hook.result.current.queueElapsedMs).toBeNull();
+  });
+
+  it("measures queue wall time without summing parallel files or counting a file's pending wait", async () => {
+    vi.useFakeTimers();
+    const chunks = Array.from({ length: 3 }, () => deferred<{ received: number }>());
+    vi.mocked(uploadChunk).mockImplementation(({ sessionId }) => chunks[Number(sessionId.split('-')[1])].promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 3);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(hook.result.current.items[2].elapsedMs).toBeNull();
+    await act(async () => { chunks[0].resolve({ received: 1 }); });
+    act(() => { vi.advanceTimersByTime(1000); });
+    await act(async () => { chunks[1].resolve({ received: 1 }); chunks[2].resolve({ received: 1 }); await run; });
+    expect(hook.result.current.items.map(item => item.elapsedMs)).toEqual([1000, 2000, 1000]);
+    expect(hook.result.current.queueElapsedMs).toBe(2000);
+  });
+
+  it("freezes cancellation time and starts a fresh clock when retrying", async () => {
+    vi.useFakeTimers();
+    const init = deferred<ReturnType<typeof session>>();
+    vi.mocked(initUpload).mockReturnValueOnce(init.promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    act(() => { run = hook.result.current.startAllUploads(); });
+    act(() => { vi.advanceTimersByTime(1200); hook.result.current.cancelAll(); vi.advanceTimersByTime(5000); });
+    await act(async () => { init.resolve(session()); await run; });
+    expect(hook.result.current.items[0].elapsedMs).toBe(1200);
+    expect(hook.result.current.queueElapsedMs).toBe(1200);
+    const retry = deferred<ReturnType<typeof session>>();
+    vi.mocked(initUpload).mockReturnValueOnce(retry.promise);
+    act(() => { run = hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0].elapsedMs).toBe(0);
+    expect(hook.result.current.queueElapsedMs).toBe(0);
+    act(() => { vi.advanceTimersByTime(300); });
+    await act(async () => { retry.resolve(session()); await run; });
+    expect(hook.result.current.items[0].elapsedMs).toBe(300);
+    expect(hook.result.current.queueElapsedMs).toBe(300);
+  });
+
   it("counts local acknowledgements correctly when responses arrive out of order", async () => {
     vi.mocked(initUpload).mockResolvedValue(session("test", 3));
     const chunks = Array.from({ length: 3 }, () =>

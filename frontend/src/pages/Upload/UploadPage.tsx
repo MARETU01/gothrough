@@ -2,7 +2,7 @@
 import { useSharedUploadQueue } from "@/contexts/UploadQueueContext";
 import { Link } from "react-router-dom";
 import { UploadFileRow } from "./UploadFileRow";
-import { formatSpeed } from "@/utils/format";
+import { formatElapsed, formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
 import { Button } from "@/components/ui/button";
 import { StatusMessage } from "@/components/StatusMessage";
@@ -17,6 +17,7 @@ const UploadPage: React.FC = () => {
     setDragOver,
     status,
     totalSpeed,
+    queueElapsedMs,
     pendingCount,
     errorCount,
     successCount,
@@ -172,6 +173,7 @@ const UploadPage: React.FC = () => {
 
         {items.length > 0 && (
           <div className="stats-bar">
+            {queueElapsedMs !== null && <div title="本轮队列耗时，不含暂停时间">总耗时: <span>{formatElapsed(queueElapsedMs)}</span>（不含暂停）</div>}
             <div>
               总速度: <span>{formatSpeed(totalSpeed)}</span>
             </div>

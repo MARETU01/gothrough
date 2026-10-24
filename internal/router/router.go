@@ -1,6 +1,8 @@
 package router
 
 import (
+	"os"
+
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
 
@@ -10,7 +12,11 @@ import (
 // 注册所有路由
 func SetupRouter(h *handler.UploadHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
+	if os.Getenv("GOTHROUGH_ACCESS_LOG") == "1" {
+		r.Use(gin.Logger())
+	}
 
 	r.MaxMultipartMemory = config.MaxContentLength
 	r.POST("/upload/init", h.UploadInit)

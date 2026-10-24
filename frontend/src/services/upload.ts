@@ -31,6 +31,7 @@ export interface InitUploadResponse {
   total_chunks: number;
   chunk_size: number;
   final_filename: string;
+  upload_transport?: 'raw';
   error?: string;
 }
 
@@ -62,6 +63,8 @@ export interface UploadChunkOptions {
   chunkIndex: number;
   /** 分块二进制内容（File.slice 的结果） */
   chunk: Blob;
+  /** Negotiated at initialization; omitted for older multipart-only servers. */
+  transport?: 'raw';
   /** 取消信号：abort 后立即中断该分块请求（axios 原生支持） */
   signal?: AbortSignal;
   /**
@@ -76,15 +79,22 @@ export function uploadChunk({
   sessionId,
   chunkIndex,
   chunk,
+  transport,
   signal,
   onProgress,
 }: UploadChunkOptions) {
   const form = new FormData();
-  form.append('session_id', sessionId);
-  form.append('chunk_index', String(chunkIndex));
-  form.append('chunk', chunk);
+  if (transport !== 'raw') {
+    form.append('session_id', sessionId);
+    form.append('chunk_index', String(chunkIndex));
+    form.append('chunk', chunk);
+  }
 
-  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, form, {
+  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, transport === 'raw' ? chunk : form, {
+    ...(transport === 'raw' ? {
+      params: { session_id: sessionId, chunk_index: chunkIndex },
+      headers: { 'Content-Type': 'application/octet-stream' },
+    } : {}),
     // 分块可能很大，覆盖实例默认的 30s 超时，避免中途被 abort
     timeout: 0,
     signal,

@@ -9,7 +9,7 @@ import (
 
 const (
 	MaxContentLength = 50 * 1024 * 1024 // 单次请求最大 50MB
-	ChunkSize        = 5 * 1024 * 1024  // 默认分块大小 5MB
+	ChunkSize        = 8 * 1024 * 1024  // 默认分块大小 8MiB，减少高速链路请求开销
 	ServerPort       = ":8080"
 	ServerPortTLS    = ":443"
 	CertFile         = "D:/Tools/lego/.lego/certificates/maretu.top.crt"
@@ -38,8 +38,12 @@ func Init() {
 	UploadFolder = filepath.Join(BaseDir, "uploads")
 	TempFolder = filepath.Join(BaseDir, "temp_uploads")
 
-	_ = os.MkdirAll(UploadFolder, 0755)
-	_ = os.MkdirAll(TempFolder, 0755)
+	if err := os.MkdirAll(UploadFolder, 0755); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.MkdirAll(TempFolder, 0700); err != nil {
+		log.Fatal(err)
+	}
 
 	// 清理上次残留的临时分块
 	if entries, err := os.ReadDir(TempFolder); err == nil {

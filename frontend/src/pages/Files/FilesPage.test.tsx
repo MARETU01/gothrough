@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FilesPage from './FilesPage';
@@ -20,7 +20,7 @@ const makeData = (): FileListResponse => ({
 });
 
 beforeEach(() => { vi.mocked(listFiles).mockResolvedValue(makeData()); vi.mocked(deleteFile).mockResolvedValue({ status: 'deleted' }); });
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); });
 const openPage = () => render(createElement(MemoryRouter, null, createElement(FilesPage)));
 
 it('keeps all files available after pagination, searching, and sorting', async () => {
@@ -46,16 +46,23 @@ it('requires confirmation, encodes download paths, and clamps the page after del
   expect(screen.getByRole('link', { name: '下载 文件 21.txt' }).getAttribute('href')).toBe('/api/uploads/' + encodeURIComponent('文件 21.txt'));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
   expect(deleteFile).not.toHaveBeenCalled();
-  expect(screen.getByRole('alertdialog').textContent).toContain('文件 21.txt');
-  fireEvent.click(screen.getByRole('button', { name: '取消' }));
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  expect(deleteFile).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
-  fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 21.txt' }));
   await waitFor(() => expect(deleteFile).toHaveBeenCalledWith('文件 21.txt'));
   await screen.findByText('文件 01.txt');
   expect(screen.queryByText('文件 21.txt')).toBeNull();
   expect(screen.queryByRole('navigation', { name: '文件列表分页' })).toBeNull();
+});
+
+it('resets inline confirmation after three seconds without deleting', async () => {
+  openPage();
+  await screen.findByText('文件 01.txt');
+  vi.useFakeTimers();
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+  expect(screen.getByRole('button', { name: '确认删除 文件 01.txt' })).toBeTruthy();
+  act(() => { vi.advanceTimersByTime(3000); });
+  expect(screen.getByRole('button', { name: '删除 文件 01.txt' })).toBeTruthy();
+  expect(deleteFile).not.toHaveBeenCalled();
 });
 
 it('shows load errors with a working retry and distinguishes empty search results', async () => {

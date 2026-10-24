@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -20,55 +21,77 @@ import (
 
 type UploadHandler struct {
 	uploadService *service.UploadService
+	streams       chan struct{}
 }
 
 func NewUploadHandler(us *service.UploadService) *UploadHandler {
-	return &UploadHandler{uploadService: us}
+	return &UploadHandler{uploadService: us, streams: make(chan struct{}, 16)}
 }
 
 // 初始化分块上传
 func (h *UploadHandler) UploadInit(c *gin.Context) {
 	var req model.InitRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Filename == "" || req.TotalSize <= 0 {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Filename == "" || req.TotalSize < 0 || req.TotalSize > 1<<40 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 filename 或 total_size"})
 		return
 	}
 
 	session, err := h.uploadService.InitSession(req)
 	if err != nil {
+		if errors.Is(err, service.ErrBusy) {
+			c.Header("Retry-After", "1")
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"session_id":     session.SessionID,
-		"chunk_size":     session.ChunkSize,
-		"total_chunks":   session.TotalChunks,
-		"final_filename": session.FinalFilename,
+		"session_id":       session.SessionID,
+		"chunk_size":       session.ChunkSize,
+		"total_chunks":     session.TotalChunks,
+		"final_filename":   session.FinalFilename,
+		"upload_transport": "raw",
 	})
 }
 
 // 上传单个分块
 func (h *UploadHandler) UploadChunk(c *gin.Context) {
+	// Bound compatibility parsing as well as direct streams; multipart allocates
+	// memory before reaching the service's independent disk-write limiter.
+	select {
+	case h.streams <- struct{}{}:
+		defer func() { <-h.streams }()
+	default:
+		c.Header("Retry-After", "1")
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": service.ErrBusy.Error()})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, config.ChunkSize+1024*1024)
+	if strings.HasPrefix(c.GetHeader("Content-Type"), "application/octet-stream") {
+		if c.Request.ContentLength > config.ChunkSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "分块超过大小限制"})
+			return
+		}
+		index, err := strconv.Atoi(c.Query("chunk_index"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 chunk_index"})
+			return
+		}
+		h.writeChunk(c, c.Query("session_id"), index, c.Request.Body)
+		return
+	}
+	// Compatibility for existing multipart clients; new clients stream raw bodies.
 	sessionID := c.PostForm("session_id")
+	if c.Request.MultipartForm != nil {
+		defer c.Request.MultipartForm.RemoveAll()
+	}
 	chunkIndexStr := c.PostForm("chunk_index")
 
 	chunkIndex, err := strconv.Atoi(chunkIndexStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 chunk_index"})
-		return
-	}
-
-	session, err := h.uploadService.GetSession(sessionID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	if chunkIndex < 0 || chunkIndex >= session.TotalChunks {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("分块索引 %d 超出范围 [0, %d)", chunkIndex, session.TotalChunks),
-		})
 		return
 	}
 
@@ -78,25 +101,35 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 		return
 	}
 
-	chunkPath := filepath.Join(session.ChunksDir, strconv.Itoa(chunkIndex))
-	if err := c.SaveUploadedFile(chunkFile, chunkPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存分块失败"})
+	file, err := chunkFile.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取分块失败"})
 		return
 	}
+	defer file.Close()
+	h.writeChunk(c, sessionID, chunkIndex, file)
+}
 
-	if err := h.uploadService.AddChunkToSession(sessionID, chunkIndex); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io.Reader) {
+	count, err := h.uploadService.WriteChunk(id, index, body)
+	if err != nil {
+		status := http.StatusInternalServerError
+		var tooLarge *http.MaxBytesError
+		switch {
+		case errors.Is(err, service.ErrSession):
+			status = http.StatusNotFound
+		case errors.Is(err, service.ErrChunk):
+			status = http.StatusBadRequest
+		case errors.Is(err, service.ErrBusy):
+			status = http.StatusTooManyRequests
+			c.Header("Retry-After", "1")
+		case errors.As(err, &tooLarge):
+			status = http.StatusRequestEntityTooLarge
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-
-	session, _ = h.uploadService.GetSession(sessionID)
-
-	c.JSON(http.StatusOK, gin.H{
-		"session_id":   sessionID,
-		"chunk_index":  chunkIndex,
-		"received":     session.ReceivedCount(),
-		"total_chunks": session.TotalChunks,
-	})
+	c.JSON(http.StatusOK, gin.H{"session_id": id, "chunk_index": index, "received": count})
 }
 
 // 查询上传进度
@@ -109,10 +142,11 @@ func (h *UploadHandler) UploadStatus(c *gin.Context) {
 		return
 	}
 
-	progress := float64(session.ReceivedCount()) / float64(session.TotalChunks) * 100
-
+	progress := 100.0
+	if session.TotalChunks > 0 {
+		progress = float64(session.ReceivedCount()) / float64(session.TotalChunks) * 100
+	}
 	sortedChunks := session.ReceivedChunks
-	sort.Ints(sortedChunks)
 
 	c.JSON(http.StatusOK, gin.H{
 		"session_id":        sessionID,
@@ -162,6 +196,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 			"saved_filename":    session.FinalFilename,
 			"status":            "failed",
 			"message":           err.Error(),
+			"error":             err.Error(),
 		})
 		return
 	}
