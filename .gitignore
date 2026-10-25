@@ -32,5 +32,10 @@ go.work.sum
 .vscode/
 
 # Upload data
+/release/
+/internal/webassets/dist/
 /uploads/
 /temp_uploads/
+
+# Local TLS certificates and private keys
+/config/certs/

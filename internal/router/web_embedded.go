@@ -3,7 +3,7 @@
 package router
 
 import (
-	webassets "github.com/MARETU01/gothrough"
+	"github.com/MARETU01/gothrough/internal/webassets"
 	"github.com/gin-gonic/gin"
 )
 

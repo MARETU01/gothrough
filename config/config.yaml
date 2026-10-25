@@ -1,0 +1,9 @@
+# Environment variables override these values; see README.md.
+server:
+  host: "0.0.0.0"
+  port: 8080
+  tls:
+    enabled: false
+    # Relative paths are resolved from this config file's directory.
+    cert_file: "certs/server.crt"
+    key_file: "certs/server.key"

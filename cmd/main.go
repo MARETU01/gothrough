@@ -25,8 +25,20 @@ func main() {
 }
 
 func run() error {
-	enableTLS := flag.Bool("tls", false, "enable https tls server, use -tls=true to open")
+	configPath := flag.String("config", "", "YAML config path (or GOTHROUGH_CONFIG)")
+	enableTLS := flag.Bool("tls", false, "override TLS enablement; environment variables take precedence")
 	flag.Parse()
+	var legacyTLS *bool
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "tls" {
+			legacyTLS = enableTLS
+		}
+	})
+	settings, err := config.Load(*configPath, config.Overrides{TLS: legacyTLS})
+	if err != nil {
+		return err
+	}
+	log.Printf("配置来源: %s", settings.Source)
 	config.Init()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -48,18 +60,16 @@ func run() error {
 	uploadHandler := handler.NewUploadHandler(uploadService)
 	r := router.SetupRouter(uploadHandler)
 
-	address := config.ServerPort
-	if *enableTLS {
-		address = config.ServerPortTLS
-	}
+	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Minute, IdleTimeout: 90 * time.Second}
 	errorsCh := make(chan error, 1)
 	go func() {
-		log.Printf("启动文件传输服务器，端口 %s", address)
-		if *enableTLS {
-			errorsCh <- server.ListenAndServeTLS(config.CertFile, config.KeyFile)
+		if settings.Server.TLS.Enabled {
+			log.Printf("启动 HTTPS 文件传输服务器，监听 %s", address)
+			errorsCh <- server.ListenAndServeTLS(settings.Server.TLS.CertFile, settings.Server.TLS.KeyFile)
 		} else {
+			log.Printf("启动 HTTP 文件传输服务器，监听 %s", address)
 			errorsCh <- server.ListenAndServe()
 		}
 	}()
