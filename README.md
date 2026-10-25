@@ -98,6 +98,8 @@ Makefile                开发检查和发布构建入口
 | [配置说明](doc/configuration.md) | YAML 配置、环境变量、配置优先级、证书路径和开发代理 |
 | [构建与部署](doc/build.md) | Makefile、依赖缓存、前端嵌入、发布及跨平台构建 |
 | [传输实现](doc/transfer.md) | 分块协议、并发控制、临时文件、校验及资源限制 |
+| [持续集成](doc/ci.md) | GitHub Actions 检查范围、race 检测及本地复现 |
+| [Docker 部署](doc/docker.md) | 镜像构建、Compose、数据持久化及 HTTPS |
 | [前端说明](frontend/README.md) | 前端开发、代码组织及测试 |
 
 ## 使用限制

@@ -1,0 +1,14 @@
+services:
+  gothrough:
+    build: .
+    image: gothrough:local
+    ports:
+      - "${GOTHROUGH_HTTP_PORT:-8080}:8080"
+    volumes:
+      - gothrough-data:/data
+      - ./config/config.yaml:/app/config/config.yaml:ro
+    restart: unless-stopped
+    stop_grace_period: 40s
+
+volumes:
+  gothrough-data:
