@@ -14,6 +14,26 @@ Dockerfile 分为前端构建、Go 编译、运行三个阶段。构建环境使
 
 npm 和 Go 依赖下载、Go 编译使用 BuildKit 缓存，源码修改不会直接使依赖下载层失效。`.dockerignore` 排除本机依赖、构建产物、上传数据、环境文件和常见证书/私钥文件。
 
+## GitHub 自动构建与发布
+
+工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 `main` 的 push 或 main 分支的手动运行中，等待全部 CI 检查通过后，自动验证容器上传下载及重启持久化，再发布镜像到 GitHub Container Registry（GHCR）。PR 不发布。
+
+支持 `linux/amd64` 和 `linux/arm64`，镜像地址为 `ghcr.io/maretu01/gothrough`；同时生成 `latest` 和 `sha-<完整提交SHA>` 标签。镜像名根据仓库路径自动生成，fork 后会使用 fork 自己的仓库名。
+
+首次成功发布后，可在 GitHub 账号或仓库关联的 Packages 页面查看镜像。GHCR 新包默认私有；如果需要未登录的服务器直接拉取，应在包设置中明确将可见性改为 Public。保留私有时，在服务器用具有该包读取权限的账号及 `read:packages` 权限的 classic token 执行 `docker login ghcr.io`。参见 [GitHub Container registry 文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
+
+镜像首次发布成功且已具备读取权限后：
+
+```sh
+docker pull ghcr.io/maretu01/gothrough:latest
+docker run -d --name gothrough --stop-timeout 40 \
+  -p 8080:8080 \
+  --mount type=volume,source=gothrough-data,target=/data \
+  ghcr.io/maretu01/gothrough:latest
+```
+
+镜像发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，仅发布任务开启 `packages: write`，无需填写 Docker Hub 用户名或密码。若发布时遇到 403，检查仓库/组织是否限制 Actions 的包写入；如果曾手动创建同名包，还需在该包的 Actions access 设置中授予本仓库访问权限。工作流不会自动修改包的可见性，也不会自动部署或更新你的服务器。
+
 ## 启动容器
 
 ```sh
