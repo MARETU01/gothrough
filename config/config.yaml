@@ -1,4 +1,4 @@
-# Environment variables override these values; see README.md.
+# Environment variables override these values; see doc/configuration.md.
 server:
   host: "0.0.0.0"
   port: 8080
