@@ -16,9 +16,9 @@ npm 和 Go 依赖下载、Go 编译使用 BuildKit 缓存，源码修改不会�
 
 ## GitHub 自动构建与发布
 
-工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 `main` 的 push 或 main 分支的手动运行中，等待全部 CI 检查通过后，自动验证容器上传下载及重启持久化，再发布镜像到 GitHub Container Registry（GHCR）。PR 不发布。
+工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 GitHub Container Registry（GHCR）；标签提交必须已包含在 main 历史中。
 
-支持 `linux/amd64` 和 `linux/arm64`，镜像地址为 `ghcr.io/maretu01/gothrough`；同时生成 `latest` 和 `sha-<完整提交SHA>` 标签。镜像名根据仓库路径自动生成，fork 后会使用 fork 自己的仓库名。
+发布支持 `linux/amd64` 和 `linux/arm64`，镜像地址为 `ghcr.io/maretu01/gothrough`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名根据仓库路径自动生成，fork 后会使用 fork 自己的仓库名。手动运行工作流只验证，不发布，打标签步骤见[持续集成](ci.md)。
 
 首次成功发布后，可在 GitHub 账号或仓库关联的 Packages 页面查看镜像。GHCR 新包默认私有；如果需要未登录的服务器直接拉取，应在包设置中明确将可见性改为 Public。保留私有时，在服务器用具有该包读取权限的账号及 `read:packages` 权限的 classic token 执行 `docker login ghcr.io`。参见 [GitHub Container registry 文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
 

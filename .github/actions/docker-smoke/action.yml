@@ -1,0 +1,49 @@
+name: Docker smoke test
+description: Verify the gothrough:ci image can serve pages, upload files, and preserve them across restart
+runs:
+  using: composite
+  steps:
+    - name: Verify container upload and persistence
+      shell: bash
+      run: |
+        set -euo pipefail
+        trap 'docker logs gothrough-ci || true; docker rm -f gothrough-ci || true; docker volume rm gothrough-ci-data || true' EXIT
+        docker volume create gothrough-ci-data
+        docker run --detach --name gothrough-ci --stop-timeout 40 \
+          --publish 127.0.0.1:18080:8080 \
+          --volume gothrough-ci-data:/data \
+          --env GOTHROUGH_HOST=0.0.0.0 \
+          --env GOTHROUGH_PORT=8080 \
+          --env GOTHROUGH_TLS_ENABLED=false gothrough:ci
+        curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 \
+          http://127.0.0.1:18080/files > /dev/null
+        python3 - <<'PY'
+        import json
+        import urllib.parse
+        import urllib.request
+
+        base = "http://127.0.0.1:18080"
+        payload = b"GoThrough Docker upload smoke test"
+
+        def post(path, body, content_type):
+            req = urllib.request.Request(base + path, data=body,
+                                         headers={"Content-Type": content_type})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.load(response)
+
+        session = post("/api/upload/init", json.dumps({
+            "filename": "docker-ci.txt", "total_size": len(payload)
+        }).encode(), "application/json")
+        query = urllib.parse.urlencode({"session_id": session["session_id"], "chunk_index": 0})
+        post("/api/upload/chunk?" + query, payload, "application/octet-stream")
+        completed = post("/api/upload/complete", json.dumps({
+            "session_id": session["session_id"]
+        }).encode(), "application/json")
+        assert completed["saved_filename"] == "docker-ci.txt", completed
+        with urllib.request.urlopen(base + "/api/uploads/docker-ci.txt", timeout=30) as response:
+            assert response.read() == payload, "download differs from uploaded content"
+        PY
+        docker restart gothrough-ci
+        curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 \
+          http://127.0.0.1:18080/api/uploads/docker-ci.txt > /tmp/gothrough-ci-download
+        printf 'GoThrough Docker upload smoke test' | cmp - /tmp/gothrough-ci-download
