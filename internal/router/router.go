@@ -41,5 +41,6 @@ func SetupRouter(h *handler.UploadHandler) *gin.Engine {
 		api.POST("/delete/*filename", h.DeleteFile)
 	}
 
+	setupWeb(r)
 	return r
 }
