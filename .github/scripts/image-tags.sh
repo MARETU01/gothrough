@@ -21,7 +21,11 @@ if [[ $VERSION == *-* ]]; then
     done
 fi
 
-image="ghcr.io/${REPOSITORY,,}"
+image="${REPOSITORY,,}"
+if [[ ! $image =~ ^[a-z0-9][a-z0-9_-]*/[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*$ ]]; then
+    echo "Invalid Docker Hub repository: use namespace/repository" >&2
+    exit 1
+fi
 commit="$(git rev-parse HEAD)"
 {
     echo "commit=$commit"

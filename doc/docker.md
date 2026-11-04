@@ -16,23 +16,30 @@ npm 和 Go 依赖下载、Go 编译使用 BuildKit 缓存，源码修改不会�
 
 ## GitHub 自动构建与发布
 
-工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 GitHub Container Registry（GHCR）；标签提交必须已包含在 main 历史中。
+工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 Docker Hub；标签提交必须已包含在 main 历史中。
 
-发布支持 `linux/amd64` 和 `linux/arm64`，镜像地址为 `ghcr.io/maretu01/gothrough`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名根据仓库路径自动生成，fork 后会使用 fork 自己的仓库名。手动运行工作流只验证，不发布，打标签步骤见[持续集成](ci.md)。
+发布支持 `linux/amd64` 和 `linux/arm64`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名默认为 `<Docker Hub 用户名>/<GitHub 仓库名>` 并转换为小写，也可通过 repository variable `DOCKERHUB_REPOSITORY` 指定完整的 `命名空间/镜像名`。手动运行工作流只验证，不发布，打标签步骤见[持续集成](ci.md)。
 
-首次成功发布后，可在 GitHub 账号或仓库关联的 Packages 页面查看镜像。GHCR 新包默认私有；如果需要未登录的服务器直接拉取，应在包设置中明确将可见性改为 Public。保留私有时，在服务器用具有该包读取权限的账号及 `read:packages` 权限的 classic token 执行 `docker login ghcr.io`。参见 [GitHub Container registry 文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。
+首次发布前完成以下设置：
+
+1. 在 Docker Hub 创建目标仓库，例如 `你的用户名/gothrough`；需要公开拉取时将其设为 Public。
+2. 在 Docker Hub 创建具有目标仓库读写权限的访问令牌（Personal Access Token），不要使用账户密码。
+3. 在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Secrets** 添加 `DOCKERHUB_USERNAME`（Docker Hub 登录用户名）和 `DOCKERHUB_TOKEN`（访问令牌）。不要把令牌写入代码或日志。
+4. 如果 Docker Hub 命名空间或仓库名与默认值不同，在同一页面的 **Variables** 添加 `DOCKERHUB_REPOSITORY`，例如 `my-org/gothrough`；登录账号及令牌必须有该仓库的推送权限。
+
+以下命令中的 `YOUR_USERNAME` 替换为 Docker Hub 用户名；配置了自定义仓库时替换整个镜像地址。私有仓库需要先在目标机器执行 `docker login`。
 
 镜像首次发布成功且已具备读取权限后：
 
 ```sh
-docker pull ghcr.io/maretu01/gothrough:latest
+docker pull YOUR_USERNAME/gothrough:latest
 docker run -d --name gothrough --stop-timeout 40 \
   -p 8080:8080 \
   --mount type=volume,source=gothrough-data,target=/data \
-  ghcr.io/maretu01/gothrough:latest
+  YOUR_USERNAME/gothrough:latest
 ```
 
-镜像发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，仅发布任务开启 `packages: write`，无需填写 Docker Hub 用户名或密码。若发布时遇到 403，检查仓库/组织是否限制 Actions 的包写入；如果曾手动创建同名包，还需在该包的 Actions access 设置中授予本仓库访问权限。工作流不会自动修改包的可见性，也不会自动部署或更新你的服务器。
+若登录或发布失败，检查两个 secrets 是否齐全、令牌是否有效且具有写入权限，以及镜像命名空间是否属于登录账号或已授权的组织。工作流不会自动修改仓库的可见性，也不会自动部署或更新你的服务器。认证及发布方式参见 [Docker 官方 GitHub Actions 文档](https://docs.docker.com/build/ci/github-actions/)。
 
 ## 启动容器
 
