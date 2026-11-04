@@ -15,7 +15,7 @@
 
 普通后端任务设置 `CGO_ENABLED=0`，验证不依赖前端产物的开发构建。嵌入任务设置 `CGO_ENABLED=1`，使用 Ubuntu runner 的 C 工具链运行 `go test -race -tags embedweb ./...`，覆盖普通与嵌入相关的 Go 包。
 
-Go 版本从 `go.mod` 读取，Node.js 使用 24。Go 和 npm 下载缓存用于减少重复下载，前端仍按照 lockfile 安装依赖。安装标记沿用 Makefile，同一个任务中的后续构建不会再次安装。
+Go 版本从 `go.mod` 读取，Node.js 使用 26 LTS。Go 和 npm 下载缓存用于减少重复下载，前端仍按照 lockfile 安装依赖。安装标记沿用 Makefile，同一个任务中的后续构建不会再次安装。
 
 工作流使用仓库只读权限；镜像发布任务使用 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` 两个 repository secrets 登录 Docker Hub，不需要 GitHub Packages 写入权限。配置步骤见 [Docker 部署](docker.md#github-自动构建与发布)。相同分支的新运行会取消旧运行，避免重复占用资源。工作流不自动提交代码、部署服务器或创建 Release。
 

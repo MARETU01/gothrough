@@ -4,6 +4,8 @@ React + TypeScript + Vite 文件上传界面。支持拖拽和多文件选择、
 
 ## 本地开发
 
+使用 Node.js 26 LTS（26.13.0 或更高的 26.x 版本）及其配套 npm。在仓库根目录执行 `nvm use 26` 切换版本；从旧版 Node.js 升级后，先在根目录执行 `make -B install` 强制重装依赖。
+
 在 `frontend` 目录执行：
 
 ```sh

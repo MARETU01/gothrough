@@ -4,7 +4,7 @@
 
 本页命令均在项目根目录执行；监听端口和 TLS 设置见[配置说明](configuration.md)。
 
-安装 Go、Node.js/npm 和 GNU Make 后，在仓库根目录执行（Windows 使用 Git Bash；默认目标也是 `build`）：
+安装 Go、Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm 和 GNU Make 后，在仓库根目录执行（Windows 使用 Git Bash；默认目标也是 `build`）。使用 nvm 时先执行 `nvm use 26`；从旧版 Node.js 升级后先执行 `make -B install` 强制重装依赖：
 
 ```sh
 make build

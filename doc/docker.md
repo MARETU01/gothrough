@@ -10,7 +10,7 @@
 docker build -t gothrough:local .
 ```
 
-Dockerfile 分为前端构建、Go 编译、运行三个阶段。构建环境使用 Node.js 24 和 Go 1.27，Go 版本需与 `go.mod` 要求相容；运行镜像只保留嵌入前端的程序、默认配置和基础运行环境，不包含 Node.js、Go 工具链或源码。无需在宿主机先执行 `make`。
+Dockerfile 分为前端构建、Go 编译、运行三个阶段。构建环境使用 Node.js 26 LTS 和 Go 1.27，Go 版本需与 `go.mod` 要求相容；运行镜像只保留嵌入前端的程序、默认配置和基础运行环境，不包含 Node.js、Go 工具链或源码。无需在宿主机先执行 `make`。
 
 npm 和 Go 依赖下载、Go 编译使用 BuildKit 缓存，源码修改不会直接使依赖下载层失效。`.dockerignore` 排除本机依赖、构建产物、上传数据、环境文件和常见证书/私钥文件。
 

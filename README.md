@@ -14,7 +14,7 @@
 ## 环境要求
 
 - Go：版本要求见 [go.mod](go.mod)。
-- Node.js / npm：用于前端开发和发布构建，部署机器无需安装。
+- Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm：用于前端开发和发布构建，部署机器无需安装。仓库根目录的 `.nvmrc` 指定本地默认版本 26.13.0，可执行 `nvm use 26` 切换到已安装的 26.x 版本。
 - GNU Make 和 POSIX shell：执行 Makefile；Windows 使用 Git Bash。
 
 以下命令均在项目根目录执行。Windows 若提供的命令名为 `mingw32-make`，将示例中的 `make` 替换为该命令。
