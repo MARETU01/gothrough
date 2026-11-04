@@ -16,10 +16,10 @@ OUTPUT ?= $(OUT_DIR)/gothrough$(EXE)
 DEPS_STAMP := frontend/node_modules/.gothrough-deps-installed
 DEPS_INPUTS := frontend/package.json frontend/package-lock.json $(wildcard frontend/.npmrc .npmrc)
 
-.PHONY: build install reinstall frontend web-assets test test-embedded help
+.PHONY: build install test help
 
 # A single dependency chain preserves ordering even with make -j.
-build: web-assets
+build: internal/webassets/dist/index.html
 	mkdir -p "$(dir $(OUTPUT))"
 	$(GO) build -tags embedweb -trimpath -ldflags="-s -w" -o "$(OUTPUT)" ./cmd
 	mkdir -p "$(dir $(OUTPUT))config"
@@ -27,6 +27,7 @@ build: web-assets
 	@echo Built: $(OUTPUT)
 
 install: $(DEPS_STAMP)
+	$(GO) mod download
 
 # npm ci removes node_modules, so keep the stamp inside it: deleting dependencies
 # automatically invalidates this cache. Failed installs never create the stamp.
@@ -34,15 +35,11 @@ $(DEPS_STAMP): $(DEPS_INPUTS)
 	$(NPM) --prefix frontend ci
 	touch "$@"
 
-reinstall:
-	$(NPM) --prefix frontend ci
-	touch "$(DEPS_STAMP)"
-
-frontend: install
+# install is phony, so rebuild assets on every invocation and share the result
+# between build and test when both are requested in the same make invocation.
+internal/webassets/dist/index.html: install
 	$(NPM) --prefix frontend run build
-
-# Refresh only the generated copy, so obsolete hashed assets are not embedded.
-web-assets: frontend
+	# Refresh only the generated copy, so obsolete hashed assets are not embedded.
 	test -f frontend/dist/index.html
 	test "$$(cd internal/webassets && pwd -P)" = "$$(pwd -P)/internal/webassets"
 	test ! -L internal/webassets/dist
@@ -50,20 +47,14 @@ web-assets: frontend
 	mkdir -p internal/webassets/dist
 	cp -R frontend/dist/. internal/webassets/dist/
 
-test:
+test: internal/webassets/dist/index.html
 	$(GO) test ./...
 	$(GO) vet ./...
-
-test-embedded: web-assets
 	$(GO) test -tags embedweb ./...
 	$(GO) vet -tags embedweb ./...
 
 help:
 	@echo make build          - Reuse unchanged dependencies and build the embedded executable
-	@echo make frontend       - Install dependencies and build frontend/dist
-	@echo make web-assets     - Build frontend and sync internal/webassets/dist
-	@echo make install        - Install dependencies only when package files change
-	@echo make reinstall      - Force a clean dependency install from the lockfile
-	@echo make test           - Run backend tests and vet without embedded assets
-	@echo make test-embedded  - Build frontend, then run embedded backend tests and vet
+	@echo make install        - Download Go modules and install frontend dependencies as needed
+	@echo make test           - Build frontend, then run backend tests and vet with and without embedded assets
 	@echo make OUTPUT=release/custom.exe - Customize the output file

@@ -7,7 +7,7 @@ import (
 	"io/fs"
 )
 
-// Run make web-assets before compiling with -tags embedweb.
+// Run make build or make test to generate the embedded frontend assets.
 //
 //go:embed all:dist
 var assets embed.FS

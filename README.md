@@ -63,11 +63,8 @@ make build
 | 命令 | 用途 |
 | --- | --- |
 | `make` / `make build` | 按需安装依赖，构建并嵌入前端，输出可执行文件 |
-| `make frontend` | 构建前端 |
-| `make web-assets` | 构建前端并同步嵌入资源 |
-| `make reinstall` | 强制重新安装前端依赖 |
-| `make test` | 后端测试及 vet |
-| `make test-embedded` | 构建嵌入资源，执行嵌入版测试及 vet |
+| `make install` | 下载 Go 模块并按需安装前端依赖 |
+| `make test` | 构建嵌入资源，执行普通及嵌入版后端测试和 vet |
 | `make help` | 查看构建命令 |
 
 构建缓存、自定义输出路径和跨平台编译详见[构建与部署](doc/build.md)。

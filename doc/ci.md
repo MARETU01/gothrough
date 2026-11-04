@@ -68,11 +68,12 @@ git push origin v1.0.0
 项目根目录执行，Windows 使用 Git Bash：
 
 ```sh
-make test
+go test ./...
+go vet ./...
 make install
 npm --prefix frontend run lint
 npm --prefix frontend test
-make -j2 build test-embedded
+make -j2 build test
 ```
 
 具备 CGO 和 C 编译器时补充：
