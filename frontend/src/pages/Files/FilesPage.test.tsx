@@ -43,7 +43,7 @@ it('requires confirmation, encodes download paths, and clamps the page after del
   openPage();
   await screen.findByText('文件 01.txt');
   fireEvent.click(screen.getByRole('button', { name: '下一页' }));
-  expect(screen.getByRole('link', { name: '下载 文件 21.txt' }).getAttribute('href')).toBe('/api/uploads/' + encodeURIComponent('文件 21.txt'));
+  expect(screen.getByRole('link', { name: '下载 文件 21.txt' }).getAttribute('href')).toBe('/api/files/' + encodeURIComponent('文件 21.txt'));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
   expect(deleteFile).not.toHaveBeenCalled();
   expect(screen.queryByRole('alertdialog')).toBeNull();

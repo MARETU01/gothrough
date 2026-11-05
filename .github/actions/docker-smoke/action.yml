@@ -40,10 +40,10 @@ runs:
             "session_id": session["session_id"]
         }).encode(), "application/json")
         assert completed["saved_filename"] == "docker-ci.txt", completed
-        with urllib.request.urlopen(base + "/api/uploads/docker-ci.txt", timeout=30) as response:
+        with urllib.request.urlopen(base + "/api/files/docker-ci.txt", timeout=30) as response:
             assert response.read() == payload, "download differs from uploaded content"
         PY
         docker restart gothrough-ci
         curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 \
-          http://127.0.0.1:18080/api/uploads/docker-ci.txt > /tmp/gothrough-ci-download
+          http://127.0.0.1:18080/api/files/docker-ci.txt > /tmp/gothrough-ci-download
         printf 'GoThrough Docker upload smoke test' | cmp - /tmp/gothrough-ci-download

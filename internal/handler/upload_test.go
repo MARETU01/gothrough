@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -96,12 +97,75 @@ func TestRawMultipartAndRangeDownload(t *testing.T) {
 	if err != nil || !bytes.Equal(got, payload) {
 		t.Fatalf("content mismatch: %v", err)
 	}
-	download := httptest.NewRequest("GET", "/api/uploads/"+info.FinalFilename, nil)
+	download := httptest.NewRequest("GET", "/api/files/"+info.FinalFilename, nil)
 	download.Header.Set("Range", "bytes=2-5")
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, download)
 	if res.Code != 206 || res.Body.String() != "aaaa" {
 		t.Fatalf("range: %d %q", res.Code, res.Body.String())
+	}
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/files/"+info.FinalFilename, nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(config.UploadFolder, info.FinalFilename)); !os.IsNotExist(err) {
+		t.Fatalf("deleted file still exists or cannot be checked: %v", err)
+	}
+}
+
+func TestFileOperationsPreserveLiteralFilename(t *testing.T) {
+	for _, tc := range []struct{ name, other string }{
+		{"report%20.txt", "report .txt"},
+		{"report%25.txt", "report%.txt"},
+		{"report%2520.txt", "report%20.txt"},
+		{"report%2F.txt", "report.txt"},
+		{"中文 文件.txt", "中文%20文件.txt"},
+		{"100%.txt", "100.txt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, h := setup(t)
+			for name, content := range map[string]string{tc.name: "target", tc.other: "untouched"} {
+				if err := os.WriteFile(filepath.Join(config.UploadFolder, name), []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			path := "/api/files/" + url.PathEscape(tc.name)
+			res := httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path, nil))
+			if res.Code != http.StatusOK || res.Body.String() != "target" {
+				t.Fatalf("download: %d %q", res.Code, res.Body.String())
+			}
+			res = httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, path, nil))
+			if res.Code != http.StatusOK {
+				t.Fatalf("delete: %d %s", res.Code, res.Body.String())
+			}
+			if _, err := os.Stat(filepath.Join(config.UploadFolder, tc.name)); !os.IsNotExist(err) {
+				t.Fatalf("target was not deleted: %v", err)
+			}
+			if data, err := os.ReadFile(filepath.Join(config.UploadFolder, tc.other)); err != nil || string(data) != "untouched" {
+				t.Fatalf("other file was changed: %q %v", data, err)
+			}
+		})
+	}
+}
+
+func TestFileOperationsRejectEncodedTraversal(t *testing.T) {
+	_, h := setup(t)
+	outside := filepath.Join(filepath.Dir(config.UploadFolder), "outside.txt")
+	if err := os.WriteFile(outside, []byte("untouched"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		res := httptest.NewRecorder()
+		h.ServeHTTP(res, httptest.NewRequest(method, "/api/files/%2e%2e%2foutside.txt", nil))
+		if res.Code != http.StatusNotFound && res.Code != http.StatusForbidden {
+			t.Fatalf("%s traversal: %d %s", method, res.Code, res.Body.String())
+		}
+	}
+	if data, err := os.ReadFile(outside); err != nil || string(data) != "untouched" {
+		t.Fatalf("outside file was changed: %q %v", data, err)
 	}
 }
 

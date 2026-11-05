@@ -20,5 +20,5 @@ export interface FileListResponse {
 export const listFiles = (signal?: AbortSignal) =>
   api.get<FileListResponse, FileListResponse>('/files', { signal });
 
-export const deleteFile = (name: string) => api.post<{ status: string }, { status: string }>('/delete/' + encodeURIComponent(name));
-export const downloadFileUrl = (name: string) => '/api/uploads/' + encodeURIComponent(name);
+export const deleteFile = (name: string) => api.delete<{ status: string }, { status: string }>('/files/' + encodeURIComponent(name));
+export const downloadFileUrl = (name: string) => '/api/files/' + encodeURIComponent(name);

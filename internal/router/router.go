@@ -1,8 +1,6 @@
 package router
 
 import (
-	"os"
-
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
 
@@ -12,22 +10,9 @@ import (
 // 注册所有路由
 func SetupRouter(h *handler.UploadHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
-	r.Use(gin.Recovery())
-	if os.Getenv("GOTHROUGH_ACCESS_LOG") == "1" {
-		r.Use(gin.Logger())
-	}
+	r := gin.Default()
 
 	r.MaxMultipartMemory = config.MaxContentLength
-	r.POST("/upload/init", h.UploadInit)
-	r.POST("/upload/chunk", h.UploadChunk)
-	r.GET("/upload/status/:session_id", h.UploadStatus)
-	r.POST("/upload/complete", h.UploadComplete)
-	r.POST("/upload/cancel", h.UploadCancel)
-	r.GET("/uploads", h.ListUploads)
-	r.GET("/uploads/*filename", h.DownloadUpload)
-	r.POST("/delete/*filename", h.DeleteFile)
-	r.GET("/api/disk-info", h.DiskInfo)
 
 	api := r.Group("/api")
 	{
@@ -37,8 +22,9 @@ func SetupRouter(h *handler.UploadHandler) *gin.Engine {
 		api.POST("/upload/complete", h.UploadComplete)
 		api.POST("/upload/cancel", h.UploadCancel)
 		api.GET("/files", h.ListUploads)
-		api.GET("/uploads/*filename", h.DownloadUpload)
-		api.POST("/delete/*filename", h.DeleteFile)
+		api.GET("/files/*filename", h.DownloadUpload)
+		api.DELETE("/files/*filename", h.DeleteFile)
+		api.GET("/disk-info", h.DiskInfo)
 	}
 
 	setupWeb(r)

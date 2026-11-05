@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -100,17 +99,12 @@ func ResolveNameConflict(folder, filename string) string {
 	return candidate
 }
 
-// 安全化上传相对路径，防止目录遍历攻击
+// 安全化上传相对路径，防止目录遍历攻击。
+// filename 是实际文件名（HTTP 路由参数已经解码），此处不得再次进行 URL 解码。
 func SafeUploadRelpath(filename, uploadFolder string) string {
 	if filename == "" {
 		return ""
 	}
-
-	decoded, err := url.PathUnescape(filename)
-	if err != nil {
-		decoded = filename
-	}
-	filename = decoded
 
 	filename = strings.ReplaceAll(filename, `\`, "/")
 
