@@ -17,6 +17,9 @@ export const Navigation: React.FC = () => {
         <NavLink to="/files" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
           文件列表
         </NavLink>
+        <NavLink to="/clipboard" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          剪贴板
+        </NavLink>
       </div>
     </nav>
   );

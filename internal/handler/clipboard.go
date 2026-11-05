@@ -1,0 +1,94 @@
+package handler
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+
+	"github.com/MARETU01/gothrough/internal/model"
+	"github.com/MARETU01/gothrough/internal/service"
+	"github.com/gin-gonic/gin"
+)
+
+type ClipboardHandler struct{ service *service.ClipboardService }
+
+func NewClipboardHandler(s *service.ClipboardService) *ClipboardHandler {
+	return &ClipboardHandler{service: s}
+}
+
+func (h *ClipboardHandler) List(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"entries": h.service.List()})
+}
+
+func (h *ClipboardHandler) Create(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.ClipboardMaxBytes*6+1024)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	var req model.ClipboardRequest
+	err := decoder.Decode(&req)
+	if err == nil {
+		var extra any
+		if nextErr := decoder.Decode(&extra); !errors.Is(nextErr, io.EOF) {
+			if nextErr != nil {
+				err = nextErr
+			} else {
+				err = errors.New("只允许一个 JSON 对象")
+			}
+		}
+	}
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "请求体过大"})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的文本请求"})
+		}
+		return
+	}
+	entry, err := h.service.Create(req.Text)
+	if errors.Is(err, service.ErrClipboardText) {
+		status := http.StatusBadRequest
+		if len(req.Text) > service.ClipboardMaxBytes {
+			status = http.StatusRequestEntityTooLarge
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		clipboardFailure(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, entry)
+}
+
+func (h *ClipboardHandler) Delete(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	err := h.service.Delete(c.Param("id"))
+	if errors.Is(err, service.ErrClipboardNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		clipboardFailure(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (h *ClipboardHandler) Clear(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	if err := h.service.Clear(); err != nil {
+		clipboardFailure(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func clipboardFailure(c *gin.Context, err error) {
+	log.Printf("剪贴板存储失败: %v", err)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "剪贴板存储失败，请稍后重试"})
+}

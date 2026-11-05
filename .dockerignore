@@ -5,6 +5,7 @@
 release
 uploads
 temp_uploads
+clipboard
 doc
 **/node_modules
 **/dist

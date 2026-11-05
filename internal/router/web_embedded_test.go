@@ -16,10 +16,12 @@ func TestEmbeddedBuildIncludesFrontend(t *testing.T) {
 	root := webassets.Assets()
 	r := gin.New()
 	setupWeb(r)
-	res := httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest("GET", "/files", nil))
-	if res.Code != 200 || !strings.Contains(res.Body.String(), `id="root"`) {
-		t.Fatalf("missing built SPA: %d", res.Code)
+	for _, path := range []string{"/files", "/clipboard", "/clipboard/"} {
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest("GET", path, nil))
+		if res.Code != 200 || !strings.Contains(res.Body.String(), `id="root"`) {
+			t.Fatalf("missing built SPA at %s: %d", path, res.Code)
+		}
 	}
 	count := 0
 	err := fs.WalkDir(root, "assets", func(name string, entry fs.DirEntry, err error) error {

@@ -61,7 +61,7 @@ docker compose logs -f
 docker compose down
 ```
 
-Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件。
+Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件和剪贴板历史。
 
 默认映射宿主机 8080 到容器 8080。仅修改宿主机端口可执行：
 
@@ -80,14 +80,15 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 /app/config/           外部配置与可挂载的证书目录
 /app/uploads           符号链接 → /data/uploads
 /app/temp_uploads      符号链接 → /data/temp_uploads
+/app/clipboard         符号链接 → /data/clipboard
 /data/                 单个持久化数据卷
 ```
 
-当前后端根据可执行文件位置确定数据目录；镜像通过两个符号链接，将上传文件和临时文件统一落到 `/data`。这样无需改变应用现有目录规则，且升级镜像不会从数据卷读取旧版本可执行文件。
+当前后端根据可执行文件位置确定数据目录；镜像通过符号链接，将上传文件、临时文件和剪贴板历史统一落到 `/data`。这样无需改变应用现有目录规则，且升级镜像不会从数据卷读取旧版本可执行文件。升级前已存在的数据卷中，应用会自动创建 `clipboard` 子目录。
 
 **必须将整个 `/data` 挂载为同一个卷。** 不要把 `uploads` 和 `temp_uploads` 分别挂载为两个卷，也不要单独将临时目录放入 tmpfs；上传完成依赖跨目录硬链接，两个独立挂载点会导致发布失败。数据卷底层文件系统也必须支持硬链接。服务启动仍会清理临时上传，容器重启不提供上传续传。
 
-默认推荐 Docker 管理的 named volume。使用宿主机 bind mount 时，需预先确保 UID/GID `10001:10001` 能创建和读写两个子目录；镜像不会在启动时自动修改宿主机目录权限。同一个卷不要同时供多个应用实例处理上传会话。
+默认推荐 Docker 管理的 named volume。使用宿主机 bind mount 时，需预先确保 UID/GID `10001:10001` 能创建和读写上述子目录；镜像不会在启动时自动修改宿主机目录权限。同一个卷不要同时供多个应用实例使用。
 
 ## 配置及环境变量
 

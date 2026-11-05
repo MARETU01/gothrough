@@ -26,7 +26,7 @@ func webHandler(assets fs.FS) gin.HandlerFunc {
 		}
 		urlPath := c.Request.URL.Path
 		switch urlPath {
-		case "/", "/index.html", "/upload", "/upload/", "/files", "/files/":
+		case "/", "/index.html", "/upload", "/upload/", "/files", "/files/", "/clipboard", "/clipboard/":
 			c.Header("Cache-Control", "no-cache")
 			c.Header("Content-Type", "text/html; charset=utf-8")
 			http.ServeContent(c.Writer, c.Request, "index.html", time.Time{}, bytes.NewReader(index))

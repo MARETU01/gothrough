@@ -32,14 +32,11 @@ type TLSSettings struct {
 	KeyFile  string `yaml:"key_file"`
 }
 
-// Overrides preserves the explicit legacy -tls flag; environment variables take precedence.
-type Overrides struct{ TLS *bool }
-
 func (s ServerSettings) Address() string { return net.JoinHostPort(s.Host, strconv.Itoa(s.Port)) }
 
 // Load is read-only: config and certificates are validated before initializing
 // storage, so a bad configuration never triggers temporary-upload cleanup.
-func Load(path string, overrides Overrides) (*Settings, error) {
+func Load(path string) (*Settings, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
@@ -48,10 +45,10 @@ func Load(path string, overrides Overrides) (*Settings, error) {
 	if err != nil {
 		return nil, err
 	}
-	return loadSettings(path, filepath.Dir(exe), cwd, os.LookupEnv, overrides)
+	return loadSettings(path, filepath.Dir(exe), cwd, os.LookupEnv)
 }
 
-func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool), overrides Overrides) (*Settings, error) {
+func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) (*Settings, error) {
 	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 8080}, Source: "内置默认值"}
 	if path == "" {
 		path, _ = lookup("GOTHROUGH_CONFIG")
@@ -89,9 +86,6 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool), 
 		}
 		cfg.Source = path
 		base = filepath.Dir(path)
-	}
-	if overrides.TLS != nil {
-		cfg.Server.TLS.Enabled = *overrides.TLS
 	}
 	if value, ok := lookup("GOTHROUGH_HOST"); ok {
 		cfg.Server.Host = value

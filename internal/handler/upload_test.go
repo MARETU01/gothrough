@@ -32,7 +32,11 @@ func setup(t testing.TB) (*service.UploadService, http.Handler) {
 	}
 	s := service.NewUploadService()
 	t.Cleanup(func() { s.Close(); config.UploadFolder, config.TempFolder = oldUpload, oldTemp })
-	return s, router.SetupRouter(handler.NewUploadHandler(s))
+	clipboard, err := service.NewClipboardService(filepath.Join(root, "clipboard"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard))
 }
 
 func post(t *testing.T, h http.Handler, path, contentType string, body io.Reader) *httptest.ResponseRecorder {

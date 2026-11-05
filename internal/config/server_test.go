@@ -39,38 +39,37 @@ func TestSettingsDefaultsAndDiscovery(t *testing.T) {
 	root := t.TempDir()
 	exeDir := filepath.Join(root, "bin")
 	cwd := filepath.Join(root, "work")
-	cfg, err := loadSettings("", exeDir, cwd, envMap(nil), Overrides{})
+	cfg, err := loadSettings("", exeDir, cwd, envMap(nil))
 	if err != nil || cfg.Server.Address() != "0.0.0.0:8080" || cfg.Server.TLS.Enabled {
 		t.Fatalf("defaults: %v %v", cfg, err)
 	}
 	cwdPath := putConfig(t, cwd, "server:\n  port: 9001\n")
-	cfg, err = loadSettings("", exeDir, cwd, envMap(nil), Overrides{})
+	cfg, err = loadSettings("", exeDir, cwd, envMap(nil))
 	if err != nil || cfg.Source != cwdPath || cfg.Server.Port != 9001 {
 		t.Fatalf("cwd config: %v %v", cfg, err)
 	}
 	exePath := putConfig(t, exeDir, "server:\n  port: 9002\n")
-	cfg, err = loadSettings("", exeDir, cwd, envMap(nil), Overrides{})
+	cfg, err = loadSettings("", exeDir, cwd, envMap(nil))
 	if err != nil || cfg.Source != exePath || cfg.Server.Port != 9002 {
 		t.Fatalf("exe config: %v %v", cfg, err)
 	}
-	cfg, err = loadSettings(cwdPath, exeDir, cwd, envMap(map[string]string{"GOTHROUGH_CONFIG": exePath}), Overrides{})
+	cfg, err = loadSettings(cwdPath, exeDir, cwd, envMap(map[string]string{"GOTHROUGH_CONFIG": exePath}))
 	if err != nil || cfg.Server.Port != 9001 {
 		t.Fatalf("explicit config: %v %v", cfg, err)
 	}
-	cfg, err = loadSettings("", exeDir, cwd, envMap(map[string]string{"GOTHROUGH_CONFIG": cwdPath}), Overrides{})
+	cfg, err = loadSettings("", exeDir, cwd, envMap(map[string]string{"GOTHROUGH_CONFIG": cwdPath}))
 	if err != nil || cfg.Server.Port != 9001 {
 		t.Fatalf("environment config: %v %v", cfg, err)
 	}
 }
 
-func TestEnvironmentOverridesFileAndLegacyFlag(t *testing.T) {
+func TestEnvironmentOverridesFile(t *testing.T) {
 	root := t.TempDir()
 	path := putConfig(t, root, "server:\n  host: localhost\n  port: 8443\n  tls:\n    enabled: true\n    cert_file: missing.crt\n    key_file: missing.key\n")
-	legacy := true
 	cfg, err := loadSettings(path, root, root, envMap(map[string]string{
 		"GOTHROUGH_HOST": "::1", "GOTHROUGH_PORT": "9090", "GOTHROUGH_TLS_ENABLED": "false",
 		"GOTHROUGH_TLS_CERT_FILE": "certs/env.crt", "GOTHROUGH_TLS_KEY_FILE": "certs/env.key",
-	}), Overrides{TLS: &legacy})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,11 +82,7 @@ func TestEnvironmentOverridesFileAndLegacyFlag(t *testing.T) {
 	if cfg.Server.TLS.KeyFile != filepath.Join(root, "config", "certs", "env.key") {
 		t.Fatal(cfg.Server.TLS.KeyFile)
 	}
-	legacy = false
-	if _, err := loadSettings(path, root, root, envMap(nil), Overrides{TLS: &legacy}); err != nil {
-		t.Fatalf("explicit legacy false: %v", err)
-	}
-	cfg, err = loadSettings("", root, root, envMap(map[string]string{"GOTHROUGH_PORT": "8181", "GOTHROUGH_TLS_ENABLED": "false"}), Overrides{})
+	cfg, err = loadSettings("", root, root, envMap(map[string]string{"GOTHROUGH_PORT": "8181", "GOTHROUGH_TLS_ENABLED": "false"}))
 	if err != nil || cfg.Server.Port != 8181 {
 		t.Fatalf("env only: %+v %v", cfg, err)
 	}
@@ -104,7 +99,7 @@ func TestInvalidSettings(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
-			if _, err := loadSettings("", root, root, envMap(values), Overrides{}); err == nil {
+			if _, err := loadSettings("", root, root, envMap(values)); err == nil {
 				t.Fatal("accepted invalid settings")
 			}
 		})
@@ -116,16 +111,16 @@ func TestInvalidSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			path := putConfig(t, root, content)
-			if _, err := loadSettings(path, root, root, envMap(nil), Overrides{}); err == nil {
+			if _, err := loadSettings(path, root, root, envMap(nil)); err == nil {
 				t.Fatal("accepted invalid YAML")
 			}
 		})
 	}
 	root := t.TempDir()
-	if _, err := loadSettings("missing.yaml", root, root, envMap(nil), Overrides{}); err == nil {
+	if _, err := loadSettings("missing.yaml", root, root, envMap(nil)); err == nil {
 		t.Fatal("explicit missing file silently ignored")
 	}
-	if _, err := loadSettings("", root, root, envMap(map[string]string{"GOTHROUGH_CONFIG": "missing.yaml"}), Overrides{}); err == nil {
+	if _, err := loadSettings("", root, root, envMap(map[string]string{"GOTHROUGH_CONFIG": "missing.yaml"})); err == nil {
 		t.Fatal("environment missing file silently ignored")
 	}
 }
@@ -153,7 +148,7 @@ func TestTLSCertificates(t *testing.T) {
 		t.Fatal(err)
 	}
 	values := map[string]string{"GOTHROUGH_TLS_ENABLED": "true", "GOTHROUGH_TLS_CERT_FILE": certPath, "GOTHROUGH_TLS_KEY_FILE": keyPath, "GOTHROUGH_PORT": "8443"}
-	cfg, err := loadSettings("", root, root, envMap(values), Overrides{})
+	cfg, err := loadSettings("", root, root, envMap(values))
 	if err != nil || !cfg.Server.TLS.Enabled || cfg.Server.Port != 8443 {
 		t.Fatalf("valid TLS: %v %v", cfg, err)
 	}
@@ -179,7 +174,7 @@ func TestTLSCertificates(t *testing.T) {
 		t.Fatal(response.StatusCode)
 	}
 	values["GOTHROUGH_TLS_KEY_FILE"] = certPath
-	if _, err := loadSettings("", root, root, envMap(values), Overrides{}); err == nil || !strings.Contains(err.Error(), "证书") {
+	if _, err := loadSettings("", root, root, envMap(values)); err == nil || !strings.Contains(err.Error(), "证书") {
 		t.Fatalf("invalid key accepted: %v", err)
 	}
 }

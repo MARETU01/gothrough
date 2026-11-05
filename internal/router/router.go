@@ -8,7 +8,7 @@ import (
 )
 
 // 注册所有路由
-func SetupRouter(h *handler.UploadHandler) *gin.Engine {
+func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
@@ -25,6 +25,10 @@ func SetupRouter(h *handler.UploadHandler) *gin.Engine {
 		api.GET("/files/*filename", h.DownloadUpload)
 		api.DELETE("/files/*filename", h.DeleteFile)
 		api.GET("/disk-info", h.DiskInfo)
+		api.GET("/clipboard", clipboard.List)
+		api.POST("/clipboard", clipboard.Create)
+		api.DELETE("/clipboard", clipboard.Clear)
+		api.DELETE("/clipboard/:id", clipboard.Delete)
 	}
 
 	setupWeb(r)

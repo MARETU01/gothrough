@@ -1,5 +1,15 @@
 package model
 
+type ClipboardEntry struct {
+	ID        string `json:"id"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ClipboardRequest struct {
+	Text string `json:"text"`
+}
+
 // 上传会话
 type UploadSession struct {
 	SessionID        string       `json:"session_id"`

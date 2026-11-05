@@ -13,9 +13,10 @@ const (
 )
 
 var (
-	UploadFolder string
-	TempFolder   string
-	BaseDir      string
+	UploadFolder    string
+	TempFolder      string
+	ClipboardFolder string
+	BaseDir         string
 )
 
 func Init() {
@@ -33,6 +34,7 @@ func Init() {
 
 	UploadFolder = filepath.Join(BaseDir, "uploads")
 	TempFolder = filepath.Join(BaseDir, "temp_uploads")
+	ClipboardFolder = filepath.Join(BaseDir, "clipboard")
 
 	if err := os.MkdirAll(UploadFolder, 0755); err != nil {
 		log.Fatal(err)

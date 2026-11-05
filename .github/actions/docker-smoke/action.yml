@@ -42,8 +42,27 @@ runs:
         assert completed["saved_filename"] == "docker-ci.txt", completed
         with urllib.request.urlopen(base + "/api/files/docker-ci.txt", timeout=30) as response:
             assert response.read() == payload, "download differs from uploaded content"
+        clipboard = post("/api/clipboard", json.dumps({
+            "text": "GoThrough clipboard smoke test\nsecond line"
+        }).encode(), "application/json")
+        assert clipboard["id"] and clipboard["text"].endswith("\nsecond line"), clipboard
+        with urllib.request.urlopen(base + "/clipboard", timeout=30) as response:
+            assert b'id="root"' in response.read(), "clipboard page unavailable"
         PY
         docker restart gothrough-ci
         curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 \
           http://127.0.0.1:18080/api/files/docker-ci.txt > /tmp/gothrough-ci-download
         printf 'GoThrough Docker upload smoke test' | cmp - /tmp/gothrough-ci-download
+        python3 - <<'PY'
+        import json
+        import urllib.request
+
+        base = "http://127.0.0.1:18080/api/clipboard"
+        with urllib.request.urlopen(base, timeout=30) as response:
+            entries = json.load(response)["entries"]
+        assert len(entries) == 1, entries
+        assert entries[0]["text"] == "GoThrough clipboard smoke test\nsecond line", entries
+        request = urllib.request.Request(base + "/" + entries[0]["id"], method="DELETE")
+        with urllib.request.urlopen(request, timeout=30) as response:
+            assert json.load(response)["status"] == "deleted"
+        PY

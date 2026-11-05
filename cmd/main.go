@@ -26,20 +26,17 @@ func main() {
 
 func run() error {
 	configPath := flag.String("config", "", "YAML config path (or GOTHROUGH_CONFIG)")
-	enableTLS := flag.Bool("tls", false, "override TLS enablement; environment variables take precedence")
 	flag.Parse()
-	var legacyTLS *bool
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "tls" {
-			legacyTLS = enableTLS
-		}
-	})
-	settings, err := config.Load(*configPath, config.Overrides{TLS: legacyTLS})
+	settings, err := config.Load(*configPath)
 	if err != nil {
 		return err
 	}
 	log.Printf("配置来源: %s", settings.Source)
 	config.Init()
+	clipboardService, err := service.NewClipboardService(config.ClipboardFolder)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -58,7 +55,7 @@ func run() error {
 		}
 	}()
 	uploadHandler := handler.NewUploadHandler(uploadService)
-	r := router.SetupRouter(uploadHandler)
+	r := router.SetupRouter(uploadHandler, handler.NewClipboardHandler(clipboardService))
 
 	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,

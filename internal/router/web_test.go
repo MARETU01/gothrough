@@ -22,7 +22,7 @@ func TestWebRouting(t *testing.T) {
 	r := gin.New()
 	r.GET("/api/test", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 	r.NoRoute(webHandler(assets))
-	for _, path := range []string{"/", "/index.html", "/upload", "/upload/", "/files", "/files/"} {
+	for _, path := range []string{"/", "/index.html", "/upload", "/upload/", "/files", "/files/", "/clipboard", "/clipboard/"} {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			t.Run(method+path, func(t *testing.T) {
 				response := httptest.NewRecorder()
