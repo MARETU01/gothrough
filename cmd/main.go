@@ -55,7 +55,8 @@ func run() error {
 		}
 	}()
 	uploadHandler := handler.NewUploadHandler(uploadService)
-	r := router.SetupRouter(uploadHandler, handler.NewClipboardHandler(clipboardService))
+	clipboardHandler := handler.NewClipboardHandler(clipboardService)
+	r := router.SetupRouter(uploadHandler, clipboardHandler)
 
 	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,

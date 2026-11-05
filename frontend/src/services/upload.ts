@@ -1,4 +1,3 @@
-import axios, { isAxiosError } from 'axios';
 import api from './http';
 
 /**
@@ -9,7 +8,6 @@ import api from './http';
  *                        /api/upload/complete、/api/upload/cancel
  *   - 响应拦截器已取出 data，所以这里用 post<T, T> 让返回值直接是业务数据
  *
- * 请求体 / 响应体的字段与原 submit.html 中的 fetch 调用完全一致。
  */
 
 /** 接口路径（相对于 api 实例的 baseURL） */
@@ -20,7 +18,7 @@ export const UPLOAD_ENDPOINTS = {
   cancel: '/upload/cancel',
 } as const;
 
-/* ==================== 数据结构（与原页面保持一致） ==================== */
+/* ==================== 数据结构 ==================== */
 export interface InitUploadRequest {
   filename: string;
   relative_path?: string;
@@ -75,7 +73,7 @@ export interface UploadChunkOptions {
   onProgress?: (loaded: number, total: number) => void;
 }
 
-/** 上传单个分块：POST /api/upload/chunk（multipart/form-data） */
+/** 上传单个分块：优先使用 raw，兼容旧服务端的 multipart。 */
 export function uploadChunk({
   sessionId,
   chunkIndex,
@@ -106,7 +104,7 @@ export function uploadChunk({
   });
 }
 
-/** 合并分块、完成上传：POST /api/upload/complete */
+/** 校验并发布文件：POST /api/upload/complete */
 export function completeUpload(sessionId: string, signal?: AbortSignal) {
   return api.post<CompleteUploadResponse, CompleteUploadResponse>(UPLOAD_ENDPOINTS.complete, {
     session_id: sessionId,
@@ -118,18 +116,4 @@ export function cancelUpload(sessionId: string) {
   return api.post<CancelUploadResponse, CancelUploadResponse>(UPLOAD_ENDPOINTS.cancel, {
     session_id: sessionId,
   });
-}
-
-/* ==================== 错误辅助 ==================== */
-
-/** 请求是否被主动取消（axios 的 CanceledError / ERR_CANCELED） */
-export function isCanceledError(error: unknown): boolean {
-  return isAxiosError(error) && (axios.isCancel(error) || error.code === 'ERR_CANCELED');
-}
-
-/** 从 axios 错误中取出后端返回的结构体（如 { error } / { missing_chunks }） */
-export function getErrorBody<T>(error: unknown): T | null {
-  if (!isAxiosError<T>(error)) return null;
-  const data = error.response?.data;
-  return (data ?? null) as T | null;
 }

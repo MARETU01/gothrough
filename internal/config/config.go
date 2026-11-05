@@ -8,8 +8,11 @@ import (
 )
 
 const (
-	MaxContentLength = 50 * 1024 * 1024 // 单次请求最大 50MB
-	ChunkSize        = 8 * 1024 * 1024  // 默认分块大小 8MiB，减少高速链路请求开销
+	MaxMultipartMemory        = 50 * 1024 * 1024 // multipart 解析的内存阈值，不是请求体大小限制
+	ChunkSize                 = 8 * 1024 * 1024  // 默认分块大小 8MiB
+	MaxUploadSize       int64 = 1 << 40          // 单文件上限 1TiB
+	MaxConcurrentChunks       = 16
+	MaxUploadSessions         = 1024
 )
 
 var (
@@ -27,8 +30,7 @@ func Init() {
 	BaseDir = filepath.Dir(exePath)
 
 	// go run 或 IDE 临时构建目录时，使用当前工作目录
-	if strings.Contains(BaseDir, "go-build") || strings.Contains(BaseDir, "\\go-build") ||
-		strings.Contains(BaseDir, "JetBrains") || strings.Contains(BaseDir, "\\JetBrains") {
+	if strings.Contains(BaseDir, "go-build") || strings.Contains(BaseDir, "JetBrains") {
 		BaseDir, _ = os.Getwd()
 	}
 

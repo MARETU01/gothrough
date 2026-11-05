@@ -31,7 +31,10 @@ npm run lint
 
 - `src/pages/Upload`：上传页面与独立文件行。
 - `src/hooks/useUploadQueue.ts`：队列调度、并发和生命周期。
-- `src/services/upload.ts`：初始化、分块、合并、取消接口。
+- `src/services/upload.ts`：初始化、分块、完成和取消接口。
+- `src/services/errors.ts`：各业务共用的 HTTP 错误解析和取消判断。
+- `src/hooks/useRemoteData.ts`：文件列表与剪贴板共用的加载、刷新和请求取消逻辑，忽略过期响应，卸载时取消请求。
+- `src/hooks/usePageTitle.ts`：设置页面标题并在离开时恢复。
 - `src/config/upload.ts`：分块大小和并发配置。
 - `src/types/upload.ts`：内部任务类型和只读展示类型。
 - `src/utils/upload.ts`：字节进度和展示快照。
@@ -40,4 +43,4 @@ npm run lint
 
 `/files` 文件列表页提供存储空间概览、文件名搜索、名称/大小/修改时间排序、每页 20 条分页、下载及按钮内二次确认删除。第一次点击显示“确认删除？”，3 秒内再次点击执行删除，超时自动恢复。列表从 `/api/files` 获取，下载和删除复用已有后端接口，删除后刷新存储信息。
 
-上传页和文件列表页统一复用 Button、StatusMessage 与 Lucide 图标；公共交互样式位于 `src/styles/interactions.css`，包含主操作、次操作、危险操作和加载状态。删除提交期间禁用重复操作。
+上传页、文件列表和剪贴板统一复用 Button、StatusMessage 与 Lucide 图标；公共交互样式位于 `src/styles/interactions.css`，包含主操作、次操作、危险操作和加载状态。文件列表与剪贴板的公共页面容器样式位于 `src/styles/global.css`。删除提交期间禁用重复操作。

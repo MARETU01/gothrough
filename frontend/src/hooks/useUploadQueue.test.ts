@@ -15,9 +15,6 @@ vi.mock("@/services/upload", () => ({
   uploadChunk: vi.fn(),
   completeUpload: vi.fn(),
   cancelUpload: vi.fn(),
-  getErrorBody: () => null,
-  isCanceledError: (err: unknown) =>
-    err instanceof Error && err.name === "AbortError",
 }));
 
 const deferred = <T>() => {

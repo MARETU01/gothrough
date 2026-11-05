@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteFile, downloadFileUrl, listFiles, type FileListResponse } from '@/services/files';
-import { getErrorBody } from '@/services/upload';
-import { errorMessage } from '@/utils/misc';
+import { apiErrorMessage } from '@/services/errors';
+import { useRemoteData } from '@/hooks/useRemoteData';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
 import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
@@ -16,48 +17,15 @@ const SORT_OPTIONS = [
 ] as const;
 
 export default function FilesPage() {
-  const [data, setData] = useState<FileListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  usePageTitle('已上传文件 - GoThrough');
+  const { data, setData, loading, error, setError, refresh, cancel, mounted } =
+    useRemoteData<FileListResponse | null>(listFiles, null);
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('mtime_desc');
   const [page, setPage] = useState(1);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const requestRef = useRef<AbortController | null>(null);
-  const mounted = useRef(false);
-
-  const refresh = useCallback(async () => {
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await listFiles(controller.signal);
-      if (!controller.signal.aborted) setData(result);
-    } catch (err) {
-      if (!controller.signal.aborted) setError(getErrorBody<{ error?: string }>(err)?.error ?? errorMessage(err));
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    mounted.current = true;
-    const previousTitle = document.title;
-    document.title = '已上传文件 - GoThrough';
-    // Fetch the remote list on mount; refresh also manages loading/error state.
-    // oxlint-disable-next-line react/set-state-in-effect
-    void refresh();
-    return () => {
-      mounted.current = false;
-      requestRef.current?.abort();
-      document.title = previousTitle;
-    };
-  }, [refresh]);
-
 
   useEffect(() => {
     if (confirming === null) return;
@@ -65,7 +33,7 @@ export default function FilesPage() {
     return () => clearTimeout(timer);
   }, [confirming]);
 
-  const filtered = React.useMemo(() => {
+  const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
     const files = (data?.files ?? []).filter(file => file.name.toLocaleLowerCase().includes(keyword));
     const [field, direction] = sort.split('_');
@@ -90,8 +58,7 @@ export default function FilesPage() {
     setDeleting(name);
     setError('');
     setNotice('');
-    requestRef.current?.abort();
-    setLoading(false);
+    cancel();
     try {
       await deleteFile(name);
       if (!mounted.current) return;
@@ -100,15 +67,15 @@ export default function FilesPage() {
       setNotice(`已删除 ${name}`);
       await refresh();
     } catch (err) {
-      if (mounted.current) { setConfirming(null); setError(`删除 ${name} 失败：${getErrorBody<{ error?: string }>(err)?.error ?? errorMessage(err)}`); }
+      if (mounted.current) { setConfirming(null); setError(`删除 ${name} 失败：${apiErrorMessage(err)}`); }
     } finally {
       if (mounted.current) setDeleting(null);
     }
   }
 
   return (
-    <main className="files-page">
-      <div className="files-container">
+    <main className="files-page content-page">
+      <div className="files-container content-container">
         <header className="files-header">
           <div><h1>已上传文件</h1><p>浏览和管理已上传的文件</p></div>
           <div className="files-actions">

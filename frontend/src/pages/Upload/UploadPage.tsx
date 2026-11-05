@@ -1,4 +1,5 @@
-﻿import React, { useEffect } from "react";
+import type React from "react";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSharedUploadQueue } from "@/contexts/UploadQueueContext";
 import { Link } from "react-router-dom";
 import { UploadFileRow } from "./UploadFileRow";
@@ -38,13 +39,7 @@ const UploadPage: React.FC = () => {
     openFilePicker,
   } = useSharedUploadQueue();
 
-  useEffect(() => {
-    const previousTitle = document.title;
-    document.title = "文件上传 - 分块上传";
-    return () => {
-      document.title = previousTitle;
-    };
-  }, []);
+  usePageTitle("文件上传 - 分块上传");
 
   return (
     <main className="upload-page">

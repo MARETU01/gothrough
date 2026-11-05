@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 @import "tw-animate-css";
 @import "./interactions.css";
 
@@ -112,6 +112,13 @@ h1, h2 { font-weight: 600; line-height: 1.2; }
 p { margin: 0; }
 .not-found { flex: 1; text-align: center; padding: 3rem 1rem; }
 
+/* Shared shell for file management and clipboard pages. */
+.content-page { flex: 1; padding: 32px 20px; color: #345650; }
+.content-container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 32px; border: 1px solid rgba(128,203,196,.2); border-radius: 15px; background: rgba(255,255,255,.85); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+@media (max-width: 600px) {
+  .content-page { padding: 12px; }
+  .content-container { padding: 20px 14px; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

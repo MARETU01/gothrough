@@ -7,7 +7,6 @@ import UploadPage from './UploadPage';
 
 vi.mock('@/services/upload', () => ({
   initUpload: vi.fn(), uploadChunk: vi.fn(), completeUpload: vi.fn(), cancelUpload: vi.fn(),
-  getErrorBody: () => null, isCanceledError: () => false,
 }));
 beforeEach(() => {
   vi.clearAllMocks();

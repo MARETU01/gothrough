@@ -1,13 +1,11 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode/utf8"
-	"uuid"
 )
 
 var windowsReservedNames = map[string]bool{
@@ -81,24 +79,6 @@ func SanitizeFilenameKeepUnicode(name string, maxLength int) string {
 	return strings.TrimRight(base+ext, " .")
 }
 
-// 解决文件名冲突，自动追加随机后缀
-func ResolveNameConflict(folder, filename string) string {
-	candidate := filename
-	base := filename
-	ext := ""
-	lastDot := strings.LastIndex(filename, ".")
-	if lastDot > 0 {
-		base = filename[:lastDot]
-		ext = filename[lastDot:]
-	}
-
-	for FileExists(filepath.Join(folder, candidate)) {
-		suffix := uuid.NewV7().String()
-		candidate = fmt.Sprintf("%s_%s%s", base, suffix, ext)
-	}
-	return candidate
-}
-
 // 安全化上传相对路径，防止目录遍历攻击。
 // filename 是实际文件名（HTTP 路由参数已经解码），此处不得再次进行 URL 解码。
 func SafeUploadRelpath(filename, uploadFolder string) string {
@@ -148,28 +128,4 @@ func SafeUploadRelpath(filename, uploadFolder string) string {
 func FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-// 格式化文件大小为人类可读字符串
-func FormatFileSize(sizeBytes int64) string {
-	if sizeBytes <= 0 {
-		return "0 B"
-	}
-	units := []string{"B", "KB", "MB", "GB", "TB"}
-	k := float64(1024)
-	size := float64(sizeBytes)
-	i := 0
-	for size >= k && i < len(units)-1 {
-		size /= k
-		i++
-	}
-	return fmt.Sprintf("%.2f %s", size, units[i])
-}
-
-func GetFileSize(path string) (int64, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return info.Size(), nil
 }

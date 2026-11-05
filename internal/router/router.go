@@ -12,7 +12,7 @@ func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler) 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
-	r.MaxMultipartMemory = config.MaxContentLength
+	r.MaxMultipartMemory = config.MaxMultipartMemory
 
 	api := r.Group("/api")
 	{

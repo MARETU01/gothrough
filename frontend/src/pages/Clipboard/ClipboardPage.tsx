@@ -1,111 +1,85 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Clipboard, Copy, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { StatusMessage } from '@/components/StatusMessage';
 import {
   CLIPBOARD_MAX_BYTES, CLIPBOARD_MAX_ENTRIES,
   createClipboard, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry,
 } from '@/services/clipboard';
-import { getErrorBody } from '@/services/upload';
-import { errorMessage } from '@/utils/misc';
+import { apiErrorMessage } from '@/services/errors';
+import { useRemoteData } from '@/hooks/useRemoteData';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import './ClipboardPage.css';
 
-const messageFor = (error: unknown) => getErrorBody<{ error?: string }>(error)?.error ?? errorMessage(error);
+const loadEntries = async (signal?: AbortSignal) => (await listClipboard(signal)).entries;
 
 export default function ClipboardPage() {
   const [text, setText] = useState('');
-  const [entries, setEntries] = useState<ClipboardEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  usePageTitle('共享剪贴板 - GoThrough');
+  const { data: entries, setData: setEntries, loading, error, setError, refresh: reload, cancel, mounted } =
+    useRemoteData<ClipboardEntry[]>(loadEntries, []);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [manualCopy, setManualCopy] = useState<ClipboardEntry | null>(null);
-  const mounted = useRef(false);
-  const request = useRef<AbortController | null>(null);
   const operation = useRef(false);
   const byteLength = new Blob([text]).size;
   const tooLarge = byteLength > CLIPBOARD_MAX_BYTES;
 
-  const refresh = useCallback(async () => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setLoading(true);
+  const refresh = () => {
     setConfirmingAll(false);
-    setError('');
-    try {
-      const data = await listClipboard(controller.signal);
-      if (mounted.current && !controller.signal.aborted) setEntries(data.entries);
-    } catch (err) {
-      if (mounted.current && !controller.signal.aborted) setError(messageFor(err));
-    } finally {
-      if (mounted.current && !controller.signal.aborted) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    mounted.current = true;
-    const previousTitle = document.title;
-    document.title = '共享剪贴板 - GoThrough';
-    // Initial loading is an external request; refresh handles cancellation.
-    // oxlint-disable-next-line react/set-state-in-effect
-    void refresh();
-    return () => {
-      mounted.current = false;
-      request.current?.abort();
-      document.title = previousTitle;
-    };
-  }, [refresh]);
-
-  const publish = async () => {
-    if (operation.current || !text.trim() || tooLarge) return;
-    operation.current = true;
-    request.current?.abort();
-    setLoading(false);
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const entry = await createClipboard(text);
-      if (!mounted.current) return;
-      setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
-      setText('');
-      setNotice('文本已发布，其他设备可刷新查看。');
-      await refresh();
-    } catch (err) {
-      if (mounted.current) setError(messageFor(err));
-    } finally {
-      operation.current = false;
-      if (mounted.current) setBusy(false);
-    }
+    return reload();
   };
 
-  const remove = async (id: string | null) => {
+  const runMutation = async <T,>(
+    action: () => Promise<T>,
+    onSuccess: (result: T) => void,
+    successMessage: string,
+  ) => {
     if (operation.current) return;
     operation.current = true;
-    request.current?.abort();
-    setLoading(false);
+    cancel();
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      if (id === null) await clearClipboard();
-      else await deleteClipboard(id);
+      const result = await action();
       if (!mounted.current) return;
-      setEntries(previous => id === null ? [] : previous.filter(entry => entry.id !== id));
-      setConfirming(null);
-      setConfirmingAll(false);
-      setManualCopy(previous => id === null || previous?.id === id ? null : previous);
-      setNotice(id === null ? '全部记录已删除。' : '记录已删除。');
+      onSuccess(result);
+      setNotice(successMessage);
       await refresh();
     } catch (err) {
-      if (mounted.current) setError(messageFor(err));
+      if (mounted.current) setError(apiErrorMessage(err));
     } finally {
       operation.current = false;
       if (mounted.current) setBusy(false);
     }
   };
+
+  const publish = () => {
+    if (!text.trim() || tooLarge) return;
+    return runMutation(() => createClipboard(text), entry => {
+      setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
+      setText('');
+    }, '文本已发布，其他设备可刷新查看。');
+  };
+
+  const removeEntry = (id: string) =>
+    runMutation(() => deleteClipboard(id), () => {
+      setEntries(previous => previous.filter(entry => entry.id !== id));
+      setConfirming(null);
+      setConfirmingAll(false);
+      setManualCopy(previous => previous?.id === id ? null : previous);
+    }, '记录已删除。');
+
+  const clearAll = () =>
+    runMutation(clearClipboard, () => {
+      setEntries([]);
+      setConfirming(null);
+      setConfirmingAll(false);
+      setManualCopy(null);
+    }, '全部记录已删除。');
 
   const copy = async (entry: ClipboardEntry) => {
     setNotice('');
@@ -122,8 +96,8 @@ export default function ClipboardPage() {
   };
 
   return (
-    <main className="clipboard-page">
-      <div className="clipboard-container">
+    <main className="clipboard-page content-page">
+      <div className="clipboard-container content-container">
         <header className="clipboard-header">
           <div>
             <h1><Clipboard aria-hidden="true" />共享剪贴板</h1>
@@ -146,8 +120,8 @@ export default function ClipboardPage() {
           </div>
         </form>
 
-        {error && <div className="clipboard-error" role="alert">{error}</div>}
-        {notice && <p className="clipboard-notice" role="status">{notice}</p>}
+        {error && <StatusMessage tone="error">{error}</StatusMessage>}
+        {notice && <StatusMessage tone="success">{notice}</StatusMessage>}
         {manualCopy && <section className="clipboard-manual" aria-label="手动复制">
           <label htmlFor="clipboard-manual-text">无法自动复制，请复制下方已选中的文本（Ctrl+C / ⌘C，或长按复制）。</label>
           <textarea id="clipboard-manual-text" readOnly rows={4} value={manualCopy.text}
@@ -171,7 +145,7 @@ export default function ClipboardPage() {
           {confirmingAll && <div className="clipboard-clear-confirm" role="group" aria-label="全部删除确认">
             <p>确定删除所有设备共享的全部记录？删除后无法恢复。</p>
             <div className="clipboard-entry-actions">
-              <Button variant="destructive" disabled={busy || loading} onClick={() => void remove(null)}>确认全部删除</Button>
+              <Button variant="destructive" disabled={busy || loading} onClick={() => void clearAll()}>确认全部删除</Button>
               <Button variant="outline" disabled={busy} onClick={() => setConfirmingAll(false)}>取消</Button>
             </div>
           </div>}
@@ -185,7 +159,7 @@ export default function ClipboardPage() {
                   <div className="clipboard-entry-actions">
                     <Button variant="outline" onClick={() => void copy(entry)} aria-label={`复制记录 ${index + 1}`}><Copy aria-hidden="true" />复制</Button>
                     {confirming === entry.id ? <>
-                      <Button variant="destructive" disabled={busy} onClick={() => void remove(entry.id)} aria-label={`确认删除记录 ${index + 1}`}>确认删除</Button>
+                      <Button variant="destructive" disabled={busy} onClick={() => void removeEntry(entry.id)} aria-label={`确认删除记录 ${index + 1}`}>确认删除</Button>
                       <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>取消</Button>
                     </> : <Button variant="outline" disabled={busy} onClick={() => setConfirming(entry.id)} aria-label={`删除记录 ${index + 1}`}><Trash2 aria-hidden="true" />删除</Button>}
                   </div>

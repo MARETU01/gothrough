@@ -46,11 +46,7 @@ type InitRequest struct {
 	TotalSize    int64  `json:"total_size"`
 }
 
-type CompleteRequest struct {
-	SessionID string `json:"session_id"`
-}
-
-type CancelRequest struct {
+type SessionRequest struct {
 	SessionID string `json:"session_id"`
 }
 

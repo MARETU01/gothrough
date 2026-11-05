@@ -21,11 +21,12 @@ import (
 func nameKey(name string) string { return strings.ToLower(name) }
 
 var (
-	ErrSession      = errors.New("无效或已结束的会话")
-	ErrChunk        = errors.New("分块索引或大小无效")
-	ErrPath         = errors.New("无效的上传相对路径")
-	ErrBusy         = errors.New("服务器上传繁忙，请稍后重试")
-	transferBuffers = sync.Pool{New: func() any { b := make([]byte, 256*1024); return &b }}
+	ErrSession       = errors.New("无效或已结束的会话")
+	ErrChunk         = errors.New("分块索引或大小无效")
+	ErrPath          = errors.New("无效的上传相对路径")
+	ErrBusy          = errors.New("服务器上传繁忙，请稍后重试")
+	ErrMissingChunks = errors.New("缺少分块")
+	transferBuffers  = sync.Pool{New: func() any { b := make([]byte, 256*1024); return &b }}
 )
 
 type transferSession struct {
@@ -50,11 +51,11 @@ type UploadService struct {
 
 func NewUploadService() *UploadService {
 	return &UploadService{sessions: make(map[string]*transferSession), names: make(map[string]bool),
-		uploadDir: config.UploadFolder, tempDir: config.TempFolder, slots: make(chan struct{}, 16)}
+		uploadDir: config.UploadFolder, tempDir: config.TempFolder, slots: make(chan struct{}, config.MaxConcurrentChunks)}
 }
 
 func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession, error) {
-	if req.TotalSize < 0 || req.TotalSize > 1<<40 || req.Filename == "" {
+	if req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize || req.Filename == "" {
 		return nil, ErrChunk
 	}
 	safeName := utils.SanitizeFilenameKeepUnicode(req.Filename, 200)
@@ -90,7 +91,7 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 		CreatedAt: time.Now().Format(time.RFC3339), ReceivedChunks: []int{}, ReceivedSet: make(map[int]bool),
 	}}
 	s.mu.Lock()
-	if len(s.sessions) >= 1024 {
+	if len(s.sessions) >= config.MaxUploadSessions {
 		s.mu.Unlock()
 		_ = f.Close()
 		_ = os.RemoveAll(dir)
@@ -218,7 +219,7 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	count := entry.info.ReceivedCount()
 	entry.mu.Unlock()
 	if count != entry.info.TotalChunks {
-		return "", 0, fmt.Errorf("缺少分块: 总数=%d, 已收=%d", entry.info.TotalChunks, count)
+		return "", 0, fmt.Errorf("%w: 总数=%d, 已收=%d", ErrMissingChunks, entry.info.TotalChunks, count)
 	}
 	stat, err := entry.file.Stat()
 	if err != nil {

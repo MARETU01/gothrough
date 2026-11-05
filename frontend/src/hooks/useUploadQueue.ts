@@ -2,11 +2,10 @@
 import {
   cancelUpload,
   completeUpload,
-  getErrorBody,
   initUpload,
-  isCanceledError,
   uploadChunk,
 } from "@/services/upload";
+import { apiErrorMessage, getErrorBody, isCanceledError } from "@/services/errors";
 import type {
   UploadController,
   UploadItem,
@@ -346,7 +345,7 @@ export const useUploadQueue = () => {
           }>(err);
           const message = body?.missing_chunks
             ? `缺少 ${body.missing_chunks.length} 个分块`
-            : (body?.error ?? errorMessage(err));
+            : apiErrorMessage(err);
           item.error = message;
           if (mountedRef.current)
             setStatus({
