@@ -26,6 +26,7 @@ import {
 } from "@/utils/upload";
 import { errorMessage, sleep } from "@/utils/misc";
 import { createElapsedClock } from "@/utils/elapsed";
+import { collectDroppedFiles, getUploadPath } from "@/utils/droppedFiles";
 
 const cleanupSession = async (item: UploadItem) => {
   if (!item.session) return;
@@ -57,6 +58,7 @@ export const useUploadQueue = () => {
   const [running, setRunning] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [readingDrops, setReadingDrops] = useState(0);
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const refreshFileList = useCallback(() => {
     if (!mountedRef.current) return;
@@ -125,7 +127,7 @@ export const useUploadQueue = () => {
     }, 500);
     return () => clearInterval(timer);
   }, [refreshFileList]);
-  const handleSelection = (files: FileList) => {
+  const handleSelection = (files: FileList | File[]) => {
     const keys = new Set(itemsRef.current.map((i) => getFileKey(i.file)));
     Array.from(files).forEach((file) => {
       const key = getFileKey(file);
@@ -148,6 +150,20 @@ export const useUploadQueue = () => {
     });
     refreshFileList();
     setStatus(null);
+  };
+  const handleDrop = async (data: DataTransfer) => {
+    setReadingDrops(count => count + 1);
+    setStatus(null);
+    try {
+      const files = await collectDroppedFiles(data);
+      if (!mountedRef.current) return;
+      handleSelection(files);
+      if (!files.length) setStatus({ text: "没有可上传的文件（空文件夹不会上传）", type: "error" });
+    } catch (err) {
+      if (mountedRef.current) setStatus({ text: `读取文件夹失败：${errorMessage(err)}`, type: "error" });
+    } finally {
+      if (mountedRef.current) setReadingDrops(count => count - 1);
+    }
   };
   const uploadFileChunked = useCallback(
     async (item: UploadItem, run: { cancelled: boolean }) => {
@@ -195,6 +211,8 @@ export const useUploadQueue = () => {
         // Observe late initialization responses so cancelled sessions can be cleaned up.
         const data = await initUpload({
           filename: item.file.name,
+          ...(getUploadPath(item.file) !== item.file.name
+            ? { relative_path: getUploadPath(item.file) } : {}),
           total_size: item.file.size,
         });
         const session = {
@@ -218,24 +236,27 @@ export const useUploadQueue = () => {
         ) {
           throw new Error("服务端返回的分块配置无效");
         }
-        let chunkIndex = 0;
-        let lastPaint = 0;
-        let failure: unknown;
+        // Shared only by the workers for this file's current upload attempt.
+        const transfer = {
+          nextChunkIndex: 0,
+          lastPaint: 0,
+          failure: undefined as unknown,
+        };
         const worker = async () => {
           try {
-            while (chunkIndex < session.totalChunks) {
+            while (transfer.nextChunkIndex < session.totalChunks) {
               await waitForResume();
               checkActive();
-              if (chunkIndex >= session.totalChunks) return;
-              const index = chunkIndex++;
+              if (transfer.nextChunkIndex >= session.totalChunks) return;
+              const index = transfer.nextChunkIndex++;
               const chunk = item.file.slice(
                 index * session.chunkSize,
                 Math.min((index + 1) * session.chunkSize, item.file.size),
               );
-              let attemptLoaded = 0;
+              const attempt = { loaded: 0 };
               const recordTransferred = (loaded: number) => {
-                item.transferredBytes += Math.max(0, loaded - attemptLoaded);
-                attemptLoaded = Math.max(attemptLoaded, loaded);
+                item.transferredBytes += Math.max(0, loaded - attempt.loaded);
+                attempt.loaded = Math.max(attempt.loaded, loaded);
               };
               const send = () =>
                 uploadChunk({
@@ -255,8 +276,8 @@ export const useUploadQueue = () => {
                     );
                     recordTransferred(bytes);
                     item.inflightBytes.set(index, bytes);
-                    if (Date.now() - lastPaint >= PROGRESS_REFRESH_INTERVAL) {
-                      lastPaint = Date.now();
+                    if (Date.now() - transfer.lastPaint >= PROGRESS_REFRESH_INTERVAL) {
+                      transfer.lastPaint = Date.now();
                       recalcLoadedBytes(item);
                       refreshFileList();
                     }
@@ -272,7 +293,7 @@ export const useUploadQueue = () => {
                 )
                   throw err;
                 item.inflightBytes.delete(index);
-                attemptLoaded = 0;
+                attempt.loaded = 0;
                 await waitForResume();
                 await send();
               }
@@ -286,7 +307,7 @@ export const useUploadQueue = () => {
               refreshFileList();
             }
           } catch (err) {
-            if (failure === undefined) failure = err;
+            if (transfer.failure === undefined) transfer.failure = err;
             controller.abort.abort();
             throw err;
           }
@@ -295,7 +316,7 @@ export const useUploadQueue = () => {
         await Promise.allSettled(
           Array.from({ length: MAX_CONCURRENT_UPLOADS }, worker),
         );
-        if (failure !== undefined) throw failure;
+        if (transfer.failure !== undefined) throw transfer.failure;
         checkActive();
         await waitForResume();
         item.state = "completing";
@@ -351,7 +372,7 @@ export const useUploadQueue = () => {
           (fileKey === undefined || getFileKey(i.file) === fileKey),
       );
       if (!pending.length) return;
-      const run = { cancelled: false };
+      const run = { cancelled: false, nextFileIndex: 0 };
       queueClockRef.current = createElapsedClock();
       queueClockRef.current.resume();
       setQueueElapsedMs(0);
@@ -359,14 +380,13 @@ export const useUploadQueue = () => {
       setRunning(true);
       setGlobalPaused(false);
       setStatus(null);
-      let next = 0;
       const worker = async () => {
-        while (!run.cancelled && mountedRef.current && next < pending.length) {
+        while (!run.cancelled && mountedRef.current && run.nextFileIndex < pending.length) {
           if (globalPausedRef.current) {
             await sleep(100);
             continue;
           }
-          const item = pending[next++];
+          const item = pending[run.nextFileIndex++];
           if (!itemsRef.current.includes(item)) continue;
           await uploadFileChunked(item, run);
         }
@@ -491,6 +511,8 @@ export const useUploadQueue = () => {
     resetAll,
     removeItem,
     handleSelection,
+    handleDrop,
+    readingFolders: readingDrops > 0,
     openFilePicker: () => fileInputRef.current?.click(),
   };
 };

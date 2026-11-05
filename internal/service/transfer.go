@@ -23,6 +23,7 @@ func nameKey(name string) string { return strings.ToLower(name) }
 var (
 	ErrSession      = errors.New("无效或已结束的会话")
 	ErrChunk        = errors.New("分块索引或大小无效")
+	ErrPath         = errors.New("无效的上传相对路径")
 	ErrBusy         = errors.New("服务器上传繁忙，请稍后重试")
 	transferBuffers = sync.Pool{New: func() any { b := make([]byte, 256*1024); return &b }}
 )
@@ -59,6 +60,13 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 	safeName := utils.SanitizeFilenameKeepUnicode(req.Filename, 200)
 	if safeName == "" {
 		safeName = "upload_" + uuid.NewV7().String()
+	}
+	if req.RelativePath != "" {
+		var err error
+		safeName, err = sanitizeUploadPath(req.RelativePath)
+		if err != nil {
+			return nil, err
+		}
 	}
 	id := uuid.NewV7().String()
 	dir := filepath.Join(s.tempDir, id)
@@ -225,6 +233,9 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	// Hard-link publication is atomic and never overwrites an existing file. Both
 	// directories must be on the same filesystem (the default configuration is).
 	source := filepath.Join(entry.info.ChunksDir, "payload")
+	if err := s.prepareParent(entry.info.FinalFilename); err != nil {
+		return "", 0, err
+	}
 	for {
 		err = os.Link(source, filepath.Join(s.uploadDir, entry.info.FinalFilename))
 		if !errors.Is(err, os.ErrExist) {

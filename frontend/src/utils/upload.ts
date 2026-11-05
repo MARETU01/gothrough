@@ -1,4 +1,5 @@
 import type { UploadItem, UploadViewItem } from "@/types/upload";
+import { getUploadPath } from "./droppedFiles";
 
 export const createUploadSnapshot = (
   item: UploadItem,
@@ -29,9 +30,9 @@ export const createUploadSnapshot = (
   };
 };
 
-/** 生成文件唯一 key：name + size + lastModified，用于去重与 React key */
+/** Include the path so equal filenames in different folders remain distinct. */
 export const getFileKey = (file: File) =>
-  `${file.name}-${file.size}-${file.lastModified}`;
+  `${getUploadPath(file)}-${file.size}-${file.lastModified}`;
 
 /**
  * 汇总「服务端已确认的分块字节 + 正在传输分块的实时已发送字节」，

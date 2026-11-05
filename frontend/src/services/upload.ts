@@ -23,6 +23,7 @@ export const UPLOAD_ENDPOINTS = {
 /* ==================== 数据结构（与原页面保持一致） ==================== */
 export interface InitUploadRequest {
   filename: string;
+  relative_path?: string;
   total_size: number;
 }
 

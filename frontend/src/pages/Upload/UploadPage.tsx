@@ -33,6 +33,8 @@ const UploadPage: React.FC = () => {
     resetAll,
     removeItem,
     handleSelection,
+    handleDrop,
+    readingFolders,
     openFilePicker,
   } = useSharedUploadQueue();
 
@@ -48,7 +50,7 @@ const UploadPage: React.FC = () => {
     <main className="upload-page">
       <div className="container">
         <h1>文件上传</h1>
-        <p className="subtitle">支持大文件分块上传，切换页面后仍会继续，可随时返回暂停和恢复</p>
+        <p className="subtitle">支持拖入文件夹并保留目录结构，切换页面后仍会继续上传</p>
 
         <div className="nav-links">
           <Button asChild variant="outline"><Link to="/files"><Files aria-hidden="true" />查看已上传文件</Link></Button>
@@ -70,8 +72,7 @@ const UploadPage: React.FC = () => {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            if (e.dataTransfer.files.length)
-              handleSelection(e.dataTransfer.files);
+            void handleDrop(e.dataTransfer);
           }}
         >
           <button
@@ -83,7 +84,7 @@ const UploadPage: React.FC = () => {
             <span className="upload-icon" aria-hidden="true">
               <FolderOpen size={48} aria-hidden="true" />
             </span>
-            <span className="upload-text">拖放文件到此处或点击浏览</span>
+            <span className="upload-text">拖放文件或文件夹到此处或点击浏览</span>
             <span className="browse-btn">选择文件</span>
           </button>
           <input
@@ -104,7 +105,7 @@ const UploadPage: React.FC = () => {
         <div className="file-list">
           {items.length === 0 ? (
             <div className="empty-hint">
-              没有文件，拖放文件到此处或点击"选择文件"按钮
+              拖放文件或文件夹，或点击"选择文件"按钮；空文件夹不会上传
             </div>
           ) : (
             items.map((item) => (
@@ -120,6 +121,7 @@ const UploadPage: React.FC = () => {
         </div>
 
         <div role="status" aria-live="polite" aria-atomic="true">
+          {readingFolders && <StatusMessage tone="loading">正在读取拖入的文件夹…</StatusMessage>}
           {status && (
             <StatusMessage tone={status.type}>{status.text}</StatusMessage>
           )}
@@ -161,6 +163,7 @@ const UploadPage: React.FC = () => {
                 type="button"
                 variant="default" size="lg"
                 onClick={startAllUploads}
+                disabled={readingFolders}
               >
                 <Upload aria-hidden="true" />开始上传
               </Button>

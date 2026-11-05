@@ -169,6 +169,54 @@ func TestFileOperationsRejectEncodedTraversal(t *testing.T) {
 	}
 }
 
+func TestFolderUploadHTTP(t *testing.T) {
+	_, h := setup(t)
+	path := "文件夹/子目录/报告%20.txt"
+	body, _ := json.Marshal(model.InitRequest{Filename: "报告%20.txt", RelativePath: path, TotalSize: 5})
+	res := post(t, h, "/api/upload/init", "application/json", bytes.NewReader(body))
+	var info model.UploadSession
+	if err := json.Unmarshal(res.Body.Bytes(), &info); err != nil || res.Code != http.StatusOK || info.FinalFilename != path {
+		t.Fatalf("init: %d %s %v", res.Code, res.Body.String(), err)
+	}
+	res = post(t, h, "/api/upload/chunk?session_id="+info.SessionID+"&chunk_index=0", "application/octet-stream", bytes.NewBufferString("hello"))
+	if res.Code != http.StatusOK {
+		t.Fatalf("chunk: %d %s", res.Code, res.Body.String())
+	}
+	res = post(t, h, "/api/upload/complete", "application/json", bytes.NewBufferString(fmt.Sprintf(`{"session_id":%q}`, info.SessionID)))
+	if res.Code != http.StatusOK {
+		t.Fatalf("complete: %d %s", res.Code, res.Body.String())
+	}
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/files", nil))
+	var list struct {
+		Files     []model.FileInfo `json:"files"`
+		TotalSize int64            `json:"total_size"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &list); err != nil || res.Code != http.StatusOK || len(list.Files) != 1 || list.Files[0].Name != path || list.TotalSize != 5 {
+		t.Fatalf("list: %d %s %v", res.Code, res.Body.String(), err)
+	}
+	urlPath := "/api/files/" + url.PathEscape(path)
+	res = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, urlPath, nil)
+	req.Header.Set("Range", "bytes=1-3")
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Body.String() != "ell" {
+		t.Fatalf("download: %d %q", res.Code, res.Body.String())
+	}
+	res = httptest.NewRecorder()
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, urlPath, nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(config.UploadFolder, path)); !os.IsNotExist(err) {
+		t.Fatalf("file not deleted: %v", err)
+	}
+	res = post(t, h, "/api/upload/init", "application/json", bytes.NewBufferString(`{"filename":"file.txt","relative_path":"../file.txt","total_size":0}`))
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("traversal init: %d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestInvalidRawAndEmpty(t *testing.T) {
 	s, h := setup(t)
 	info := initHTTP(t, h, "small.txt", 4)

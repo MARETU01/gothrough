@@ -2,6 +2,7 @@
 import { STATE_LABELS, type UploadViewItem } from "@/types/upload";
 import { formatElapsed, formatETA, formatSize, formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
+import { getUploadPath } from "@/utils/droppedFiles";
 
 import { Button } from "@/components/ui/button";
 import { RotateCcw, X } from "lucide-react";
@@ -20,6 +21,7 @@ export const UploadFileRow = memo(function UploadFileRow({
   onRetry,
 }: Props) {
   const key = getFileKey(item.file);
+  const displayName = getUploadPath(item.file);
   const progress =
     item.state === "success"
       ? 100
@@ -34,15 +36,15 @@ export const UploadFileRow = memo(function UploadFileRow({
     <div className={`file-row ${item.state}`}>
       <div className="file-meta">
         <div className="file-label">
-          <div className="file-name" title={item.file.name}>
-            {item.file.name}
+          <div className="file-name" title={displayName}>
+            {displayName}
           </div>
           <div className="file-size">{formatSize(item.file.size)}</div>
         </div>
         <Button
           type="button"
           variant="ghost" size="sm"
-          aria-label={`移除 ${item.file.name}`}
+          aria-label={`移除 ${displayName}`}
           disabled={item.state === "canceling"}
           onClick={() => onRemove(key)}
         >
@@ -58,7 +60,7 @@ export const UploadFileRow = memo(function UploadFileRow({
         <Button
           type="button"
           variant="outline" size="sm"
-          aria-label={`重试 ${item.file.name}`}
+          aria-label={`重试 ${displayName}`}
           disabled={retryDisabled}
           onClick={() => void onRetry(key)}
         >
@@ -81,7 +83,7 @@ export const UploadFileRow = memo(function UploadFileRow({
       <div
         className="progress-bar"
         role="progressbar"
-        aria-label={`${item.file.name} 传输进度`}
+        aria-label={`${displayName} 传输进度`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress}

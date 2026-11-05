@@ -38,6 +38,10 @@ func (h *UploadHandler) UploadInit(c *gin.Context) {
 
 	session, err := h.uploadService.InitSession(req)
 	if err != nil {
+		if errors.Is(err, service.ErrPath) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		if errors.Is(err, service.ErrBusy) {
 			c.Header("Retry-After", "1")
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
@@ -269,16 +273,20 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 		return
 	}
 
-	fullPath := filepath.Join(config.UploadFolder, rel)
-
-	rootReal, _ := filepath.Abs(config.UploadFolder)
-	fullReal, _ := filepath.Abs(fullPath)
-	if fullReal != rootReal && !strings.HasPrefix(fullReal, rootReal+string(os.PathSeparator)) {
-		c.AbortWithStatus(http.StatusForbidden)
+	root, err := os.OpenRoot(config.UploadFolder)
+	if err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+	defer root.Close()
+	file, err := root.Open(rel)
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -287,7 +295,7 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Accept-Ranges", "bytes")
 
-	http.ServeFile(c.Writer, c.Request, fullPath)
+	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
 }
 
 // 文件删除
@@ -334,20 +342,10 @@ func (h *UploadHandler) DiskInfo(c *gin.Context) {
 		return
 	}
 
-	var totalSize int64
-	var fileCount int
-
-	files, err := os.ReadDir(config.UploadFolder)
-	if err == nil {
-		for _, f := range files {
-			if !f.IsDir() {
-				info, e := f.Info()
-				if e == nil {
-					totalSize += info.Size()
-					fileCount++
-				}
-			}
-		}
+	files, totalSize, err := h.uploadService.ListFiles()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -355,7 +353,7 @@ func (h *UploadHandler) DiskInfo(c *gin.Context) {
 		"disk_used":            diskUsage.Used,
 		"disk_free":            diskUsage.Free,
 		"uploads_size":         totalSize,
-		"uploads_count":        fileCount,
+		"uploads_count":        len(files),
 		"disk_total_display":   utils.FormatFileSize(int64(diskUsage.Total)),
 		"disk_used_display":    utils.FormatFileSize(int64(diskUsage.Used)),
 		"disk_free_display":    utils.FormatFileSize(int64(diskUsage.Free)),

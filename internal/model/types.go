@@ -31,8 +31,9 @@ func (s *UploadSession) ReceivedCount() int {
 
 // 请求类型
 type InitRequest struct {
-	Filename  string `json:"filename"`
-	TotalSize int64  `json:"total_size"`
+	Filename     string `json:"filename"`
+	RelativePath string `json:"relative_path,omitempty"`
+	TotalSize    int64  `json:"total_size"`
 }
 
 type CompleteRequest struct {
