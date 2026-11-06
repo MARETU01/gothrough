@@ -58,7 +58,7 @@ func serve(ctx context.Context, settings *config.Settings) error {
 	if err := config.Init(settings.Storage.DataDir); err != nil {
 		return err
 	}
-	clipboardService, err := service.NewClipboardService(config.ClipboardFolder)
+	clipboardService, err := service.NewClipboardService(config.ClipboardFolder, settings.Clipboard.Image)
 	if err != nil {
 		return err
 	}

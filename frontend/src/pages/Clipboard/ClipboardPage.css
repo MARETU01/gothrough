@@ -1,4 +1,8 @@
 .clipboard-container { max-width: 1000px; }
+.clipboard-image-composer { border: 1px dashed #a7d8d2; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+.clipboard-image-composer label { display: block; margin-bottom: 12px; font-weight: 600; }
+.clipboard-image-composer p { color: #546e6a; font-size: 13px; margin: 12px 0; }
+.clipboard-image-draft img, .clipboard-history-image { display: block; max-width: 100%; max-height: 360px; object-fit: contain; margin: 12px auto; }
 .clipboard-header { margin-bottom: 28px; }
 .clipboard-header h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: #00796b; font-size: 30px; }
 .clipboard-header p, .clipboard-history-header p { color: #546e6a; font-size: 14px; }

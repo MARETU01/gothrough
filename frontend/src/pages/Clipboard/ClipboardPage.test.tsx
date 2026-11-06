@@ -2,23 +2,27 @@ import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ClipboardPage from './ClipboardPage';
-import { CLIPBOARD_MAX_BYTES, createClipboard, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry } from '@/services/clipboard';
+import { CLIPBOARD_MAX_BYTES, createClipboard, createClipboardImage, fetchClipboardImage, getClipboardImageSettings, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry } from '@/services/clipboard';
 import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
 
 vi.mock('@/services/clipboard', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/clipboard')>(),
   listClipboard: vi.fn(), createClipboard: vi.fn(), deleteClipboard: vi.fn(), clearClipboard: vi.fn(),
+  getClipboardImageSettings: vi.fn(), createClipboardImage: vi.fn(), fetchClipboardImage: vi.fn(),
 }));
 
 const record = (text = '第一行\n<script>alert(1)</script>', id = 'entry-1'): ClipboardEntry => ({
   id, text, created_at: '2026-11-05T12:00:00Z',
 });
+const imageRecord = (): ClipboardEntry => ({ id: 'image-1', text: '', type: 'image', created_at: '2026-11-05T12:00:00Z',
+  image: { url: '/api/clipboard/image-1/image', mime_type: 'image/png', size: 123, width: 2, height: 2 } });
 let history: ClipboardEntry[];
 const writeText = vi.fn();
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
 
 beforeEach(() => {
+  vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: true, max_size_mb: 10, max_pixels: 20000000, max_total_size_mb: 200 });
   history = [];
   window.getSelection()?.removeAllRanges();
   vi.mocked(clearClipboard).mockImplementation(async () => {
@@ -40,11 +44,16 @@ beforeEach(() => {
   });
   writeText.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = vi.fn(() => 'blob:preview');
+    static revokeObjectURL = vi.fn();
+  });
 });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
   if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
   else Reflect.deleteProperty(navigator, 'clipboard');
   if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility);
@@ -69,6 +78,84 @@ it('publishes literal multiline text, refreshes history, and copies it', async (
   history = [record('来自另一台设备', 'remote')];
   fireEvent.click(screen.getByRole('button', { name: '刷新' }));
   await screen.findByText('来自另一台设备');
+});
+
+it('previews and publishes a selected image without changing the text draft, releasing the preview', async () => {
+  const file = new File(['png'], 'screenshot.png', { type: 'image/png' });
+  vi.mocked(createClipboardImage).mockImplementation(async () => { const entry = imageRecord(); history = [entry]; return entry; });
+  const view = render(createElement(ClipboardPage));
+  const input = await screen.findByLabelText(/选择图片，或/);
+  await waitFor(() => expect((input as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: 'text draft' } });
+  fireEvent.change(input, { target: { files: [file] } });
+  expect(screen.getByAltText('待发布图片预览').getAttribute('src')).toBe('blob:preview');
+  fireEvent.click(screen.getByRole('button', { name: '发布图片' }));
+  await screen.findByText('图片已发布。');
+  await waitFor(() => expect(screen.queryByAltText('待发布图片预览')).toBeNull());
+  expect(createClipboardImage).toHaveBeenCalledWith(file);
+  expect((screen.getByLabelText('输入或粘贴文本') as HTMLTextAreaElement).value).toBe('text draft');
+  expect(screen.getByAltText('共享图片 1').getAttribute('src')).toBe('/api/clipboard/image-1/image');
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+  view.unmount();
+});
+
+it('accepts pasted screenshots and keeps the image draft after publication fails', async () => {
+  render(createElement(ClipboardPage));
+  await waitFor(() => expect((screen.getByLabelText(/选择图片，或/) as HTMLInputElement).disabled).toBe(false));
+  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
+  fireEvent.paste(screen.getByLabelText('输入或粘贴文本'), { clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }] } });
+  expect(screen.getByAltText('待发布图片预览')).toBeTruthy();
+  vi.mocked(createClipboardImage).mockRejectedValueOnce(new Error('upload failed'));
+  fireEvent.click(screen.getByRole('button', { name: '发布图片' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('upload failed');
+  expect(screen.getByAltText('待发布图片预览')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '移除图片' }));
+  expect(screen.queryByAltText('待发布图片预览')).toBeNull();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+});
+
+it('writes a PNG image to the clipboard during the click gesture', async () => {
+  history = [imageRecord()];
+  const blob = new Blob(['png'], { type: 'image/png' });
+  vi.mocked(fetchClipboardImage).mockResolvedValue(blob);
+  const write = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write } });
+  const clipboardItem = vi.fn(class {
+    data: Record<string, Promise<Blob>>;
+    constructor(data: Record<string, Promise<Blob>>) { this.data = data; }
+  });
+  vi.stubGlobal('ClipboardItem', clipboardItem);
+  render(createElement(ClipboardPage));
+  await screen.findByAltText('共享图片 1');
+  fireEvent.click(screen.getByRole('button', { name: '复制记录 1' }));
+  expect(write).toHaveBeenCalledOnce();
+  expect(fetchClipboardImage).toHaveBeenCalledWith('image-1');
+  await expect(clipboardItem.mock.calls[0][0]['image/png']).resolves.toBe(blob);
+  await screen.findByText('已复制到剪贴板。');
+  expect(writeText).not.toHaveBeenCalled();
+});
+
+it('offers image download and manual copy when clipboard permission is denied', async () => {
+  history = [imageRecord()];
+  vi.stubGlobal('ClipboardItem', class {});
+  vi.mocked(fetchClipboardImage).mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write: vi.fn().mockRejectedValue(new Error('denied')) } });
+  render(createElement(ClipboardPage));
+  await screen.findByAltText('共享图片 1');
+  fireEvent.click(screen.getByRole('button', { name: '复制记录 1' }));
+  await screen.findByText(/无法直接复制图片/);
+  expect(screen.getByRole('link', { name: '打开图片' }).getAttribute('href')).toBe('/api/clipboard/image-1/image');
+  expect(screen.getAllByRole('link', { name: '下载图片' })[0].getAttribute('href')).toBe('/api/clipboard/image-1/image?download=1');
+});
+
+it('uses server image limits and rejects unsupported local files', async () => {
+  vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: true, max_size_mb: 1, max_pixels: 200, max_total_size_mb: 2 });
+  render(createElement(ClipboardPage));
+  await screen.findByText(/每张最多 1 MiB/);
+  fireEvent.change(screen.getByLabelText(/选择图片，或/), { target: { files: [new File(['svg'], 'a.svg', { type: 'image/svg+xml' })] } });
+  expect(screen.getByRole('alert').textContent).toContain('PNG 或 JPEG');
+  expect((screen.getByRole('button', { name: '发布图片' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(createClipboardImage).not.toHaveBeenCalled();
 });
 
 it('rejects whitespace and counts the UTF-8 byte limit', async () => {

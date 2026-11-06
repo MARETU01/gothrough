@@ -6,8 +6,31 @@ export const CLIPBOARD_MAX_ENTRIES = 100;
 export interface ClipboardEntry {
   id: string;
   text: string;
+  type?: 'text' | 'image';
+  image?: { url: string; mime_type: string; size: number; width: number; height: number };
   created_at: string;
 }
+
+export interface ClipboardImageSettings {
+  enabled: boolean;
+  max_size_mb: number;
+  max_pixels: number;
+  max_total_size_mb: number;
+}
+
+export const getClipboardImageSettings = (signal?: AbortSignal) =>
+  api.get<ClipboardImageSettings, ClipboardImageSettings>('/clipboard/image-config', { signal });
+
+export const createClipboardImage = (file: File) => {
+  const body = new FormData();
+  body.append('image', file);
+  return api.post<ClipboardEntry, ClipboardEntry>('/clipboard/image', body);
+};
+
+export const fetchClipboardImage = async (id: string) => {
+  const response = await responseApi.get<Blob>('/clipboard/' + encodeURIComponent(id) + '/image', { responseType: 'blob' });
+  return response.data;
+};
 
 export interface ClipboardListResponse {
   entries: ClipboardEntry[];

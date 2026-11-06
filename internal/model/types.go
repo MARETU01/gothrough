@@ -1,9 +1,19 @@
 package model
 
 type ClipboardEntry struct {
-	ID        string `json:"id"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"created_at"`
+	ID        string         `json:"id"`
+	Type      string         `json:"type,omitempty"`
+	Text      string         `json:"text"`
+	Image     ClipboardImage `json:"image,omitzero"`
+	CreatedAt string         `json:"created_at"`
+}
+
+type ClipboardImage struct {
+	URL      string `json:"url"`
+	MimeType string `json:"mime_type"`
+	Size     int64  `json:"size"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
 }
 
 type ClipboardRequest struct {

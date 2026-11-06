@@ -71,6 +71,21 @@ GOTHROUGH_TLS_KEY_FILE="C:/certs/server.key" ./release/gothrough.exe
 
 启动前校验端口、监听地址和启用 TLS 时的证书/私钥是否可加载；校验失败不会初始化或清理上传目录。修改配置或环境变量后需要重启进程，不提供热更新。
 
+## 图片剪贴板
+
+```yaml
+clipboard:
+  image:
+    enabled: true
+    max_size_mb: 10
+    max_pixels: 20000000
+    max_total_size_mb: 200
+```
+
+`max_size_mb` 同时限制上传图片和规范化 PNG 的字节数（1–50 MiB）；`max_pixels` 限制宽 × 高（1–40000000）；`max_total_size_mb` 限制历史中图片的总大小（不得小于单张上限，最大 10240 MiB）。超过总容量时拒绝新图片，不自动清空历史。降低限制不删除已有记录。图片解码最多同时执行一次，繁忙时返回 429。`enabled: false` 仅禁止新增图片，不影响已有图片和文本功能。
+
+对应环境变量为 `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB`。前端从接口读取实际限制，配置修改后重启生效。
+
 ## 前端开发代理
 
 Vite 开发代理独立于后端配置。如果后端改到 9000 端口，可启动：

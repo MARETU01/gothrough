@@ -16,10 +16,11 @@ import (
 )
 
 type Settings struct {
-	Server  ServerSettings  `yaml:"server"`
-	Storage StorageSettings `yaml:"storage"`
-	Logging LoggingSettings `yaml:"logging"`
-	Source  string          `yaml:"-"`
+	Clipboard ClipboardSettings `yaml:"clipboard"`
+	Server    ServerSettings    `yaml:"server"`
+	Storage   StorageSettings   `yaml:"storage"`
+	Logging   LoggingSettings   `yaml:"logging"`
+	Source    string            `yaml:"-"`
 }
 
 type StorageSettings struct {
@@ -58,6 +59,7 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 8080}, Source: "内置默认值"}
 	cfg.Storage.DataDir = exeDir
 	cfg.Logging = DefaultLoggingSettings()
+	cfg.Clipboard.Image = DefaultClipboardImageSettings()
 	if path == "" {
 		path, _ = lookup("GOTHROUGH_CONFIG")
 	}
@@ -145,6 +147,7 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	}{
 		{"GOTHROUGH_ACCESS_LOG", &cfg.Logging.AccessLog}, {"GOTHROUGH_LOG_POLLING", &cfg.Logging.LogPolling},
 		{"GOTHROUGH_LOG_CHUNKS", &cfg.Logging.LogChunks}, {"GOTHROUGH_LOG_FILE_ENABLED", &cfg.Logging.File.Enabled},
+		{"GOTHROUGH_CLIPBOARD_IMAGE_ENABLED", &cfg.Clipboard.Image.Enabled},
 	} {
 		if value, ok := lookup(binding.name); ok {
 			parsed, err := strconv.ParseBool(value)
@@ -160,6 +163,9 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	}{
 		{"GOTHROUGH_LOG_FILE_MAX_SIZE_MB", &cfg.Logging.File.MaxSizeMB},
 		{"GOTHROUGH_LOG_FILE_MAX_BACKUPS", &cfg.Logging.File.MaxBackups},
+		{"GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB", &cfg.Clipboard.Image.MaxSizeMB},
+		{"GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS", &cfg.Clipboard.Image.MaxPixels},
+		{"GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB", &cfg.Clipboard.Image.MaxTotalSizeMB},
 	} {
 		if value, ok := lookup(binding.name); ok {
 			parsed, err := strconv.Atoi(value)
@@ -172,6 +178,9 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	cfg.Logging.Level = strings.ToLower(strings.TrimSpace(cfg.Logging.Level))
 	cfg.Logging.Format = strings.ToLower(strings.TrimSpace(cfg.Logging.Format))
 	if err := cfg.Logging.Validate(); err != nil {
+		return nil, err
+	}
+	if err := cfg.Clipboard.Image.Validate(); err != nil {
 		return nil, err
 	}
 	if cfg.Logging.File.Path != "" && !filepath.IsAbs(cfg.Logging.File.Path) {

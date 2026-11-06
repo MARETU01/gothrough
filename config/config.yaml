@@ -13,6 +13,12 @@ logging:
 storage:
   # Relative to this config file; ".." keeps data beside the config/ directory.
   data_dir: ".."
+clipboard:
+  image:
+    enabled: true
+    max_size_mb: 10 # Input and normalized PNG size.
+    max_pixels: 20000000
+    max_total_size_mb: 200
 server:
   host: "0.0.0.0"
   port: 8080

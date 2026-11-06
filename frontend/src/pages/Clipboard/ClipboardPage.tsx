@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
 import {
   CLIPBOARD_MAX_BYTES, CLIPBOARD_MAX_ENTRIES,
-  createClipboard, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry,
+  createClipboard, createClipboardImage, fetchClipboardImage, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry,
 } from '@/services/clipboard';
 import { apiErrorMessage } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
@@ -12,9 +12,11 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
 import './ClipboardPage.css';
+import { ClipboardImageComposer } from './ClipboardImageComposer';
 
 export default function ClipboardPage() {
   const [text, setText] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const etag = useRef<string | undefined>(undefined);
   const loadEntries = useCallback(async (signal?: AbortSignal, context?: RemoteLoadContext) => {
     const result = await listClipboard(signal, context?.background ? etag.current : undefined);
@@ -68,8 +70,10 @@ export default function ClipboardPage() {
       onSuccess(result);
       setNotice(successMessage);
       await refresh();
+      return true;
     } catch (err) {
       if (mounted.current) setError(apiErrorMessage(err));
+      return false;
     } finally {
       operation.current = false;
       if (mounted.current) setBusy(false);
@@ -100,6 +104,10 @@ export default function ClipboardPage() {
       setManualCopy(null);
     }, '全部记录已删除。');
 
+  const publishImage = (file: File) => runMutation(() => createClipboardImage(file), entry => {
+    setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
+  }, '图片已发布。');
+
   const copy = async (entry: ClipboardEntry) => {
     if (copyInProgress.current) return;
     copyInProgress.current = true;
@@ -107,8 +115,17 @@ export default function ClipboardPage() {
     setCopying(true);
     setNotice('');
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
-      await navigator.clipboard.writeText(entry.text);
+      if (entry.type === 'image') {
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('Clipboard unavailable');
+        // Start write during the click gesture; Safari accepts the promised Blob.
+        const image = fetchClipboardImage(entry.id);
+        // A denied write may reject before the network request finishes.
+        void image.catch(() => {});
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
+      } else {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+        await navigator.clipboard.writeText(entry.text);
+      }
       if (mounted.current) {
         setManualCopy(null);
         setNotice('已复制到剪贴板。');
@@ -122,12 +139,16 @@ export default function ClipboardPage() {
   };
 
   return (
-    <main className="clipboard-page content-page">
+    <main className="clipboard-page content-page" onPaste={event => {
+      if (busy) return;
+      const file = Array.from(event.clipboardData.items).find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
+      if (file) { event.preventDefault(); setImageFile(file); }
+    }}>
       <div className="clipboard-container content-container">
         <header className="clipboard-header">
           <div>
             <h1><Clipboard aria-hidden="true" />共享剪贴板</h1>
-            <p>在设备之间分享文本，粘贴、发布，然后在另一台设备上复制。</p>
+            <p>在设备之间分享文本和图片，粘贴、发布，然后在另一台设备上复制。</p>
           </div>
         </header>
 
@@ -146,12 +167,20 @@ export default function ClipboardPage() {
           </div>
         </form>
 
+        <ClipboardImageComposer file={imageFile} onSelect={setImageFile} onPublish={publishImage} busy={busy} />
+
         {error && <StatusMessage tone="error">{error}</StatusMessage>}
         {notice && <StatusMessage tone="success">{notice}</StatusMessage>}
         {manualCopy && <section className="clipboard-manual" aria-label="手动复制">
+          {manualCopy.type === 'image' ? <>
+            <p>无法直接复制图片，请使用 HTTPS 或 localhost 并允许剪贴板权限；也可以打开或下载图片后手动复制。</p>
+            <a href={manualCopy.image?.url} target="_blank" rel="noreferrer">打开图片</a>{' · '}
+            <a href={`${manualCopy.image?.url}?download=1`}>下载图片</a>
+          </> : <>
           <label htmlFor="clipboard-manual-text">无法自动复制，请复制下方已选中的文本（Ctrl+C / ⌘C，或长按复制）。</label>
           <textarea id="clipboard-manual-text" readOnly rows={4} value={manualCopy.text}
             ref={selectManualCopy} />
+          </>}
           <Button variant="outline" onClick={() => setManualCopy(null)}>关闭</Button>
         </section>}
 
@@ -184,11 +213,15 @@ export default function ClipboardPage() {
           <ul className="clipboard-list">
             {entries.map((entry, index) => <li key={entry.id}>
               <article className="clipboard-entry" aria-label={`记录 ${index + 1}`}>
-                <pre>{entry.text}</pre>
+                {entry.type === 'image' && entry.image ? <a href={entry.image.url} target="_blank" rel="noreferrer">
+                  <img className="clipboard-history-image" src={entry.image.url} alt={`共享图片 ${index + 1}`} loading="lazy"
+                    onError={event => { event.currentTarget.alt = '图片加载失败，可打开图片重试'; }} />
+                </a> : <pre>{entry.text}</pre>}
                 <footer>
                   <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString()}</time>
                   <div className="clipboard-entry-actions">
                     <Button variant="outline" disabled={copying} onClick={() => void copy(entry)} aria-label={`复制记录 ${index + 1}`}><Copy aria-hidden="true" />复制</Button>
+                    {entry.type === 'image' && entry.image && <a href={`${entry.image.url}?download=1`}>下载图片</a>}
                     {confirming === entry.id ? <>
                       <Button variant="destructive" disabled={busy} onClick={() => void removeEntry(entry.id)} aria-label={`确认删除记录 ${index + 1}`}>确认删除</Button>
                       <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>取消</Button>

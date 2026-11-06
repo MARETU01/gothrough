@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 	"uuid"
 
+	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/model"
 )
 
@@ -31,21 +32,38 @@ var (
 // ClipboardService owns a bounded, newest-first history. Mutations are committed
 // to a temporary file and atomically renamed before becoming visible in memory.
 type ClipboardService struct {
-	mu      sync.RWMutex
-	path    string
-	entries []model.ClipboardEntry
-	body    string
-	etag    string
+	mu            sync.RWMutex
+	path          string
+	entries       []model.ClipboardEntry
+	body          string
+	etag          string
+	imageDir      string
+	imageSettings config.ClipboardImageSettings
+	imageSlot     chan struct{}
 }
 
-func NewClipboardService(dir string) (*ClipboardService, error) {
+func NewClipboardService(dir string, options ...config.ClipboardImageSettings) (*ClipboardService, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
 	s := &ClipboardService{path: filepath.Join(dir, "history.json"), entries: []model.ClipboardEntry{}}
+	s.imageDir = filepath.Join(dir, "images")
+	s.imageSettings = config.DefaultClipboardImageSettings()
+	if len(options) > 0 && options[0] != (config.ClipboardImageSettings{}) {
+		s.imageSettings = options[0]
+	}
+	if err := s.imageSettings.Validate(); err != nil {
+		return nil, err
+	}
+	s.imageSlot = make(chan struct{}, 1)
+	if err := os.MkdirAll(s.imageDir, 0700); err != nil {
+		return nil, err
+	}
 	f, err := os.Open(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		s.updateSnapshot()
+		// No committed history means every owned image is unreferenced.
+		s.cleanupOrphanImages()
 		return s, nil
 	}
 	if err != nil {
@@ -69,7 +87,11 @@ func NewClipboardService(dir string) (*ClipboardService, error) {
 	seen := make(map[string]bool)
 	for _, entry := range s.entries {
 		_, dateErr := time.Parse(time.RFC3339Nano, entry.CreatedAt)
-		if entry.ID == "" || seen[entry.ID] || !validClipboardText(entry.Text) || dateErr != nil {
+		valid := (entry.Type == "" || entry.Type == "text") && validClipboardText(entry.Text) && entry.Image == (model.ClipboardImage{})
+		if entry.Type == "image" {
+			valid = s.validStoredImage(entry)
+		}
+		if entry.ID == "" || seen[entry.ID] || !valid || dateErr != nil {
 			return nil, fmt.Errorf("剪贴板历史记录无效")
 		}
 		seen[entry.ID] = true
@@ -78,6 +100,7 @@ func NewClipboardService(dir string) (*ClipboardService, error) {
 		s.entries = []model.ClipboardEntry{}
 	}
 	s.updateSnapshot()
+	s.cleanupOrphanImages()
 	return s, nil
 }
 
@@ -90,7 +113,7 @@ func (s *ClipboardService) Snapshot() (body, etag string) {
 }
 
 func (s *ClipboardService) updateSnapshot() {
-	// ClipboardEntry contains only strings, so marshaling cannot fail.
+	// ClipboardEntry contains only JSON-compatible scalar fields.
 	data, _ := json.Marshal(struct {
 		Entries []model.ClipboardEntry `json:"entries"`
 	}{s.entries})
@@ -118,11 +141,9 @@ func (s *ClipboardService) Create(text string) (model.ClipboardEntry, error) {
 	next := make([]model.ClipboardEntry, 1, ClipboardMaxEntries)
 	next[0] = entry
 	next = append(next, s.entries[:min(len(s.entries), ClipboardMaxEntries-1)]...)
-	if err := s.save(next); err != nil {
+	if err := s.commit(next); err != nil {
 		return model.ClipboardEntry{}, err
 	}
-	s.entries = next
-	s.updateSnapshot()
 	return entry, nil
 }
 
@@ -135,11 +156,9 @@ func (s *ClipboardService) Delete(id string) error {
 		}
 		next := append([]model.ClipboardEntry{}, s.entries[:i]...)
 		next = append(next, s.entries[i+1:]...)
-		if err := s.save(next); err != nil {
+		if err := s.commit(next); err != nil {
 			return err
 		}
-		s.entries = next
-		s.updateSnapshot()
 		return nil
 	}
 	return ErrClipboardNotFound
@@ -149,11 +168,30 @@ func (s *ClipboardService) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := []model.ClipboardEntry{}
+	if err := s.commit(next); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Called with mu held. Publish metadata first; a failed cleanup leaves only an
+// orphan, which is retried on startup, never a committed entry with no file.
+func (s *ClipboardService) commit(next []model.ClipboardEntry) error {
 	if err := s.save(next); err != nil {
 		return err
 	}
+	previous := s.entries
 	s.entries = next
 	s.updateSnapshot()
+	retained := make(map[string]bool, len(next))
+	for _, entry := range next {
+		retained[entry.ID] = true
+	}
+	for _, entry := range previous {
+		if entry.Type == "image" && !retained[entry.ID] {
+			s.removeImage(entry.ID + ".png")
+		}
+	}
 	return nil
 }
 
