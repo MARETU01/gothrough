@@ -22,3 +22,15 @@ export const listFiles = (signal?: AbortSignal) =>
 
 export const deleteFile = (name: string) => api.delete<{ status: string }, { status: string }>('/files/' + encodeURIComponent(name));
 export const downloadFileUrl = (name: string) => '/api/files/' + encodeURIComponent(name);
+
+export interface FilePreviewInfo {
+  kind: 'text' | 'image' | 'pdf' | 'audio' | 'video';
+  mime_type: string;
+  text: string;
+  version?: string;
+}
+export const previewFileUrl = (name: string) => downloadFileUrl(name) + '?preview=1';
+export const getFilePreview = (name: string, signal?: AbortSignal) =>
+  api.get<FilePreviewInfo, FilePreviewInfo>('/files/' + encodeURIComponent(name) + '?preview=info', { signal });
+export const saveFileText = (name: string, text: string, version: string) =>
+  api.put<{ version: string }, { version: string }>('/files/' + encodeURIComponent(name), { text, version });

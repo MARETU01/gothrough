@@ -60,6 +60,10 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 		return
 	}
+	if c.Query("preview") != "" {
+		servePreview(c, file, info)
+		return
+	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(rel)))
 	c.Header("Content-Type", "application/octet-stream")

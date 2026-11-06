@@ -22,6 +22,24 @@ All backend endpoints use the `/api` prefix.
 
 Encode filenames when using them as URL path parameters.
 
+### File preview
+
+The file list opens previews in a modal, full screen on phones. Close it or press Escape to return to the list. Images, UTF-8 text, PDFs, and browser-supported audio/video are supported, with a download fallback.
+
+`GET /api/files/*filename?preview=info` returns `kind`, `mime_type`, and `text`. The kind is `text`, `image`, `pdf`, `audio`, or `video`; only text previews contain a text body. Text is limited to 1 MiB (413 for oversized files); unsupported types or encodings return 415. HTML, SVG, and source code are displayed as plain text without executing content.
+
+`GET /api/files/*filename?preview=1` serves supported files inline with Range support. Both modes reuse download authentication and path validation and disable caching. Regular downloads retain their existing behavior.
+
+### Text editing
+
+Text previews offer Edit, Save, and Cancel editing. Discarding a modified draft requires confirmation; failed saves preserve the draft. Successful saves refresh file sizes and modification times in the list.
+
+Text preview metadata includes `version`. Send `PUT /api/files/*filename` with `{"text":"new content","version":"preview version"}`. Success returns the new version. Missing versions return 428, changed contents return 409, and deleted files return 404. On conflict, copy any draft content you need before reloading; forced overwrites are not offered.
+
+Only supported UTF-8 text files up to 1 MiB after encoding (including BOM and line endings) can be edited. Original BOM and permission bits are preserved. Editors use LF; saves retain the source's first newline style (LF, CRLF, or CR). Unchanged content preserves original bytes, including mixed endings. Writes use a synced temporary file in the same directory before replacement. Version checking and edits/deletes within the service are serialized. Do not run multiple editing services against the same data directory or modify files externally during a save.
+
+All unlocked visitors may edit, following the existing shared access model. When password protection is enabled, PUT requests require a valid session and pass the same-origin checks.
+
 ## Clipboard API
 
 | Method | Path | Purpose |

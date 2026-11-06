@@ -8,6 +8,7 @@ import { useRemoteData } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
+import { FilePreview } from '@/components/FilePreview';
 import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
 import './FilesPage.css';
 
@@ -29,6 +30,7 @@ export default function FilesPage() {
   const [page, setPage] = useState(1);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
 
   useEffect(() => {
     if (confirming === null) return;
@@ -113,6 +115,7 @@ export default function FilesPage() {
             <tbody>{pageFiles.map(file => <tr key={file.name}>
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.mtime}</td>
               <td><div className="files-row-actions">
+                <Button type="button" variant="outline" size="sm" aria-label={t('preview.open', { name: file.name })} onClick={() => setPreviewing(file.name)}>{t('preview.button')}</Button>
                 <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
                 <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={t(confirming === file.name ? 'files.confirmDelete' : 'files.delete', { name: file.name })} onClick={() => void handleDelete(file.name)}>
                   <Trash2 aria-hidden="true" />{deleting === file.name ? t("删除中…") : confirming === file.name ? t("确认删除？") : t("删除")}
@@ -128,6 +131,7 @@ export default function FilesPage() {
           </nav>}
         </section>}
       </div>
+      {previewing !== null && <FilePreview key={previewing} name={previewing} onClose={() => setPreviewing(null)} onSaved={() => { void refresh(); }} />}
     </main>
   );
 }

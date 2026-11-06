@@ -58,6 +58,8 @@ func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 
 // 删除已上传的文件
 func (s *UploadService) DeleteFile(filename string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	rel := utils.SafeUploadRelpath(filename, s.uploadDir)
 	if rel == "" {
 		return fmt.Errorf("无效文件名")
