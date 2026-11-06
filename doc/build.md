@@ -1,67 +1,69 @@
-# 前端嵌入与发布打包
+# Frontend Embedding and Release Builds
 
-[返回项目首页](../README.md)
+English | [简体中文](build.zh-CN.md)
 
-本页命令均在项目根目录执行；监听端口和 TLS 设置见[配置说明](configuration.md)。
+[Back to the project README](../README.md)
 
-安装 Go、Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm 和 GNU Make 后，在仓库根目录执行（Windows 使用 Git Bash；默认目标也是 `build`）。使用 nvm 时先执行 `nvm use 26`；从旧版 Node.js 升级后先执行 `make -B install` 强制重装依赖：
+Run all commands on this page from the project root. See the [configuration guide](configuration.md) for the listening port and TLS settings.
+
+After installing Go, Node.js 26 LTS (26.13.0 or a newer 26.x version), npm, and GNU Make, run the following from the repository root. On Windows, use Git Bash. The default Make target is also `build`. If you use nvm, run `nvm use 26` first. After upgrading from an older Node.js version, run `make -B install` first to force dependency reinstallation.
 
 ```sh
 make build
 ```
 
-Makefile 在首次构建、依赖清单或 npm 配置变更、删除 `node_modules` 后执行 `npm ci`，其他时候复用已安装依赖，再执行前端构建和带 `embedweb` 标签的 Go 构建。任何一步失败会停止；`make -j` 也保持这些步骤的先后顺序。Windows 自动输出 `release/gothrough.exe`，Linux/macOS 输出 `release/gothrough`。Windows 若命令名为 `mingw32-make`，将命令中的 `make` 替换为 `mingw32-make`。
+The Makefile runs `npm ci` on the first build, after dependency manifests or npm configuration change, or after `node_modules` is removed. Otherwise it reuses installed dependencies, then builds the frontend and compiles Go with the `embedweb` build tag. Any failed step stops the build. The same ordering is preserved with `make -j`. Output defaults to `release/gothrough.exe` on Windows and `release/gothrough` on Linux/macOS. If your Windows Make command is named `mingw32-make`, use it in place of `make`.
 
-打包同时将默认配置复制到输出目录的 `config/config.yaml`；如果该文件已存在则保留，不覆盖部署配置。配置文件、证书和私钥均保持外置。
+The build also copies the default configuration to `config/config.yaml` under the output directory. An existing file is preserved so deployment settings are not overwritten. Configuration files, certificates, and private keys remain external.
 
-Windows 在 Git Bash 中启动：
+Start the application on Windows in Git Bash:
 
 ```sh
 ./release/gothrough.exe
 ```
 
-Linux/macOS 启动：
+On Linux/macOS:
 
 ```sh
 ./release/gothrough
 ```
 
-可用目标和参数：
+Available targets and options:
 
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `make` / `make build` | 按需安装依赖、构建前端并打包 Go |
-| `make install` | 下载 Go 模块并按需安装前端依赖 |
-| `make test` | 构建前端，再运行普通及嵌入版后端测试和 vet |
-| `make OUTPUT=release/custom.exe` | 自定义输出文件路径 |
-| `make OUT_DIR=out` | 修改默认输出目录 |
-| `make help` | 查看命令说明 |
+| `make` / `make build` | Install dependencies as needed, build the frontend, and package the Go executable |
+| `make install` | Download Go modules and install frontend dependencies as needed |
+| `make test` | Build the frontend, then run backend tests and vet with and without embedded assets |
+| `make OUTPUT=release/custom.exe` | Set a custom output file path |
+| `make OUT_DIR=out` | Change the default output directory |
+| `make help` | Show command help |
 
-Makefile 统一使用 `sh` 和 POSIX 命令，不调用 cmd 或 PowerShell。`make install` 执行 `go mod download` 并按需执行 `npm ci`，只准备依赖；`make build` 和 `make test` 会自动先安装依赖，再构建、同步前端资源。可通过 `GO`、`NPM` 指定工具命令。跨平台打包通过标准 `GOOS`、`GOARCH` 环境变量指定目标，输出扩展名根据 Go 目标平台自动选择。例如在 Git Bash 中执行 `GOOS=linux GOARCH=amd64 make build`，这些设置仅影响本次命令。
+The Makefile uses `sh` and POSIX commands throughout; it does not invoke cmd or PowerShell. `make install` runs `go mod download` and, when needed, `npm ci`, preparing dependencies only. `make build` and `make test` install dependencies automatically before building and synchronizing frontend assets. Override the tool commands with `GO` and `NPM`. For cross-compilation, select the target through the standard `GOOS` and `GOARCH` environment variables; the output extension is selected automatically from the Go target platform. For example, in Git Bash, run `GOOS=linux GOARCH=amd64 make build`. These settings apply only to that command.
 
-依赖安装标记保存在 `frontend/node_modules/.gothrough-deps-installed`，不纳入 Git。`package.json`、`package-lock.json` 和已有 `.npmrc` 的时间戳用于判断是否需要重装；首次切换到这版 Makefile 会先安装一次。更换 Node.js/npm 版本、修改 npm 环境参数或怀疑依赖损坏时执行 `make -B install` 强制重新安装。不要同时运行强制安装和其他构建任务，因为它会删除并重新创建 `node_modules`。
+The dependency installation marker is stored in `frontend/node_modules/.gothrough-deps-installed` and excluded from Git. Timestamps on `package.json`, `package-lock.json`, and an existing `.npmrc` determine whether reinstallation is needed. The first build using this version of the Makefile installs dependencies once. Run `make -B install` to force reinstallation after switching Node.js/npm versions, changing npm environment settings, or suspecting damaged dependencies. Do not run forced installation alongside other build tasks because it removes and recreates `node_modules`.
 
-前端源码和资源仍会正常重新构建、完整同步，避免删除文件后残留旧产物；TypeScript 与 Go 继续复用各自的编译缓存。主要提速来自跳过每次几十秒的重复依赖安装，不跳过必要的前端生成步骤。
+Frontend source and assets are still rebuilt and fully synchronized, preventing stale output after source files are deleted. TypeScript and Go continue to reuse their own compilation caches. The main speed improvement comes from avoiding repeated dependency installations that can take tens of seconds, while still performing the necessary frontend generation steps.
 
-自定义输出路径：
+To set a custom output path:
 
 ```sh
 make build OUTPUT=release/custom.exe
 ```
 
-发布后访问 `http://localhost:8080`（或实际后端监听地址）。前端 HTML、JS、CSS 已包含在程序中，部署机器不需要 Node.js，也不需要携带 `frontend/dist`。运行配置、TLS 证书和数据不会嵌入可执行文件。程序需有创建和读写数据根目录的权限；目录由 `storage.data_dir` 或 `GOTHROUGH_DATA_DIR` 设置，详见[配置说明](configuration.md)。Makefile 不覆盖已有配置，旧配置仍可使用；开发时若用 `go run`，请显式补上数据目录，避免数据落入临时可执行文件目录。
+After deployment, open `http://localhost:8080` or the configured backend address. Frontend HTML, JavaScript, and CSS are included in the executable. The deployment machine does not need Node.js or `frontend/dist`. Runtime configuration, TLS certificates, and data are not embedded. The application needs permission to create, read, and write the data root, set through `storage.data_dir` or `GOTHROUGH_DATA_DIR`; see the [configuration guide](configuration.md). The Makefile preserves existing configuration files, and older configuration files remain usable. When developing with `go run`, explicitly set the data directory to avoid storing data beside the temporary executable.
 
-`internal/webassets/embed.go` 通过 `go:embed all:dist` 嵌入同目录下的构建产物。Vite 仍输出到 `frontend/dist`；Makefile 的内部资源规则构建前端后，将产物完整同步到 `internal/webassets/dist`，清除该生成目录中的旧文件，避免过期哈希资源残留。`make build` 和 `make test` 会自动执行此步骤，并行执行时也会先完成同步再开始 Go 编译。同一次 `make -j2 build test` 调用只构建和同步一次前端。
+`internal/webassets/embed.go` uses `go:embed all:dist` to embed build output from its own directory. Vite still writes to `frontend/dist`. After building the frontend, the Makefile's internal asset rule fully synchronizes the output into `internal/webassets/dist`, removing old files from that generated directory to prevent stale hashed assets. Both `make build` and `make test` do this automatically. Parallel builds also wait for synchronization before compiling Go. A single `make -j2 build test` invocation builds and synchronizes the frontend only once.
 
-手动使用 `-tags embedweb` 前可先执行 `make test` 生成并验证嵌入资源，缺少嵌入产物会编译失败；修改前端后需重新同步和编译。两个 `dist` 目录与 `release` 均不纳入 Git，CI 也需要执行相同构建流程。
+Before manually using `-tags embedweb`, you can run `make test` to generate and validate embedded assets. Compilation fails if the generated assets are missing. After changing the frontend, synchronize and compile again. Both `dist` directories and `release` are excluded from Git, so CI must perform the same build steps.
 
-Gin 保留所有接口，未命中接口的 GET/HEAD 请求由嵌入资源处理。`/`、`/upload`、`/files` 返回 SPA 入口，直接访问和刷新正常；不存在的 API、静态资源和其他路径返回 404。以后增加前端页面路由时，需同步更新 `internal/router/web.go` 的页面回退列表。带哈希的 Vite 资源长期缓存，HTML 与公共资源使用 `no-cache`。
+Gin retains all API routes. GET/HEAD requests that do not match an API route are handled by the embedded asset routing. Page routes such as `/`, `/upload`, and `/files` return the SPA entry point, supporting direct navigation and refreshes. Missing API routes, static assets, and other paths return 404. When adding frontend page routes, also update the page fallback list in `internal/router/web.go`. Hashed Vite assets use long-lived caching; HTML and public assets use `no-cache`.
 
-普通 `go run ./cmd`、`go test ./...`、`go build ./...` 不嵌入页面，也不要求生成 `dist`，继续配合 Vite 开发代理使用。前端 API 保持同源 `/api`，无需额外跨域配置。
+Ordinary `go run ./cmd`, `go test ./...`, and `go build ./...` commands do not embed pages or require generated `dist` directories. Continue using the Vite development proxy with these commands. Frontend API calls use same-origin `/api` paths, without additional cross-origin configuration.
 
-### 嵌入版检查
+## Embedded Build Checks
 
-前端构建并同步完成后执行（或直接运行 `make test`，同时检查普通后端版本）：
+After building and synchronizing the frontend, run the following, or use `make test` to check both the ordinary backend and the embedded build:
 
 ```sh
 go test -tags embedweb ./...

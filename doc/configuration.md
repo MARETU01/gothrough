@@ -1,12 +1,14 @@
-# 服务与数据目录配置
+# Server and Data Directory Configuration
 
-[返回项目首页](../README.md)
+English | [简体中文](configuration.zh-CN.md)
 
-本页命令均在项目根目录执行。运行配置位于 `config/config.yaml`。
+[Back to the project README](../README.md)
 
-## 配置文件
+Run all commands on this page from the project root. Runtime configuration is stored in `config/config.yaml`.
 
-外部配置文件 `config/config.yaml`：
+## Configuration File
+
+The external `config/config.yaml` file:
 
 ```yaml
 storage:
@@ -20,58 +22,58 @@ server:
     key_file: "certs/server.key"
 ```
 
-相对证书路径以配置文件所在目录为基准，示例对应 `config/certs/server.crt` 与 `config/certs/server.key`。证书、私钥不嵌入程序，`config/certs/` 不纳入 Git。启用 TLS 后端口不会自动改为 443；需将 `server.port` 设置为期望端口（例如 8443）。服务只启动一个 HTTP 或 HTTPS 监听器。
+Relative certificate paths are resolved from the directory containing the configuration file. In this example, they refer to `config/certs/server.crt` and `config/certs/server.key`. Certificates and private keys are not embedded in the executable, and `config/certs/` is excluded from Git. Enabling TLS does not automatically change the port to 443; set `server.port` to the desired port, such as 8443. The server starts a single HTTP or HTTPS listener.
 
-配置文件选择顺序：`-config 指定路径` → `GOTHROUGH_CONFIG` → 可执行文件旁的 `config/config.yaml` → 工作目录下的 `config/config.yaml`。没有默认配置文件时使用内置 HTTP `0.0.0.0:8080`，也支持纯环境变量启动；显式指定的文件缺失或格式错误则启动失败。未知 YAML 字段会报错，避免拼写错误被忽略。
+Configuration files are selected in this order: the path passed to `-config` → `GOTHROUGH_CONFIG` → `config/config.yaml` beside the executable → `config/config.yaml` under the working directory. If no default configuration file exists, the server uses its built-in HTTP default of `0.0.0.0:8080`. It can also start using environment variables alone. A missing or malformed explicitly selected file causes startup to fail. Unknown YAML fields are rejected so that typos are not silently ignored.
 
-字段优先级：**环境变量 > YAML 配置 > 内置默认值**。TLS 开关通过 `server.tls.enabled` 或 `GOTHROUGH_TLS_ENABLED` 设置。环境变量中的空字符串也视为明确覆盖，空端口或无效布尔值会报错。
+Field precedence is **environment variables > YAML configuration > built-in defaults**. Set TLS through `server.tls.enabled` or `GOTHROUGH_TLS_ENABLED`. An empty environment variable still counts as an explicit override; an empty port or an invalid boolean causes an error.
 
-日志通过 `logging` 配置，支持级别、文本 / JSON 格式、成功访问日志开关和可选滚动文件；详细参数及环境变量见[日志说明](logging.md)。日志文件相对路径以数据根目录为基准。
+The `logging` section controls log levels, text or JSON format, successful-request access logs, and optional rotating files. See the [logging guide](logging.md) for settings and environment variables. Relative log file paths are resolved from the data root.
 
-## 数据目录
+## Data Directory
 
-`storage.data_dir` 指定数据根目录，包含 `uploads/`、`temp_uploads/` 和 `clipboard/`。相对路径以配置文件所在目录为基准；未加载配置文件时，环境变量中的相对路径以工作目录为基准。默认配置填写 `".."`，因此开发数据保存在项目根目录，发布包的数据保存在 `release/` 中。
+`storage.data_dir` specifies the data root, containing `uploads/`, `temp_uploads/`, and `clipboard/`. Relative paths are resolved from the configuration file's directory. When no configuration file is loaded, relative paths supplied through environment variables are resolved from the working directory. The default configuration uses `".."`, placing development data in the project root and packaged application data in `release/`.
 
-如果配置文件和环境变量均未指定数据目录，使用可执行文件所在目录；不再通过 `go-build`、`JetBrains` 等路径片段猜测开发环境。旧配置配合 `go run` 使用时，请补上 `storage.data_dir: ".."` 或设置环境变量。空字符串和纯空白的数据目录会被拒绝。
+If neither the configuration file nor the environment specifies a data directory, the executable's directory is used. Paths containing names such as `go-build` or `JetBrains` are no longer used to guess the development environment. When using an older configuration with `go run`, add `storage.data_dir: ".."` or set the environment variable. Empty or whitespace-only data directory values are rejected.
 
-可通过 `GOTHROUGH_DATA_DIR` 覆盖数据目录，例如 `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd`。修改目录不会自动搬迁旧数据；需要在服务停止后自行迁移，或继续指向原目录。一个数据根目录只供一个服务进程使用。
+Override the directory with `GOTHROUGH_DATA_DIR`, for example `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd` in Git Bash. Changing the directory does not migrate existing data. Stop the server and move the data yourself, or keep using the original directory. Each data root must be used by only one server process.
 
-初始化返回错误，由程序入口统一记录并退出。创建目录、存储写入与硬链接检查通过后才清理旧上传会话；读取或清理失败会明确报错，不会被静默忽略。
+Initialization errors are returned to the entry point, logged, and followed by process exit. Old upload sessions are cleaned up only after directory creation, storage write checks, and hard-link checks succeed. Read or cleanup failures are reported rather than silently ignored.
 
-## 环境变量
+## Environment Variables
 
-| 环境变量 | 用途 |
+| Variable | Purpose |
 | --- | --- |
-| `GOTHROUGH_CONFIG` | 指定配置文件路径，低于 `-config` |
-| `GOTHROUGH_DATA_DIR` | 数据根目录，覆盖 `storage.data_dir`；不能为空 |
-| `GOTHROUGH_HOST` | 监听 IP 或主机名，不含协议和端口；IPv6 不加方括号 |
-| `GOTHROUGH_PORT` | 监听端口，范围 1～65535 |
-| `GOTHROUGH_TLS_ENABLED` | TLS 开关，建议填写 `true` / `false` |
-| `GOTHROUGH_TLS_CERT_FILE` | PEM 证书链文件路径 |
-| `GOTHROUGH_TLS_KEY_FILE` | PEM 私钥文件路径 |
+| `GOTHROUGH_CONFIG` | Configuration file path; overridden by `-config` |
+| `GOTHROUGH_DATA_DIR` | Data root; overrides `storage.data_dir` and must not be empty |
+| `GOTHROUGH_HOST` | Listening IP address or hostname, without a scheme or port; IPv6 addresses must not include brackets |
+| `GOTHROUGH_PORT` | Listening port, from 1 to 65535 |
+| `GOTHROUGH_TLS_ENABLED` | Enable or disable TLS; use `true` or `false` |
+| `GOTHROUGH_TLS_CERT_FILE` | Path to the PEM certificate chain file |
+| `GOTHROUGH_TLS_KEY_FILE` | Path to the PEM private key file |
 
-文件和环境变量提供的相对证书路径使用同一规则；未加载配置文件时相对于工作目录解析。环境变量指进程环境，后端不会自动读取 `.env`。
+Relative certificate paths follow the same rules whether supplied through YAML or environment variables. When no configuration file is loaded, they are resolved from the working directory. These variables refer to the process environment; the backend does not automatically load `.env` files.
 
-## 启动示例
+## Startup Examples
 
-Git Bash 使用示例：
+Examples for Git Bash:
 
 ```sh
-# 用环境变量覆盖端口，保留配置文件其他设置
+# Override the port while keeping the other configuration settings.
 GOTHROUGH_PORT=9000 go run ./cmd
 
-# 指定其他配置文件
+# Select a different configuration file.
 ./release/gothrough.exe -config ./config/config.yaml
 
-# 覆盖为 HTTPS，使用绝对路径明确定位证书
+# Enable HTTPS with absolute certificate paths.
 GOTHROUGH_PORT=8443 GOTHROUGH_TLS_ENABLED=true \
 GOTHROUGH_TLS_CERT_FILE="C:/certs/server.crt" \
 GOTHROUGH_TLS_KEY_FILE="C:/certs/server.key" ./release/gothrough.exe
 ```
 
-启动前校验端口、监听地址和启用 TLS 时的证书/私钥是否可加载；校验失败不会初始化或清理上传目录。修改配置或环境变量后需要重启进程，不提供热更新。
+Before startup, the server validates the port and listening address and, when TLS is enabled, checks that the certificate and private key can be loaded. Failed validation does not initialize or clean up the upload directory. Restart the process after changing configuration or environment variables; hot reload is not supported.
 
-## 图片剪贴板
+## Image Clipboard
 
 ```yaml
 clipboard:
@@ -82,16 +84,16 @@ clipboard:
     max_total_size_mb: 200
 ```
 
-`max_size_mb` 同时限制上传图片和规范化 PNG 的字节数（1–50 MiB）；`max_pixels` 限制宽 × 高（1–40000000）；`max_total_size_mb` 限制历史中图片的总大小（不得小于单张上限，最大 10240 MiB）。超过总容量时拒绝新图片，不自动清空历史。降低限制不删除已有记录。图片解码最多同时执行一次，繁忙时返回 429。`enabled: false` 仅禁止新增图片，不影响已有图片和文本功能。
+`max_size_mb` limits both the uploaded image and the normalized PNG (1–50 MiB). `max_pixels` limits width × height (1–40,000,000). `max_total_size_mb` limits the total size of images in history; it must be at least the per-image limit and no more than 10,240 MiB. New images are rejected when the total quota is exceeded; existing history is not automatically cleared. Lowering limits does not delete existing entries. Only one image can be decoded at a time; busy requests return 429. Setting `enabled: false` disables new image publishing without affecting existing images or text features.
 
-对应环境变量为 `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB`。前端从接口读取实际限制，配置修改后重启生效。
+The corresponding environment variables are `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED`, `GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB`, `GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS`, and `GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB`. The frontend reads the actual limits from the API. Restart the server for configuration changes to take effect.
 
-## 前端开发代理
+## Frontend Development Proxy
 
-Vite 开发代理独立于后端配置。如果后端改到 9000 端口，可启动：
+The Vite development proxy is independent of backend configuration. If the backend moves to port 9000, start the frontend with:
 
 ```sh
 GOTHROUGH_DEV_API_TARGET=http://127.0.0.1:9000 npm --prefix frontend run dev
 ```
 
-该变量也可写入 `frontend/.env.local`（需重启 Vite）。嵌入版前端使用同源 `/api`，不需要额外配置代理；证书和后端环境变量不会发送到浏览器。
+You can also put this variable in `frontend/.env.local`; restart Vite afterward. The embedded frontend uses same-origin `/api` requests and needs no additional proxy configuration. Certificates and backend environment variables are not sent to the browser.

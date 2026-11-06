@@ -1,21 +1,25 @@
-﻿# GoThrough 前端
+# GoThrough Frontend
 
-React + TypeScript + Vite 文件上传界面。支持拖拽和多文件选择、分块并发、当前页面内暂停/恢复、取消、单文件重试，以及进度和速度展示。
+English | [简体中文](README.zh-CN.md)
 
-## 本地开发
+[Back to the project README](../README.md)
 
-使用 Node.js 26 LTS（26.13.0 或更高的 26.x 版本）及其配套 npm。在仓库根目录执行 `nvm use 26` 切换版本；从旧版 Node.js 升级后，先在根目录执行 `make -B install` 强制重装依赖。
+A file upload interface built with React, TypeScript, and Vite. It supports drag-and-drop and multi-file selection, concurrent chunked uploads, pause and resume within the current browser session, cancellation, individual file retries, and progress and speed displays.
 
-在 `frontend` 目录执行：
+## Local Development
+
+Use Node.js 26 LTS (26.13.0 or a newer 26.x version) and its accompanying npm. Run `nvm use 26` from the repository root to switch versions. After upgrading from an older Node.js version, first run `make -B install` from the root to force dependency reinstallation.
+
+From the `frontend` directory:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-开发服务器将 `/api` 请求代理到 `http://127.0.0.1:8080`。先在仓库根目录执行 `go run ./cmd` 启动 Go 上传服务。生产部署需要自行配置 `/api` 反向代理，以及前端路由回退到 `index.html`。
+The development server proxies `/api` requests to `http://127.0.0.1:8080`. Start the Go upload service first by running `go run ./cmd` from the repository root. For a separate production frontend deployment, configure a reverse proxy for `/api` and route fallback to `index.html` for frontend pages.
 
-## 检查
+## Checks
 
 ```sh
 npm test
@@ -23,28 +27,28 @@ npm run build
 npm run lint
 ```
 
-测试使用 Vitest、jsdom 和 React Testing Library，覆盖取消、暂停/恢复、队列移除、失败重试、并发退出、分块乱序、速度采样、展示快照和空文件进度。
+Tests use Vitest, jsdom, and React Testing Library. They cover cancellation, pause and resume, queue removal, retries, concurrent worker shutdown, out-of-order chunks, speed sampling, display snapshots, and empty-file progress.
 
-## 代码组织
+## Code Organization
 
-上传页显示单文件耗时和本轮队列总耗时，每 500ms 更新，完成后保留最终结果。单文件从实际初始化开始计时，不含排队等待；队列从本轮启动开始计时，包含并发任务的整体经过时间，不累加各文件耗时。计时包含准备、传输和校验保存，从点击暂停到恢复的时间全部扣除，包括暂停期间仍在结束的请求。取消时冻结，重新开始或重试重新计时，清空队列时清除。站内切换页面不影响计时。
+The upload page displays elapsed time for each file and the current queue run, updating every 500 ms and retaining final results after completion. Per-file timing starts at initialization and excludes queue waiting. Queue timing starts when the run begins and measures elapsed time across concurrent tasks rather than adding individual file durations. Timing includes preparation, transfer, validation, and saving. All time between clicking pause and resuming is excluded, including time while existing requests are still finishing. Cancellation freezes the clock; restarting or retrying starts a new clock, and clearing the queue removes timing data. In-app navigation does not interrupt timing.
 
-- `src/pages/Upload`：上传页面与独立文件行。
-- `src/hooks/useUploadQueue.ts`：队列调度、并发和生命周期。
-- `src/services/upload.ts`：初始化、分块、完成和取消接口。
-- `src/services/errors.ts`：各业务共用的 HTTP 错误解析和取消判断。
-- `src/hooks/useRemoteData.ts`：文件列表与剪贴板共用的加载、刷新和请求取消逻辑，忽略过期响应，卸载时取消请求。后台刷新不显示加载状态，也不清除操作错误；同步失败单独记录。
-- `src/hooks/useAutoRefresh.ts`：请求完成后再安排下一次轮询，页面隐藏或操作暂停时取消后台请求，切回可见时立即同步。
-- `src/config/clipboard.ts`：剪贴板自动刷新间隔，默认 3000ms。
-- `src/hooks/usePageTitle.ts`：设置页面标题并在离开时恢复。
-- `src/config/upload.ts`：分块大小和并发配置。
-- `src/types/upload.ts`：内部任务类型和只读展示类型。
-- `src/utils/upload.ts`：字节进度和展示快照。
+- `src/pages/Upload`: upload page and individual file rows.
+- `src/hooks/useUploadQueue.ts`: queue scheduling, concurrency, and lifecycle.
+- `src/services/upload.ts`: initialization, chunk upload, completion, and cancellation endpoints.
+- `src/services/errors.ts`: shared HTTP error parsing and cancellation detection.
+- `src/hooks/useRemoteData.ts`: shared loading, refreshing, and request cancellation for file lists and the clipboard. It ignores stale responses and cancels requests on unmount. Background refreshes do not show a loading state or clear action errors; synchronization failures are tracked separately.
+- `src/hooks/useAutoRefresh.ts`: schedules the next poll after the current request completes. It cancels background requests when the page is hidden or operations pause polling, and synchronizes immediately when the page becomes visible again.
+- `src/config/clipboard.ts`: clipboard refresh interval, defaulting to 3000 ms.
+- `src/hooks/usePageTitle.ts`: sets the page title and restores it when leaving.
+- `src/config/upload.ts`: chunk size and concurrency settings.
+- `src/types/upload.ts`: internal task types and read-only display types.
+- `src/utils/upload.ts`: byte progress and display snapshots.
 
-暂停会等待当前分块请求结束，并阻止后续分块与文件启动。队列由应用级 UploadQueueProvider 管理，站内切换页面后仍会继续上传，返回上传页可查看进度和控制任务。存在未完成任务（包括待上传、失败和暂停的任务）时，刷新、关闭或离开站点会触发浏览器离开提醒；全部成功或清空队列后不再提醒。浏览器控制提醒文案与是否展示，通常要求用户已与页面交互。确认离开后不会保留队列，刷新后的断点恢复尚未实现。取消初始化中的任务后，会在初始化响应返回时清理会话；服务端仍需为网络断开等情况提供会话过期清理。
+Pausing lets active chunk requests finish and prevents subsequent chunks and files from starting. The queue is managed by the application-level `UploadQueueProvider`, so uploads continue during in-app navigation. Return to the upload page to view progress and control tasks. When tasks are unfinished, including pending, failed, or paused tasks, refreshing, closing, or leaving the site triggers the browser's leave warning. The warning is no longer requested once all tasks succeed or the queue is cleared. The browser controls the message and whether to show it, usually requiring prior user interaction. Confirming navigation away discards the queue; resuming after refresh is not implemented. If a task is cancelled during initialization, its session is cleaned up when the initialization response arrives. The server still needs session expiration to handle cases such as network disconnection.
 
-`/files` 文件列表页提供存储空间概览、文件名搜索、名称/大小/修改时间排序、每页 20 条分页、下载及按钮内二次确认删除。第一次点击显示“确认删除？”，3 秒内再次点击执行删除，超时自动恢复。列表从 `/api/files` 获取，下载和删除复用已有后端接口，删除后刷新存储信息。
+The `/files` page provides a storage overview, filename search, sorting by name, size, or modification time, pagination with 20 entries per page, downloads, and deletion confirmation within the button. The first click changes the label to the Chinese equivalent of "Confirm deletion?"; clicking again within 3 seconds deletes the file, while waiting longer resets the button. The list is fetched from `/api/files`. Downloads and deletion use the existing backend endpoints, and storage information is refreshed after deletion.
 
-`/clipboard` 复用 `GET /api/clipboard` 自动获取最新记录，请求结束后间隔 3 秒继续轮询。发布、删除、删除确认、复制及手动复制面板打开期间暂停；选中文本时跳过轮询。切回可见页面立即获取，隐藏或卸载时取消后台请求。轮询不会覆盖草稿、重置删除确认、触发加载闪烁或清掉操作错误；网络失败保留当前列表并自动重试。手动刷新可优先于后台请求执行。
+The `/clipboard` page automatically fetches the latest entries through `GET /api/clipboard`, waiting 3 seconds after each request completes before polling again. Polling pauses during publishing, deletion, deletion confirmation, copying, and while the manual copy panel is open. Polls are skipped when text is selected. Returning to a visible page triggers an immediate fetch; hiding or unmounting the page cancels background requests. Polling does not overwrite drafts, reset deletion confirmation, cause loading flashes, or clear action errors. Network failures preserve the current list and are retried automatically. Manual refreshes can take priority over background requests.
 
-上传页、文件列表和剪贴板统一复用 Button、StatusMessage 与 Lucide 图标；公共交互样式位于 `src/styles/interactions.css`，包含主操作、次操作、危险操作和加载状态。文件列表与剪贴板的公共页面容器样式位于 `src/styles/global.css`。删除提交期间禁用重复操作。
+The upload page, file list, and clipboard share `Button`, `StatusMessage`, and Lucide icons. Shared interaction styles are in `src/styles/interactions.css`, covering primary, secondary, destructive, and loading states. Shared page container styles for the file list and clipboard are in `src/styles/global.css`. Repeated operations are disabled while deletion is being submitted.

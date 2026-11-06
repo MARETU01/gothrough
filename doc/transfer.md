@@ -1,39 +1,41 @@
-# 传输实现
+# Transfer Implementation
 
-[返回项目首页](../README.md)
+English | [简体中文](transfer.zh-CN.md)
 
-## 接口路径
+[Back to the project README](../README.md)
 
-后端接口统一使用 `/api` 前缀；`/upload` 和 `/files` 是前端页面路径。
+## API Routes
 
-| 方法 | 路径 | 用途 |
+All backend endpoints use the `/api` prefix. `/upload` and `/files` are frontend page routes.
+
+| Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/upload/init` | 初始化上传 |
-| POST | `/api/upload/chunk` | 上传分块 |
-| GET | `/api/upload/status/:session_id` | 查询上传进度 |
-| POST | `/api/upload/complete` | 完成上传 |
-| POST | `/api/upload/cancel` | 取消上传 |
-| GET | `/api/files` | 获取文件列表 |
-| GET | `/api/files/*filename` | 下载文件，支持 Range 请求 |
-| DELETE | `/api/files/*filename` | 删除文件 |
-| GET | `/api/disk-info` | 获取磁盘信息 |
+| POST | `/api/upload/init` | Initialize an upload |
+| POST | `/api/upload/chunk` | Upload a chunk |
+| GET | `/api/upload/status/:session_id` | Query upload progress |
+| POST | `/api/upload/complete` | Complete an upload |
+| POST | `/api/upload/cancel` | Cancel an upload |
+| GET | `/api/files` | List files |
+| GET | `/api/files/*filename` | Download a file, with Range request support |
+| DELETE | `/api/files/*filename` | Delete a file |
+| GET | `/api/disk-info` | Get disk information |
 
-文件名作为 URL 路径参数时需要编码。不再提供旧的 `/api/uploads/*filename`、`/api/delete/*filename` 或不带 `/api` 前缀的接口。
+Encode filenames when using them as URL path parameters. The legacy `/api/uploads/*filename`, `/api/delete/*filename`, and endpoints without the `/api` prefix are no longer available.
 
-## 分块与资源管理
+## Chunking and Resource Management
 
-文件夹拖拽通过浏览器目录条目 API 遍历所有批次的子条目，只读取文件元数据，内容仍按分块发送。初始化可携带 `relative_path`（例如 `资料/照片/图片.jpg`），保留拖入文件夹的顶层目录。后端拒绝绝对路径、目录穿越和超过 32 层或 4096 字节的路径，并逐段清洗名称；每段按 UTF-8 字节限制为 200 字节，不拆开 Unicode 字符，扩展名及冲突后缀计入总长度。
+Folder drag-and-drop uses the browser's directory entry API to traverse all batches of child entries. Only file metadata is read during traversal; contents are still sent in chunks. Initialization may include `relative_path`, such as `documents/photos/image.jpg`, preserving the top-level dropped folder. The backend rejects absolute paths, directory traversal, paths deeper than 32 components, and paths longer than 4096 bytes. Each component is sanitized and limited to 200 UTF-8 bytes without splitting Unicode characters; extensions and conflict suffixes count toward this limit.
 
-初始化时创建并检查父目录。父路径已是文件、被其他上传会话预留为文件，或包含符号链接时，立即拒绝上传；路径冲突返回 409，无效路径返回 400。同名文件或同名目录占用最终文件位置时，仅修改新文件的名称，不覆盖已有内容。完成时再次校验父目录，处理初始化后发生的本地文件变更。取消会话可能留下空父目录，空目录不会作为独立上传内容保存。
+Parent directories are created and checked during initialization. Uploads are rejected immediately if a parent path is already a file, is reserved as a file by another upload session, or contains a symbolic link. Path conflicts return 409; invalid paths return 400. If a file or directory already occupies the final file path, only the new filename is changed, preserving existing content. Parent directories are checked again at completion to account for local filesystem changes after initialization. Cancelling a session may leave empty parent directories; empty directories are not saved as separate uploaded items.
 
-文件列表递归返回相对于上传目录的路径，下载和删除接口使用编码后的相对路径，磁盘统计包含子目录内的文件。目录读取失败会在上传页面提示，不会静默漏传文件。浏览器未提供目录条目 API 时仍支持普通文件拖拽。
+File listings recursively return paths relative to the upload directory. Download and delete endpoints use encoded relative paths, and disk statistics include files in subdirectories. Directory traversal failures are shown on the upload page rather than silently omitting files. Ordinary file drag-and-drop remains available when the browser does not provide the directory entry API.
 
-上传使用 8MiB 分块，前端每个文件 3 路并发、同时处理 2 个文件。初始化返回 `upload_transport: "raw"`，新版前端将 Blob 作为 `application/octet-stream` 请求体直接发送；未声明该能力的旧服务端仍使用 multipart。旧 multipart 客户端也可以继续请求新版后端，需采用初始化返回的分块大小。
+Uploads use 8 MiB chunks, with 3 concurrent chunk requests per file and 2 files processed at a time. Initialization returns `upload_transport: "raw"`. New frontend clients send the Blob directly as an `application/octet-stream` request body; they use multipart with older servers that do not advertise this capability. Older multipart clients can also use the new backend, provided they use the chunk size returned at initialization.
 
-后端通过 `io.CopyBuffer` 和偏移写入，把每块直接写入同一个临时文件，复用 256KiB 缓冲，不将整块读入内存，也不再读出全部分块合并。完成前校验分块数量和文件大小、执行 Sync，再用不覆盖现有文件的硬链接发布。临时目录与上传目录必须位于同一个支持硬链接的文件系统，例如同一 NTFS/ext4 分区。服务启动及会话初始化会通过短暂创建并删除检查文件，验证目录写入和硬链接能力。下载继续使用标准库文件服务，支持 Range 请求。
+The backend uses `io.CopyBuffer` and offset writes to stream each chunk directly into the same temporary file, reusing 256 KiB buffers. It does not load whole chunks into memory or reread all chunks for merging. Before completion, it checks the chunk count and file size, calls Sync, and publishes the file through a hard link without overwriting an existing file. Temporary and upload directories must be on the same filesystem with hard-link support, such as the same NTFS or ext4 partition. Startup and session initialization verify write access and hard-link support by briefly creating and removing probe files. Downloads continue to use standard-library file serving with Range request support.
 
-初始化会比较文件大小与临时目录的可用磁盘空间，明显不足时返回 507；检查不预留容量，并发上传或其他程序仍可能耗尽空间。写入和发布时的磁盘空间/配额不足、权限不足、只读文件系统分别返回 507、403、503，并保留操作阶段和原因；硬链接不受支持时明确提示同卷及文件系统要求。
+Initialization compares the file size with free space in the temporary directory and returns 507 if space is insufficient. This check does not reserve capacity, so concurrent uploads or other programs may still exhaust disk space. During writing and publication, insufficient disk space or quota returns 507, permission failures return 403, and read-only filesystems return 503. The operation stage and cause remain available for diagnostics. Unsupported hard links produce a specific message about the same-filesystem and hard-link requirements.
 
-会话独立控制并发，重复块不会覆盖已确认数据；最多同时接收 16 个块、保留 1024 个活跃会话，超限返回 429。单文件上限 1TiB。每 5 分钟清理闲置超过 24 小时的会话，正在写入的会话不会被清理。会话保存在内存，服务重启仍会清空临时上传，不提供重启后的续传。
+Sessions coordinate concurrent writes independently, and duplicate chunks do not overwrite acknowledged data. The server accepts at most 16 chunks concurrently and retains up to 1024 active sessions; exceeding these limits returns 429. The per-file limit is 1 TiB. Every 5 minutes, sessions idle for more than 24 hours are cleaned up; sessions with active writes are skipped. Sessions are stored in memory, and restarting the server clears temporary uploads. Resuming uploads after a restart is not supported.
 
-路由使用统一的结构化访问日志和 panic 恢复中间件，每个请求返回 `X-Request-ID`。成功的分块和轮询请求默认不逐条记录，失败请求保留错误原因；上传业务事件关联会话 ID。级别、格式和可选滚动文件见[日志说明](logging.md)。服务器设置请求头、请求体和空闲连接超时；退出时最多等待 30 秒让已有请求结束，再关闭连接并清理临时会话。
+Routes share structured access logging and panic recovery middleware. Each request returns `X-Request-ID`. Successful chunk and polling requests are not logged individually by default; failed requests retain their error causes, and upload business events include session IDs. See the [logging guide](logging.md) for levels, formats, and optional rotating files. The server sets request header, request body, and idle connection timeouts. At shutdown, it waits up to 30 seconds for existing requests to finish, then closes connections and cleans up temporary sessions.

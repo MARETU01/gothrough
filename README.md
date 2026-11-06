@@ -1,54 +1,56 @@
 # GoThrough
 
-基于 Go + Gin 和 React + TypeScript 的文件上传工具，支持将前端嵌入 Go 可执行文件部署。
+English | [简体中文](README.zh-CN.md)
 
-## 功能
+A file upload tool built with Go + Gin and React + TypeScript. The frontend can be embedded in the Go executable for deployment.
 
-- 大文件分块并发上传，支持文件和文件夹拖拽、多文件队列、暂停、恢复、取消和失败重试。
-- 拖入文件夹时保留顶层目录和子目录结构；文件列表按相对路径展示，支持逐文件下载和删除。
-- 展示上传速度、进度、预计剩余时间及不含暂停时间的耗时。
-- 站内切换页面时继续上传，存在未完成任务时提供浏览器离开提醒。
-- 文件列表支持搜索、排序、分页、下载、二次确认删除和磁盘空间展示。
-- 共享文本剪贴板：跨设备发布、查看、复制和删除文本，保留换行；每条最多 64 KiB，最多保留最近 100 条，重启后仍可查看。
-- 图片剪贴板：粘贴截图或选择 PNG/JPEG，预览后发布，支持跨设备查看、下载和直接复制图片；图片统一保存为 PNG。
-- 支持 HTTP / HTTPS，监听地址、端口和证书路径可通过 YAML 配置及环境变量设置。
-- 统一文本 / JSON 日志、请求 ID 与可选滚动日志文件，支持控制访问日志和高频请求日志。
-- 支持前后端分离开发，也可打包为包含前端资源的单个可执行文件。
+## Features
 
-## 环境要求
+- Concurrent chunked uploads for large files, with drag-and-drop support for files and folders, a multi-file queue, pause, resume, cancel, and retry.
+- Folder uploads preserve the top-level folder and subdirectory structure. The file list shows relative paths and supports individual downloads and deletion.
+- Upload speed, progress, estimated time remaining, and elapsed time excluding pauses.
+- Uploads continue while navigating within the app. The browser warns before leaving when tasks are unfinished.
+- File search, sorting, pagination, downloads, deletion confirmation, and disk space information.
+- Shared text clipboard: publish, view, copy, and delete text across devices while preserving line breaks. Each entry supports up to 64 KiB; the latest 100 entries are retained across restarts.
+- Image clipboard: paste a screenshot or select a PNG/JPEG, preview it, and publish it for viewing, downloading, or copying across devices. Images are stored as PNG.
+- HTTP and HTTPS support, with the listening address, port, and certificate paths configurable through YAML and environment variables.
+- Text or JSON logs, request IDs, optional rotating log files, and controls for access logs and frequent requests.
+- Separate frontend and backend development, or deployment as a single executable with embedded frontend assets.
 
-- Go：版本要求见 [go.mod](go.mod)。
-- Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm：用于前端开发和发布构建，部署机器无需安装。仓库根目录的 `.nvmrc` 指定本地默认版本 26.13.0，可执行 `nvm use 26` 切换到已安装的 26.x 版本。
-- GNU Make 和 POSIX shell：执行 Makefile；Windows 使用 Git Bash。
+## Requirements
 
-以下命令均在项目根目录执行。Windows 若提供的命令名为 `mingw32-make`，将示例中的 `make` 替换为该命令。
+- Go: see [go.mod](go.mod) for the required version.
+- Node.js 26 LTS (26.13.0 or a newer 26.x version) and npm: required for frontend development and release builds, but not on the deployment machine. The root `.nvmrc` specifies 26.13.0 as the local default; run `nvm use 26` to select an installed 26.x version.
+- GNU Make and a POSIX shell: required for the Makefile. On Windows, use Git Bash.
 
-## 快速开始
+Run the following commands from the project root. If your Windows installation provides `mingw32-make`, use it in place of `make`.
 
-### 本地开发
+## Quick Start
 
-启动后端：
+### Local Development
+
+Start the backend:
 
 ```sh
 go run ./cmd
 ```
 
-另开终端启动前端：
+Start the frontend in another terminal:
 
 ```sh
 make install
 npm --prefix frontend run dev
 ```
 
-打开 Vite 输出的开发地址。后端默认监听 `http://localhost:8080`，前端开发服务器将 `/api` 代理到后端。
+Open the development URL printed by Vite. The backend listens on `http://localhost:8080` by default, and the frontend development server proxies `/api` requests to it.
 
-### 打包运行
+### Build and Run
 
 ```sh
 make build
 ```
 
-启动生成的程序：
+Start the generated executable:
 
 ```sh
 # Windows / Git Bash
@@ -58,83 +60,85 @@ make build
 ./release/gothrough
 ```
 
-默认访问 `http://localhost:8080`。前端已嵌入程序，部署时无需携带前端源码、`dist` 或 `node_modules`。
+Open `http://localhost:8080` by default. The frontend is embedded in the executable, so deployment does not require the frontend source, `dist`, or `node_modules`.
 
-运行配置保存在外部 `config/config.yaml`。打包会将默认配置复制到 `release/config/config.yaml`，已有文件不会被覆盖。修改监听地址、端口、TLS 或环境变量，参见[配置说明](doc/configuration.md)。
+Runtime configuration lives in an external `config/config.yaml` file. The build copies the default configuration to `release/config/config.yaml` without overwriting an existing file. See the [configuration guide](doc/configuration.md) for the listening address, port, TLS, and environment variables.
 
-## 常用命令
+## Common Commands
 
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `make` / `make build` | 按需安装依赖，构建并嵌入前端，输出可执行文件 |
-| `make install` | 下载 Go 模块并按需安装前端依赖 |
-| `make test` | 构建嵌入资源，执行普通及嵌入版后端测试和 vet |
-| `make help` | 查看构建命令 |
+| `make` / `make build` | Install dependencies as needed, build and embed the frontend, and produce the executable |
+| `make install` | Download Go modules and install frontend dependencies as needed |
+| `make test` | Build embedded assets and run backend tests and vet with and without embedded assets |
+| `make help` | Show available build commands |
 
-构建缓存、自定义输出路径和跨平台编译详见[构建与部署](doc/build.md)。
+See [build and deployment](doc/build.md) for build caching, custom output paths, and cross-compilation.
 
-## 项目结构
+## Project Structure
 
 ```text
-cmd/                    Go 启动入口
-config/                 外部配置文件
-doc/                    项目文档
-frontend/               React 前端
-internal/config/        配置加载与校验
-internal/handler/       HTTP 接口处理
-internal/model/         数据模型
-internal/router/        API 和前端资源路由
-internal/service/       上传会话与文件服务
-internal/utils/         文件名、路径和磁盘工具
-internal/webassets/     前端资源嵌入包
-Makefile                开发检查和发布构建入口
+cmd/                    Go entry point
+config/                 External configuration files
+doc/                    Project documentation
+frontend/               React frontend
+internal/config/        Configuration loading and validation
+internal/handler/       HTTP handlers
+internal/model/         Data models
+internal/router/        API and frontend asset routing
+internal/service/       Upload sessions and file services
+internal/utils/         Filename, path, and disk utilities
+internal/webassets/     Embedded frontend assets
+Makefile                Development checks and release builds
 ```
 
-`release/`、前端构建产物、嵌入资源副本及默认运行时数据不纳入 Git。数据根目录由 `storage.data_dir` 或 `GOTHROUGH_DATA_DIR` 指定；默认配置将开发数据放在项目根目录，将发布版数据放在可执行文件旁。自定义目录的解析规则见[配置说明](doc/configuration.md)。
+`release/`, frontend build output, copied embedded assets, and default runtime data are excluded from Git. Set the data root through `storage.data_dir` or `GOTHROUGH_DATA_DIR`. With the default configuration, development data lives in the project root and release data lives next to the executable. See the [configuration guide](doc/configuration.md) for custom path resolution rules.
 
-## 共享剪贴板
+## Shared Clipboard
 
-图片可通过文件选择器添加，或在剪贴板页面按 Ctrl+V / ⌘V 粘贴截图；文本和图片共用「发布」按钮，选中图片时发布图片并保留文本草稿，移除图片后可发布文本。点击后才上传，不会自动读取或发布系统剪贴板。发布失败会保留草稿。历史图片可打开、下载或点击「复制」。直接复制图片需要支持 `ClipboardItem` 的浏览器及 HTTPS / localhost，并允许剪贴板操作；不可用时显示手动处理入口。
+Add an image through the file picker or paste a screenshot with Ctrl+V / ⌘V on the clipboard page. Text and images share the publish button: when an image is selected, publishing sends the image and preserves the text draft; remove the image to publish text. Uploads happen only when you click publish. The app does not automatically read or publish the system clipboard. Failed publishing preserves the draft. Published images can be opened, downloaded, or copied. Direct image copying requires a browser with `ClipboardItem` support, HTTPS or localhost, and clipboard permission. A manual fallback is provided when direct copying is unavailable.
 
-服务端只接受可完整解码的 PNG/JPEG，统一转换成 PNG（移除原文件元数据，不保留 JPEG EXIF 方向等元数据）。默认单张输入和转换后的 PNG 都不得超过 10 MiB，最多 2000 万像素，保留图片合计最多 200 MiB；PNG 转换后超限也会拒绝。容量不足时提示删除旧图片。文本和图片合计保留最近 100 条，删除、清空及自动淘汰都会清理对应图片文件。
+The server accepts only PNG/JPEG images that can be fully decoded and converts them to PNG, removing source metadata, including JPEG EXIF orientation. By default, both the input and the converted PNG must be no larger than 10 MiB, images are limited to 20 million pixels, and retained images may total up to 200 MiB. Images are also rejected if conversion makes the PNG exceed the size limit. When the quota is full, delete older images before publishing more. The latest 100 entries are retained across text and images combined; deletion, clearing, and automatic eviction also remove the corresponding image files.
 
-图片文件位于数据目录的 `clipboard/images/`，`history.json` 仅保存文本和图片元数据，列表条件刷新不传输图片二进制。旧文本历史无需手动迁移。启动时会检查图片是否存在且与元数据匹配，缺失或明显损坏时启动报错并保留历史；有效历史加载成功后会清理无引用的程序图片文件。备份和恢复时请同时处理整个 `clipboard/` 目录。关闭图片功能后停止接收新图片，已有图片仍可查看、复制和删除。
+Images are stored in `clipboard/images/` under the data root. `history.json` stores only text and image metadata; conditional list refreshes do not transfer image binaries. Existing text history needs no manual migration. At startup, the server checks that images exist and match their metadata. Missing or visibly damaged images cause startup to fail while preserving the history. After valid history loads, unreferenced application-owned image files are removed. Back up and restore the entire `clipboard/` directory together. Disabling image publishing stops new image uploads; existing images can still be viewed, copied, and deleted.
 
-图片接口：`GET /api/clipboard/image-config` 获取限制，`POST /api/clipboard/image` 使用 multipart 字段 `image` 发布一张图片；`GET /api/clipboard/:id/image` 获取 PNG，加 `?download=1` 下载。图片响应设置 `Cache-Control: no-store`。
+Image endpoints: `GET /api/clipboard/image-config` returns the limits; `POST /api/clipboard/image` publishes one image using the multipart field `image`; `GET /api/clipboard/:id/image` serves the PNG, with `?download=1` to download it. Image responses use `Cache-Control: no-store`.
 
-打开导航中的「剪贴板」（`/clipboard`），输入或粘贴文本后点击「发布」。另一台设备访问同一服务，即可查看、复制或删除记录。页面可见时自动获取最新内容，每次请求结束后等待 3 秒再获取，也可手动点击「刷新」。可通过「全部删除」清空所有共享记录；单条删除和全部删除均需要二次确认，清空不会影响未发布的草稿。
+Open the clipboard page (`/clipboard`) from the navigation, enter or paste text, and click publish. Another device accessing the same server can view, copy, or delete entries. While the page is visible, it fetches updates automatically, waiting 3 seconds after each request completes. You can also refresh manually. The delete-all action clears all shared entries. Both individual deletion and clearing require confirmation; clearing does not affect unpublished drafts.
 
-发布、删除、删除确认和复制操作期间暂停自动更新；手动复制面板关闭后恢复。页面隐藏时暂停，切回后立即更新；离开页面会清理定时器并取消请求。自动更新失败时保留当前内容并稍后重试，不清除操作失败提示，也不会修改输入框中的草稿或自动写入系统剪贴板。
+Automatic updates pause during publishing, deletion, deletion confirmation, and copying, and resume after the manual copy panel closes. Updates also pause while the page is hidden and run immediately when it becomes visible again. Leaving the page clears timers and cancels requests. If an automatic update fails, the current content remains visible and the app retries later. Updates do not clear action error messages, modify drafts, or automatically write to the system clipboard.
 
-内容按发布时间倒序排列，单条限制为 65,536 个 UTF-8 字节，超出 100 条时自动淘汰最旧记录。只保存纯文本，HTML 内容按文字显示。文本保存在数据根目录下的 `clipboard/history.json`；与上传文件分开存储，不会出现在文件列表中。Docker 中位于现有数据卷的 `/data/clipboard`。
+Entries appear newest first. Each text entry is limited to 65,536 UTF-8 bytes, and entries beyond the latest 100 are automatically evicted. Only plain text is stored; HTML is displayed as text. Text history is saved in `clipboard/history.json` under the data root, separately from uploaded files, and does not appear in the file list. In Docker, it lives at `/data/clipboard` in the existing data volume.
 
-浏览器的一键复制需要剪贴板权限和安全上下文（通常为 HTTPS 或 localhost）。使用局域网 HTTP 地址或权限被拒绝时，页面会展示已选中的文本，供快捷键或长按手动复制。输入框支持直接粘贴。
+One-click text copying requires clipboard permission and a secure context, usually HTTPS or localhost. When using a LAN HTTP address or when permission is denied, the page shows selected text for manual copying with keyboard shortcuts or a long press. The input also supports pasting directly.
 
-剪贴板沿用共享访问模式，所有能访问服务的人均可查看、发布和删除记录。历史文件损坏时启动会报错并保留原文件，不会自动覆盖。一个数据目录只供一个服务进程使用。
+The clipboard uses shared access: anyone who can reach the server can view, publish, and delete entries. If the history file is corrupted, startup fails and preserves the original file rather than overwriting it. Each data directory must be used by only one server process.
 
-接口为 `GET /api/clipboard`（返回 `entries` 数组）、`POST /api/clipboard`（JSON 请求体 `{"text":"共享内容"}`，返回创建的记录）、`DELETE /api/clipboard/:id`（删除单条）和 `DELETE /api/clipboard`（清空全部）。每条记录包含 `id`、`text`、`created_at`；剪贴板响应设置 `Cache-Control: no-store`。
+Text endpoints are `GET /api/clipboard` (returns an `entries` array), `POST /api/clipboard` (accepts a JSON body such as `{"text":"shared content"}` and returns the created entry), `DELETE /api/clipboard/:id` (deletes one entry), and `DELETE /api/clipboard` (clears all entries). Each text entry includes `id`, `text`, and `created_at`. Clipboard responses use `Cache-Control: no-store`.
 
-列表响应附带内容版本 `ETag`，后台自动更新通过 `If-None-Match` 校验版本：内容未变时返回 `304`，无列表正文，页面保留现有内容；内容变化时返回完整列表和新版本。版本仅随当前页面数据保存在内存中，不增加本地持久化缓存。首次加载、手动刷新以及发布、删除、清空成功后的同步均完整获取列表。轮询间隔不变，条件请求用于减少重复传输和解析，并非实时推送。
+List responses include an `ETag` content version. Automatic updates send `If-None-Match`: unchanged content returns `304` without a list body, preserving the current view; changed content returns the full list and a new version. The version is kept only in memory alongside the current page data, without persistent local caching. Initial loading, manual refreshes, and synchronization after publishing, deletion, or clearing fetch the full list. The polling interval is unchanged; conditional requests reduce repeated transfer and parsing rather than providing real-time push updates.
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+All guides are available in English, with links to their Chinese versions at the top of each page.
+
+| Guide | Contents |
 | --- | --- |
-| [配置说明](doc/configuration.md) | YAML 配置、环境变量、配置优先级、证书路径和开发代理 |
-| [日志说明](doc/logging.md) | 日志级别、请求关联、访问日志过滤、滚动文件和 Docker 日志 |
-| [构建与部署](doc/build.md) | Makefile、依赖缓存、前端嵌入、发布及跨平台构建 |
-| [传输实现](doc/transfer.md) | 分块协议、并发控制、临时文件、校验及资源限制 |
-| [持续集成](doc/ci.md) | GitHub Actions 检查范围、race 检测及本地复现 |
-| [Docker 部署](doc/docker.md) | 镜像构建、Compose、数据持久化及 HTTPS |
-| [前端说明](frontend/README.md) | 前端开发、代码组织及测试 |
+| [Configuration](doc/configuration.md) | YAML, environment variables, configuration precedence, certificate paths, and development proxy |
+| [Logging](doc/logging.md) | Log levels, request correlation, access log filtering, rotating files, and Docker logs |
+| [Build and Deployment](doc/build.md) | Makefile, dependency caching, frontend embedding, releases, and cross-compilation |
+| [Transfer Implementation](doc/transfer.md) | Chunk protocol, concurrency, temporary files, validation, and resource limits |
+| [Continuous Integration](doc/ci.md) | GitHub Actions checks, race detection, and running checks locally |
+| [Docker Deployment](doc/docker.md) | Image builds, Compose, persistent data, and HTTPS |
+| [Frontend](frontend/README.md) | Frontend development, code organization, and testing |
 
-## 使用限制
+## Limitations
 
-- 临时目录与上传目录必须位于同一个支持硬链接的文件系统。
-- 当前不支持浏览器刷新或服务重启后的断点续传；服务启动会清理临时上传。
-- 文件夹拖拽会上传其中的文件，空文件夹不会保存；同路径文件冲突时自动改名，不会覆盖已有文件。
-- 目前未提供用户鉴权和文件归属隔离，也不支持文件夹打包下载。
+- Temporary uploads and published files must be on the same filesystem, with hard-link support.
+- Uploads cannot resume after a browser refresh or server restart. Temporary uploads are cleaned up at server startup.
+- Folder uploads transfer files only; empty folders are not preserved. Conflicting file paths are renamed automatically without overwriting existing files.
+- User authentication, per-user file isolation, and folder downloads as archives are not currently supported.
 
-## 许可证
+## License
 
 [MIT](LICENSE)
