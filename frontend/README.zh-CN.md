@@ -4,22 +4,18 @@
 
 [返回项目首页](../README.zh-CN.md)
 
-React + TypeScript + Vite 文件上传界面。支持拖拽和多文件选择、分块并发、当前页面内暂停/恢复、取消、单文件重试，以及进度和速度展示。
+React + TypeScript + Vite 前端，包含上传、文件列表和共享剪贴板页面。
 
-## 本地开发
+## 本地开发与检查
 
-使用 Node.js 26 LTS（26.13.0 或更高的 26.x 版本）及其配套 npm。在仓库根目录执行 `nvm use 26` 切换版本；从旧版 Node.js 升级后，先在根目录执行 `make -B install` 强制重装依赖。
-
-在 `frontend` 目录执行：
+环境要求见[构建说明](../doc/build.zh-CN.md#环境要求)。先在项目根目录运行 `go run ./cmd`，再在 `frontend` 目录执行：
 
 ```sh
 npm ci
 npm run dev
 ```
 
-开发服务器将 `/api` 请求代理到 `http://127.0.0.1:8080`。先在仓库根目录执行 `go run ./cmd` 启动 Go 上传服务。生产部署需要自行配置 `/api` 反向代理，以及前端路由回退到 `index.html`。
-
-## 检查
+Vite 默认将 `/api` 代理到 `http://127.0.0.1:8080`；修改目标地址见[开发代理配置](../doc/configuration.zh-CN.md#前端开发代理)。默认发布方式由 Go 嵌入前端，无需额外配置代理；前后端分开部署时，需配置 `/api` 反向代理和页面路由回退。
 
 ```sh
 npm test
@@ -27,28 +23,38 @@ npm run build
 npm run lint
 ```
 
-测试使用 Vitest、jsdom 和 React Testing Library，覆盖取消、暂停/恢复、队列移除、失败重试、并发退出、分块乱序、速度采样、展示快照和空文件进度。
+测试使用 Vitest、jsdom 和 React Testing Library。完整项目检查及 CI 范围见[构建与检查](../doc/build.zh-CN.md#检查与持续集成)。
 
-## 代码组织
+## 代码入口
 
-上传页显示单文件耗时和本轮队列总耗时，每 500ms 更新，完成后保留最终结果。单文件从实际初始化开始计时，不含排队等待；队列从本轮启动开始计时，包含并发任务的整体经过时间，不累加各文件耗时。计时包含准备、传输和校验保存，从点击暂停到恢复的时间全部扣除，包括暂停期间仍在结束的请求。取消时冻结，重新开始或重试重新计时，清空队列时清除。站内切换页面不影响计时。
+| 路径 | 职责 |
+| --- | --- |
+| `src/pages/`、`src/router.tsx` | 页面及路由 |
+| `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，支持站内切换页面后继续上传 |
+| `src/hooks/useUploadQueue.ts` | 上传调度、并发与生命周期 |
+| `src/hooks/useRemoteData.ts`、`useAutoRefresh.ts` | 数据加载、后台刷新、过期响应处理与请求取消 |
+| `src/services/` | API 调用、错误解析与取消判断 |
+| `src/config/` | 上传参数及剪贴板刷新间隔 |
+| `src/i18n/` | 翻译资源、语言检测与消息描述 |
+| `src/components/`、`src/styles/` | 公共组件与样式 |
 
-- `src/pages/Upload`：上传页面与独立文件行。
-- `src/hooks/useUploadQueue.ts`：队列调度、并发和生命周期。
-- `src/services/upload.ts`：初始化、分块、完成和取消接口。
-- `src/services/errors.ts`：各业务共用的 HTTP 错误解析和取消判断。
-- `src/hooks/useRemoteData.ts`：文件列表与剪贴板共用的加载、刷新和请求取消逻辑，忽略过期响应，卸载时取消请求。后台刷新不显示加载状态，也不清除操作错误；同步失败单独记录。
-- `src/hooks/useAutoRefresh.ts`：请求完成后再安排下一次轮询，页面隐藏或操作暂停时取消后台请求，切回可见时立即同步。
-- `src/config/clipboard.ts`：剪贴板自动刷新间隔，默认 3000ms。
-- `src/hooks/usePageTitle.ts`：设置页面标题并在离开时恢复。
-- `src/config/upload.ts`：分块大小和并发配置。
-- `src/types/upload.ts`：内部任务类型和只读展示类型。
-- `src/utils/upload.ts`：字节进度和展示快照。
+## 国际化
 
-暂停会等待当前分块请求结束，并阻止后续分块与文件启动。队列由应用级 UploadQueueProvider 管理，站内切换页面后仍会继续上传，返回上传页可查看进度和控制任务。存在未完成任务（包括待上传、失败和暂停的任务）时，刷新、关闭或离开站点会触发浏览器离开提醒；全部成功或清空队列后不再提醒。浏览器控制提醒文案与是否展示，通常要求用户已与页面交互。确认离开后不会保留队列，刷新后的断点恢复尚未实现。取消初始化中的任务后，会在初始化响应返回时清理会话；服务端仍需为网络断开等情况提供会话过期清理。
+使用 `i18next` 和 `react-i18next`，支持简体中文和英文。翻译约定如下。
 
-`/files` 文件列表页提供存储空间概览、文件名搜索、名称/大小/修改时间排序、每页 20 条分页、下载及按钮内二次确认删除。第一次点击显示“确认删除？”，3 秒内再次点击执行删除，超时自动恢复。列表从 `/api/files` 获取，下载和删除复用已有后端接口，删除后刷新存储信息。
+- `src/i18n/index.ts`：初始化、语言检测、存储及 HTML `lang` 同步。
+- `src/i18n/locales/zh-CN.json`、`en.json`：随应用打包的翻译资源。
+- `src/i18n/messages.ts`：保存消息描述，渲染时翻译。
 
-`/clipboard` 复用 `GET /api/clipboard` 自动获取最新记录，请求结束后间隔 3 秒继续轮询。发布、删除、删除确认、复制及手动复制面板打开期间暂停；选中文本时跳过轮询。切回可见页面立即获取，隐藏或卸载时取消后台请求。轮询不会覆盖草稿、重置删除确认、触发加载闪烁或清掉操作错误；网络失败保留当前列表并自动重试。手动刷新可优先于后台请求执行。
+组件使用 `useTranslation()` 获取 `t`。静态文案以中文原文作 key，例如 `t('上传文件')`；含参数的整句使用命名 key，例如 `t('files.deleted', { name })`，字典通过 `{{name}}` 插值。英文数量使用 `_one`、`_other` 复数形式。
 
-上传页、文件列表和剪贴板统一复用 Button、StatusMessage 与 Lucide 图标；公共交互样式位于 `src/styles/interactions.css`，包含主操作、次操作、危险操作和加载状态。文件列表与剪贴板的公共页面容器样式位于 `src/styles/global.css`。删除提交期间禁用重复操作。
+不要在模块初始化时生成译文。上传状态、接口错误和成功提示通过 `message(key, values)` 保存描述，渲染时调用 `translateMessage()`，使已有提示跟随语言切换。
+
+接口错误保留 `error` 并提供稳定的 `code`。`apiErrorDescriptor()` 优先使用 `errors.<code>` 翻译；未知错误码或旧服务端响应回退到原始错误信息。新增错误码时同步补齐两种语言资源。
+
+新增语言时：
+
+1. 添加语言 JSON，保持 key 和插值参数一致。
+2. 在 `src/i18n/index.ts` 中注册资源、支持语言和检测规则。
+3. 在 `src/components/LanguageSwitcher.tsx` 添加以该语言自身名称显示的选项。
+4. 执行上述测试、构建和 lint。常规测试固定使用中文，语言切换另有测试覆盖。

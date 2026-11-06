@@ -34,11 +34,9 @@ The `logging` section controls log levels, text or JSON format, successful-reque
 
 `storage.data_dir` specifies the data root, containing `uploads/`, `temp_uploads/`, and `clipboard/`. Relative paths are resolved from the configuration file's directory. When no configuration file is loaded, relative paths supplied through environment variables are resolved from the working directory. The default configuration uses `".."`, placing development data in the project root and packaged application data in `release/`.
 
-If neither the configuration file nor the environment specifies a data directory, the executable's directory is used. Paths containing names such as `go-build` or `JetBrains` are no longer used to guess the development environment. When using an older configuration with `go run`, add `storage.data_dir: ".."` or set the environment variable. Empty or whitespace-only data directory values are rejected.
+If neither the configuration file nor the environment specifies a data directory, the executable's directory is used. When using `go run`, set a data directory through configuration or the environment to avoid writing beside the temporary executable. Empty or whitespace-only data directory values are rejected.
 
 Override the directory with `GOTHROUGH_DATA_DIR`, for example `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd` in Git Bash. Changing the directory does not migrate existing data. Stop the server and move the data yourself, or keep using the original directory. Each data root must be used by only one server process.
-
-Initialization errors are returned to the entry point, logged, and followed by process exit. Old upload sessions are cleaned up only after directory creation, storage write checks, and hard-link checks succeed. Read or cleanup failures are reported rather than silently ignored.
 
 ## Environment Variables
 
@@ -86,7 +84,22 @@ clipboard:
 
 `max_size_mb` limits both the uploaded image and the normalized PNG (1–50 MiB). `max_pixels` limits width × height (1–40,000,000). `max_total_size_mb` limits the total size of images in history; it must be at least the per-image limit and no more than 10,240 MiB. New images are rejected when the total quota is exceeded; existing history is not automatically cleared. Lowering limits does not delete existing entries. Only one image can be decoded at a time; busy requests return 429. Setting `enabled: false` disables new image publishing without affecting existing images or text features.
 
-The corresponding environment variables are `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED`, `GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB`, `GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS`, and `GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB`. The frontend reads the actual limits from the API. Restart the server for configuration changes to take effect.
+| Variable | Configuration field |
+| --- | --- |
+| `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED` | `clipboard.image.enabled` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB` | `clipboard.image.max_size_mb` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS` | `clipboard.image.max_pixels` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB` | `clipboard.image.max_total_size_mb` |
+
+The frontend reads the actual limits from the API. Restart the server for configuration changes to take effect.
+
+## Clipboard Data
+
+Text and image metadata are stored in `clipboard/history.json` under the data root; images are in `clipboard/images/`. They are separate from uploaded files and do not appear in the file list. Stop the service and handle the entire `clipboard/` directory when backing up, restoring, or migrating. Use each data root with only one server process.
+
+Startup validates history and images. Corrupted history, missing images, or image metadata mismatches cause startup to fail while preserving the history file. Inspect logs and restore a backup. After history loads successfully, unreferenced application-owned image files are removed.
+
+Images are converted to PNG without source metadata, including JPEG EXIF orientation. Deletion, clearing, and automatic eviction beyond the latest 100 entries also remove the corresponding images.
 
 ## Frontend Development Proxy
 

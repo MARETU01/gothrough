@@ -2,140 +2,73 @@
 
 [English](README.md) | 简体中文
 
-基于 Go + Gin 和 React + TypeScript 的文件上传工具，支持将前端嵌入 Go 可执行文件部署。
+基于 Go + Gin 和 React + TypeScript 的文件上传与共享剪贴板工具，可部署为包含前端的单个可执行文件。
 
 ## 功能
 
-- 大文件分块并发上传，支持文件和文件夹拖拽、多文件队列、暂停、恢复、取消和失败重试。
-- 拖入文件夹时保留顶层目录和子目录结构；文件列表按相对路径展示，支持逐文件下载和删除。
-- 展示上传速度、进度、预计剩余时间及不含暂停时间的耗时。
-- 站内切换页面时继续上传，存在未完成任务时提供浏览器离开提醒。
-- 文件列表支持搜索、排序、分页、下载、二次确认删除和磁盘空间展示。
-- 共享文本剪贴板：跨设备发布、查看、复制和删除文本，保留换行；每条最多 64 KiB，最多保留最近 100 条，重启后仍可查看。
-- 图片剪贴板：粘贴截图或选择 PNG/JPEG，预览后发布，支持跨设备查看、下载和直接复制图片；图片统一保存为 PNG。
-- 支持 HTTP / HTTPS，监听地址、端口和证书路径可通过 YAML 配置及环境变量设置。
-- 统一文本 / JSON 日志、请求 ID 与可选滚动日志文件，支持控制访问日志和高频请求日志。
-- 支持前后端分离开发，也可打包为包含前端资源的单个可执行文件。
-
-## 环境要求
-
-- Go：版本要求见 [go.mod](go.mod)。
-- Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm：用于前端开发和发布构建，部署机器无需安装。仓库根目录的 `.nvmrc` 指定本地默认版本 26.13.0，可执行 `nvm use 26` 切换到已安装的 26.x 版本。
-- GNU Make 和 POSIX shell：执行 Makefile；Windows 使用 Git Bash。
-
-以下命令均在项目根目录执行。Windows 若提供的命令名为 `mingw32-make`，将示例中的 `make` 替换为该命令。
+- 大文件分块并发上传，支持文件与文件夹拖拽、多文件队列、暂停、恢复、取消和失败重试。
+- 文件夹上传保留目录结构；文件列表支持搜索、排序、分页、下载、删除和磁盘空间查看。
+- 跨设备共享文本与图片，支持粘贴截图、预览、复制及下载，历史记录在重启后保留。
+- 界面支持简体中文与英文；站内切换页面时上传继续进行。
+- 支持 HTTP / HTTPS、YAML 与环境变量配置，以及文本 / JSON 日志。
 
 ## 快速开始
 
-### 本地开发
+以下命令在项目根目录执行。
 
-启动后端：
+### Docker Compose
 
-```sh
-go run ./cmd
-```
-
-另开终端启动前端：
+安装并启动 Docker 后执行：
 
 ```sh
-make install
-npm --prefix frontend run dev
+docker compose up -d --build
 ```
 
-打开 Vite 输出的开发地址。后端默认监听 `http://localhost:8080`，前端开发服务器将 `/api` 代理到后端。
+访问 `http://localhost:8080`。数据保存在 Docker 卷中，`docker compose down` 停止服务并保留数据；`docker compose down -v` 会删除数据卷。
 
-### 打包运行
+镜像拉取、端口修改、证书和卷权限见 [Docker 部署](doc/docker.zh-CN.md)。
+
+### 从源码构建
+
+准备 Go、Node.js / npm 和 GNU Make，版本要求及 Windows 环境见[构建说明](doc/build.zh-CN.md#环境要求)。
 
 ```sh
 make build
-```
-
-启动生成的程序：
-
-```sh
-# Windows / Git Bash
-./release/gothrough.exe
 
 # Linux / macOS
 ./release/gothrough
+
+# Windows / Git Bash
+./release/gothrough.exe
 ```
 
-默认访问 `http://localhost:8080`。前端已嵌入程序，部署时无需携带前端源码、`dist` 或 `node_modules`。
-
-运行配置保存在外部 `config/config.yaml`。打包会将默认配置复制到 `release/config/config.yaml`，已有文件不会被覆盖。修改监听地址、端口、TLS 或环境变量，参见[配置说明](doc/configuration.zh-CN.md)。
-
-## 常用命令
-
-| 命令 | 用途 |
-| --- | --- |
-| `make` / `make build` | 按需安装依赖，构建并嵌入前端，输出可执行文件 |
-| `make install` | 下载 Go 模块并按需安装前端依赖 |
-| `make test` | 构建嵌入资源，执行普通及嵌入版后端测试和 vet |
-| `make help` | 查看构建命令 |
-
-构建缓存、自定义输出路径和跨平台编译详见[构建与部署](doc/build.zh-CN.md)。
-
-## 项目结构
-
-```text
-cmd/                    Go 启动入口
-config/                 外部配置文件
-doc/                    项目文档
-frontend/               React 前端
-internal/config/        配置加载与校验
-internal/handler/       HTTP 接口处理
-internal/model/         数据模型
-internal/router/        API 和前端资源路由
-internal/service/       上传会话与文件服务
-internal/utils/         文件名、路径和磁盘工具
-internal/webassets/     前端资源嵌入包
-Makefile                开发检查和发布构建入口
-```
-
-`release/`、前端构建产物、嵌入资源副本及默认运行时数据不纳入 Git。数据根目录由 `storage.data_dir` 或 `GOTHROUGH_DATA_DIR` 指定；默认配置将开发数据放在项目根目录，将发布版数据放在可执行文件旁。自定义目录的解析规则见[配置说明](doc/configuration.zh-CN.md)。
+访问 `http://localhost:8080`。前端已包含在程序中，部署机器无需 Node.js。运行配置位于 `release/config/config.yaml`，监听地址、TLS 和数据目录见[配置说明](doc/configuration.zh-CN.md)。
 
 ## 共享剪贴板
 
-图片可通过文件选择器添加，或在剪贴板页面按 Ctrl+V / ⌘V 粘贴截图；文本和图片共用「发布」按钮，选中图片时发布图片并保留文本草稿，移除图片后可发布文本。点击后才上传，不会自动读取或发布系统剪贴板。发布失败会保留草稿。历史图片可打开、下载或点击「复制」。直接复制图片需要支持 `ClipboardItem` 的浏览器及 HTTPS / localhost，并允许剪贴板操作；不可用时显示手动处理入口。
+打开「剪贴板」，输入文本、粘贴截图或选择 PNG/JPEG 后点击「发布」，其他设备访问同一服务即可查看。应用不会自动读取或发布系统剪贴板。
 
-服务端只接受可完整解码的 PNG/JPEG，统一转换成 PNG（移除原文件元数据，不保留 JPEG EXIF 方向等元数据）。默认单张输入和转换后的 PNG 都不得超过 10 MiB，最多 2000 万像素，保留图片合计最多 200 MiB；PNG 转换后超限也会拒绝。容量不足时提示删除旧图片。文本和图片合计保留最近 100 条，删除、清空及自动淘汰都会清理对应图片文件。
+文本和图片合计保留最近 100 条。单条文本最多 64 KiB；图片默认最多 10 MiB、2000 万像素，总容量为 200 MiB，统一保存为 PNG。图片限额及备份规则见[配置说明](doc/configuration.zh-CN.md#图片剪贴板)。
 
-图片文件位于数据目录的 `clipboard/images/`，`history.json` 仅保存文本和图片元数据，列表条件刷新不传输图片二进制。旧文本历史无需手动迁移。启动时会检查图片是否存在且与元数据匹配，缺失或明显损坏时启动报错并保留历史；有效历史加载成功后会清理无引用的程序图片文件。备份和恢复时请同时处理整个 `clipboard/` 目录。关闭图片功能后停止接收新图片，已有图片仍可查看、复制和删除。
+一键复制需要 HTTPS / localhost 和浏览器剪贴板权限；不可用时可手动复制文本或打开、下载图片。
 
-图片接口：`GET /api/clipboard/image-config` 获取限制，`POST /api/clipboard/image` 使用 multipart 字段 `image` 发布一张图片；`GET /api/clipboard/:id/image` 获取 PNG，加 `?download=1` 下载。图片响应设置 `Cache-Control: no-store`。
+## 使用限制
 
-打开导航中的「剪贴板」（`/clipboard`），输入或粘贴文本后点击「发布」。另一台设备访问同一服务，即可查看、复制或删除记录。页面可见时自动获取最新内容，每次请求结束后等待 3 秒再获取，也可手动点击「刷新」。可通过「全部删除」清空所有共享记录；单条删除和全部删除均需要二次确认，清空不会影响未发布的草稿。
-
-发布、删除、删除确认和复制操作期间暂停自动更新；手动复制面板关闭后恢复。页面隐藏时暂停，切回后立即更新；离开页面会清理定时器并取消请求。自动更新失败时保留当前内容并稍后重试，不清除操作失败提示，也不会修改输入框中的草稿或自动写入系统剪贴板。
-
-内容按发布时间倒序排列，单条限制为 65,536 个 UTF-8 字节，超出 100 条时自动淘汰最旧记录。只保存纯文本，HTML 内容按文字显示。文本保存在数据根目录下的 `clipboard/history.json`；与上传文件分开存储，不会出现在文件列表中。Docker 中位于现有数据卷的 `/data/clipboard`。
-
-浏览器的一键复制需要剪贴板权限和安全上下文（通常为 HTTPS 或 localhost）。使用局域网 HTTP 地址或权限被拒绝时，页面会展示已选中的文本，供快捷键或长按手动复制。输入框支持直接粘贴。
-
-剪贴板沿用共享访问模式，所有能访问服务的人均可查看、发布和删除记录。历史文件损坏时启动会报错并保留原文件，不会自动覆盖。一个数据目录只供一个服务进程使用。
-
-接口为 `GET /api/clipboard`（返回 `entries` 数组）、`POST /api/clipboard`（JSON 请求体 `{"text":"共享内容"}`，返回创建的记录）、`DELETE /api/clipboard/:id`（删除单条）和 `DELETE /api/clipboard`（清空全部）。每条记录包含 `id`、`text`、`created_at`；剪贴板响应设置 `Cache-Control: no-store`。
-
-列表响应附带内容版本 `ETag`，后台自动更新通过 `If-None-Match` 校验版本：内容未变时返回 `304`，无列表正文，页面保留现有内容；内容变化时返回完整列表和新版本。版本仅随当前页面数据保存在内存中，不增加本地持久化缓存。首次加载、手动刷新以及发布、删除、清空成功后的同步均完整获取列表。轮询间隔不变，条件请求用于减少重复传输和解析，并非实时推送。
+- 未提供用户鉴权和文件归属隔离；所有能访问服务的人均可查看、上传和删除共享内容。
+- 不支持浏览器刷新或服务重启后的断点续传；服务启动会清理临时上传。
+- 临时上传与已上传文件必须位于同一个支持硬链接的文件系统；Docker 需将整个 `/data` 挂载为同一个卷。
+- 空文件夹不会保存，不支持文件夹打包下载；同路径文件冲突时自动改名，不覆盖已有文件。
 
 ## 文档
 
 | 文档 | 内容 |
 | --- | --- |
-| [配置说明](doc/configuration.zh-CN.md) | YAML 配置、环境变量、配置优先级、证书路径和开发代理 |
-| [日志说明](doc/logging.zh-CN.md) | 日志级别、请求关联、访问日志过滤、滚动文件和 Docker 日志 |
-| [构建与部署](doc/build.zh-CN.md) | Makefile、依赖缓存、前端嵌入、发布及跨平台构建 |
-| [传输实现](doc/transfer.zh-CN.md) | 分块协议、并发控制、临时文件、校验及资源限制 |
-| [持续集成](doc/ci.zh-CN.md) | GitHub Actions 检查范围、race 检测及本地复现 |
-| [Docker 部署](doc/docker.zh-CN.md) | 镜像构建、Compose、数据持久化及 HTTPS |
-| [前端说明](frontend/README.zh-CN.md) | 前端开发、代码组织及测试 |
-
-## 使用限制
-
-- 临时目录与上传目录必须位于同一个支持硬链接的文件系统。
-- 当前不支持浏览器刷新或服务重启后的断点续传；服务启动会清理临时上传。
-- 文件夹拖拽会上传其中的文件，空文件夹不会保存；同路径文件冲突时自动改名，不会覆盖已有文件。
-- 目前未提供用户鉴权和文件归属隔离，也不支持文件夹打包下载。
+| [配置说明](doc/configuration.zh-CN.md) | 配置文件、环境变量、数据目录与备份 |
+| [Docker 部署](doc/docker.zh-CN.md) | 镜像构建与发布、Compose、持久化及 HTTPS |
+| [日志说明](doc/logging.zh-CN.md) | 日志配置、请求关联与排错 |
+| [构建与检查](doc/build.zh-CN.md) | 开发环境、构建命令、测试及 CI |
+| [前端开发](frontend/README.zh-CN.md) | 本地开发、代码入口及国际化 |
+| [传输与接口](doc/transfer.zh-CN.md) | 上传与剪贴板接口、协议及资源限制 |
 
 ## 许可证
 

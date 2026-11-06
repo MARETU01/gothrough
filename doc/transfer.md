@@ -1,12 +1,12 @@
-# Transfer Implementation
+# Transfer and APIs
 
 English | [简体中文](transfer.zh-CN.md)
 
 [Back to the project README](../README.md)
 
-## API Routes
+## Upload and File APIs
 
-All backend endpoints use the `/api` prefix. `/upload` and `/files` are frontend page routes.
+All backend endpoints use the `/api` prefix.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -20,22 +20,48 @@ All backend endpoints use the `/api` prefix. `/upload` and `/files` are frontend
 | DELETE | `/api/files/*filename` | Delete a file |
 | GET | `/api/disk-info` | Get disk information |
 
-Encode filenames when using them as URL path parameters. The legacy `/api/uploads/*filename`, `/api/delete/*filename`, and endpoints without the `/api` prefix are no longer available.
+Encode filenames when using them as URL path parameters.
 
-## Chunking and Resource Management
+## Clipboard API
 
-Folder drag-and-drop uses the browser's directory entry API to traverse all batches of child entries. Only file metadata is read during traversal; contents are still sent in chunks. Initialization may include `relative_path`, such as `documents/photos/image.jpg`, preserving the top-level dropped folder. The backend rejects absolute paths, directory traversal, paths deeper than 32 components, and paths longer than 4096 bytes. Each component is sanitized and limited to 200 UTF-8 bytes without splitting Unicode characters; extensions and conflict suffixes count toward this limit.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/clipboard` | List the latest entries in an `entries` array |
+| POST | `/api/clipboard` | Publish text with a JSON body such as `{"text":"shared content"}` |
+| DELETE | `/api/clipboard/:id` | Delete one entry |
+| DELETE | `/api/clipboard` | Clear all entries |
+| GET | `/api/clipboard/image-config` | Get image availability and configured limits |
+| POST | `/api/clipboard/image` | Publish a PNG/JPEG using the multipart field `image` |
+| GET | `/api/clipboard/:id/image` | Serve the PNG; add `?download=1` to download |
 
-Parent directories are created and checked during initialization. Uploads are rejected immediately if a parent path is already a file, is reserved as a file by another upload session, or contains a symbolic link. Path conflicts return 409; invalid paths return 400. If a file or directory already occupies the final file path, only the new filename is changed, preserving existing content. Parent directories are checked again at completion to account for local filesystem changes after initialization. Cancelling a session may leave empty parent directories; empty directories are not saved as separate uploaded items.
+Successful publication returns the created entry. Entries include `id` and `created_at`; `type` identifies the entry type, with a missing value treated as text for compatibility. Text entries contain `text`; image entries contain `image` metadata. Text is treated as plain text, limited to 65,536 UTF-8 bytes per entry. The latest 100 entries across text and images are retained.
 
-File listings recursively return paths relative to the upload directory. Download and delete endpoints use encoded relative paths, and disk statistics include files in subdirectories. Directory traversal failures are shown on the upload page rather than silently omitting files. Ordinary file drag-and-drop remains available when the browser does not provide the directory entry API.
+Clipboard responses use `Cache-Control: no-store`. Lists provide an `ETag`; `If-None-Match` returns `304` without a body when content is unchanged, or the full list when it changes.
 
-Uploads use 8 MiB chunks, with 3 concurrent chunk requests per file and 2 files processed at a time. Initialization returns `upload_transport: "raw"`. New frontend clients send the Blob directly as an `application/octet-stream` request body; they use multipart with older servers that do not advertise this capability. Older multipart clients can also use the new backend, provided they use the chunk size returned at initialization.
+See [configuration](configuration.md#image-clipboard) for image limits, decoding concurrency, and storage recovery rules.
 
-The backend uses `io.CopyBuffer` and offset writes to stream each chunk directly into the same temporary file, reusing 256 KiB buffers. It does not load whole chunks into memory or reread all chunks for merging. Before completion, it checks the chunk count and file size, calls Sync, and publishes the file through a hard link without overwriting an existing file. Temporary and upload directories must be on the same filesystem with hard-link support, such as the same NTFS or ext4 partition. Startup and session initialization verify write access and hard-link support by briefly creating and removing probe files. Downloads continue to use standard-library file serving with Range request support.
+## Upload Flow
 
-Initialization compares the file size with free space in the temporary directory and returns 507 if space is insufficient. This check does not reserve capacity, so concurrent uploads or other programs may still exhaust disk space. During writing and publication, insufficient disk space or quota returns 507, permission failures return 403, and read-only filesystems return 503. The operation stage and cause remain available for diagnostics. Unsupported hard links produce a specific message about the same-filesystem and hard-link requirements.
+1. Initialize with the filename, size, and optional `relative_path` to obtain a session, chunk size, and transport mode.
+2. Send chunks using the returned size. `upload_transport: "raw"` indicates an `application/octet-stream` request body; use multipart if the server does not advertise this capability. The server also accepts multipart clients.
+3. After sending all chunks, call completion. The server validates the file size and chunk completeness before publishing the file. Use the cancellation endpoint to cancel a task.
 
-Sessions coordinate concurrent writes independently, and duplicate chunks do not overwrite acknowledged data. The server accepts at most 16 chunks concurrently and retains up to 1024 active sessions; exceeding these limits returns 429. The per-file limit is 1 TiB. Every 5 minutes, sessions idle for more than 24 hours are cleaned up; sessions with active writes are skipped. Sessions are stored in memory, and restarting the server clears temporary uploads. Resuming uploads after a restart is not supported.
+Folder uploads use `relative_path` to preserve the top-level folder and subdirectories, such as `documents/photos/image.jpg`. File listing, downloading, and deletion use paths relative to the upload directory; encode URL path parameters. Empty folders are not preserved. Conflicting names are renamed without overwriting existing content.
 
-Routes share structured access logging and panic recovery middleware. Each request returns `X-Request-ID`. Successful chunk and polling requests are not logged individually by default; failed requests retain their error causes, and upload business events include session IDs. See the [logging guide](logging.md) for levels, formats, and optional rotating files. The server sets request header, request body, and idle connection timeouts. At shutdown, it waits up to 30 seconds for existing requests to finish, then closes connections and cleans up temporary sessions.
+## Limits and Errors
+
+| Item | Limit or behavior |
+| --- | --- |
+| Default transport settings | 8 MiB chunks; frontend sends 3 chunks per file concurrently and processes 2 files at a time |
+| File size | Up to 1 TiB |
+| Server capacity | Up to 16 concurrent chunk requests and 1024 active sessions; exceeding limits returns 429 |
+| Relative paths | Up to 32 components and 4096 bytes; each sanitized component is limited to 200 UTF-8 bytes, including extensions and conflict suffixes |
+| Path validation | Absolute paths, traversal, and symlinks are rejected; invalid paths return 400 and parent path conflicts return 409 |
+| Storage requirement | Temporary and upload directories must share a filesystem with hard-link support |
+| Disk checks | Initialization checks free space without reserving capacity; concurrent uploads may still exhaust it |
+| Storage errors | Space or quota exhaustion returns 507, permission errors return 403, and read-only filesystems return 503 |
+| Session expiration | Sessions idle for over 24 hours are cleaned up every 5 minutes, except those with active writes |
+| Restarts and resuming | Sessions stay in memory; restarting clears temporary uploads and does not support resuming them |
+| Downloads | Range requests are supported |
+
+For failed requests, use the `X-Request-ID` response header to find server logs. See [troubleshooting](logging.md#troubleshooting).

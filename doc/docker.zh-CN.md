@@ -4,60 +4,9 @@
 
 [返回项目首页](../README.zh-CN.md)
 
-## 构建镜像
+需要安装并启动支持 Linux 容器的 Docker Engine 或 Docker Desktop。以下命令在项目根目录执行。
 
-需要安装并启动支持 Linux 容器的 Docker Engine 或 Docker Desktop，使用 BuildKit 构建。以下命令均在项目根目录执行：
-
-```sh
-docker build -t gothrough:local .
-```
-
-Dockerfile 分为前端构建、Go 编译、运行三个阶段。构建环境使用 Node.js 26 LTS 和 Go 1.27，Go 版本需与 `go.mod` 要求相容；运行镜像只保留嵌入前端的程序、默认配置和基础运行环境，不包含 Node.js、Go 工具链或源码。无需在宿主机先执行 `make`。
-
-npm 和 Go 依赖下载、Go 编译使用 BuildKit 缓存，源码修改不会直接使依赖下载层失效。`.dockerignore` 排除本机依赖、构建产物、上传数据、环境文件和常见证书/私钥文件。
-
-## GitHub 自动构建与发布
-
-工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 Docker Hub；标签提交必须已包含在 main 历史中。
-
-发布支持 `linux/amd64` 和 `linux/arm64`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名默认为 `<Docker Hub 用户名>/<GitHub 仓库名>` 并转换为小写，也可通过 repository variable `DOCKERHUB_REPOSITORY` 指定完整的 `命名空间/镜像名`。手动运行工作流只验证，不发布，打标签步骤见[持续集成](ci.zh-CN.md)。
-
-首次发布前完成以下设置：
-
-1. 在 Docker Hub 创建目标仓库，例如 `你的用户名/gothrough`；需要公开拉取时将其设为 Public。
-2. 在 Docker Hub 创建具有目标仓库读写权限的访问令牌（Personal Access Token），不要使用账户密码。
-3. 在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Secrets** 添加 `DOCKERHUB_USERNAME`（Docker Hub 登录用户名）和 `DOCKERHUB_TOKEN`（访问令牌）。不要把令牌写入代码或日志。
-4. 如果 Docker Hub 命名空间或仓库名与默认值不同，在同一页面的 **Variables** 添加 `DOCKERHUB_REPOSITORY`，例如 `my-org/gothrough`；登录账号及令牌必须有该仓库的推送权限。
-
-以下命令中的 `YOUR_USERNAME` 替换为 Docker Hub 用户名；配置了自定义仓库时替换整个镜像地址。私有仓库需要先在目标机器执行 `docker login`。
-
-镜像首次发布成功且已具备读取权限后：
-
-```sh
-docker pull YOUR_USERNAME/gothrough:latest
-docker run -d --name gothrough --stop-timeout 40 \
-  -p 8080:8080 \
-  --mount type=volume,source=gothrough-data,target=/data \
-  YOUR_USERNAME/gothrough:latest
-```
-
-若登录或发布失败，检查两个 secrets 是否齐全、令牌是否有效且具有写入权限，以及镜像命名空间是否属于登录账号或已授权的组织。工作流不会自动修改仓库的可见性，也不会自动部署或更新你的服务器。认证及发布方式参见 [Docker 官方 GitHub Actions 文档](https://docs.docker.com/build/ci/github-actions/)。
-
-## 启动容器
-
-```sh
-docker run -d --name gothrough \
-  --stop-timeout 40 \
-  -p 8080:8080 \
-  --mount type=volume,source=gothrough-data,target=/data \
-  gothrough:local
-```
-
-访问 `http://localhost:8080`。容器以 UID/GID `10001:10001` 运行。程序退出时可获得最多 40 秒的停止宽限期，配合应用自身的 30 秒请求等待时间。
-
-应用日志统一输出到标准输出，可使用 `docker compose logs -f --tail=100` 查看。Compose 的 Docker 日志按每文件 `10m`、最多 `3` 个文件轮转。应用默认不额外写日志文件；JSON 格式、访问日志过滤和可选文件输出见[日志说明](logging.zh-CN.md)。
-
-### 使用 Compose
+## 使用 Compose
 
 ```sh
 docker compose up -d --build
@@ -65,7 +14,7 @@ docker compose logs -f
 docker compose down
 ```
 
-Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件和剪贴板历史。
+启动后访问 `http://localhost:8080`。Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件和剪贴板历史。
 
 默认映射宿主机 8080 到容器 8080。仅修改宿主机端口可执行：
 
@@ -88,7 +37,7 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 /data/                 单个持久化数据卷
 ```
 
-镜像内置 `GOTHROUGH_DATA_DIR=/data`，直接将上传文件、临时文件和剪贴板历史放入数据卷，不再使用 `/app` 下的符号链接。数据子目录与旧版本一致，已有数据卷可继续使用。程序会创建缺失的子目录，升级镜像不会从数据卷读取旧版本可执行文件。
+镜像内置 `GOTHROUGH_DATA_DIR=/data`，上传文件、临时文件和剪贴板历史均放入数据卷，程序会创建缺失的子目录。可执行文件保留在卷外，更新镜像即可更新程序。
 
 镜像内置环境变量优先于 YAML 中的 `storage.data_dir`。如需更换容器数据根目录，使用 `-e GOTHROUGH_DATA_DIR=/其他路径`，并同步调整挂载点。
 
@@ -145,6 +94,44 @@ docker run -d --name gothrough \
 
 Windows Git Bash 可能自动转换命令中的 `/app`、`/data` 路径。如果路径被改写，可先设置 `export MSYS_NO_PATHCONV=1`，并为 bind mount 的 `source` 使用 `pwd -W` 或 `C:/...` 格式的真实 Windows 路径。Compose 命令不需要手工传递这些容器路径，Windows 优先使用 Compose。
 
+## 构建镜像
+
+使用 BuildKit 构建，无需在宿主机安装 Go、Node.js 或先执行 `make`：
+
+```sh
+docker build -t gothrough:local .
+```
+
+镜像包含程序、前端资源和默认配置。运行数据保存在挂载卷中，配置可通过只读挂载覆盖。
+
+## 启动容器
+
+```sh
+docker run -d --name gothrough \
+  --stop-timeout 40 \
+  -p 8080:8080 \
+  --mount type=volume,source=gothrough-data,target=/data \
+  gothrough:local
+```
+
+访问 `http://localhost:8080`。容器以 UID/GID `10001:10001` 运行。程序退出时可获得最多 40 秒的停止宽限期，配合应用自身的 30 秒请求等待时间。
+
+使用 `docker run` 启动时，通过 `docker logs -f --tail=100 gothrough` 查看日志。Compose 的日志命令见上文；日志格式及轮转配置见[日志说明](logging.zh-CN.md)。
+
+### 使用已发布镜像
+
+以下命令中的 `YOUR_USERNAME` 替换为 Docker Hub 用户名；配置了自定义仓库时替换整个镜像地址。私有仓库需要先在目标机器执行 `docker login`。
+
+镜像首次发布成功且已具备读取权限后：
+
+```sh
+docker pull YOUR_USERNAME/gothrough:latest
+docker run -d --name gothrough --stop-timeout 40 \
+  -p 8080:8080 \
+  --mount type=volume,source=gothrough-data,target=/data \
+  YOUR_USERNAME/gothrough:latest
+```
+
 ## 多架构构建
 
 Dockerfile 支持 Buildx 的目标平台参数，例如：
@@ -155,8 +142,38 @@ docker buildx build --platform linux/arm64 -t gothrough:arm64 --load .
 
 构建阶段运行于构建机平台，Go 使用目标平台交叉编译；本地加载的镜像仍需对应平台的宿主机或模拟环境才能运行。
 
-## 官方参考
+## GitHub 自动构建与发布
 
-- [Docker 多阶段构建](https://docs.docker.com/build/building/multi-stage/)
-- [Docker 数据卷](https://docs.docker.com/engine/storage/volumes/)
-- [Docker 构建缓存](https://docs.docker.com/build/cache/optimize/)
+工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 Docker Hub；标签提交必须已包含在 main 历史中。
+
+发布支持 `linux/amd64` 和 `linux/arm64`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名默认为 `<Docker Hub 用户名>/<GitHub 仓库名>` 并转换为小写，也可通过 repository variable `DOCKERHUB_REPOSITORY` 指定完整的 `命名空间/镜像名`。手动运行工作流只验证，不发布。
+
+首次发布前完成以下设置：
+
+1. 在 Docker Hub 创建目标仓库，例如 `你的用户名/gothrough`；需要公开拉取时将其设为 Public。
+2. 在 Docker Hub 创建具有目标仓库读写权限的访问令牌（Personal Access Token），不要使用账户密码。
+3. 在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Secrets** 添加 `DOCKERHUB_USERNAME`（Docker Hub 登录用户名）和 `DOCKERHUB_TOKEN`（访问令牌）。不要把令牌写入代码或日志。
+4. 如果 Docker Hub 命名空间或仓库名与默认值不同，在同一页面的 **Variables** 添加 `DOCKERHUB_REPOSITORY`，例如 `my-org/gothrough`；登录账号及令牌必须有该仓库的推送权限。
+
+若登录或发布失败，检查两个 secrets 是否齐全、令牌是否有效且具有写入权限，以及镜像命名空间是否属于登录账号或已授权的组织。工作流不会自动创建 GitHub Release 或部署服务器。
+
+### 验证与标签规则
+
+发布前验证 amd64 容器的页面访问、上传下载及重启持久化；arm64 仅构建，不另做容器功能测试。CI 检查范围见[构建与检查](build.zh-CN.md#检查与持续集成)。
+
+版本标签格式为 `v主版本.次版本.修订版本`，可带 `-预发布标识`；不接受数字前导零、`+build` 元数据或超出 Docker 标签长度的名称。规则见 [image-tags.sh](../.github/scripts/image-tags.sh)。
+
+### 发布一个版本
+
+先将改动合并到 main，确认工作区干净、main 已同步且对应 CI 通过，再执行：
+
+```sh
+git switch main
+git pull --ff-only origin main
+git status
+git log -1 --oneline
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+这会发布版本与 SHA 镜像，并更新 latest。发布预览版可改用 `v1.1.0-beta.1`，不会修改 latest。已发布标签保持不动，修复后使用新的版本号。工作流不会比较版本号大小，例如先发布 v2.0.0、再发布 v1.0.1，latest 会指向后发布的 v1.0.1。

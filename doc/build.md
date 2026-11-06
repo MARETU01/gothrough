@@ -1,71 +1,81 @@
-# Frontend Embedding and Release Builds
+# Build and Checks
 
 English | [简体中文](build.zh-CN.md)
 
 [Back to the project README](../README.md)
 
-Run all commands on this page from the project root. See the [configuration guide](configuration.md) for the listening port and TLS settings.
+Run commands from the project root. On Windows, use Git Bash and replace `make` with `mingw32-make` if needed.
 
-After installing Go, Node.js 26 LTS (26.13.0 or a newer 26.x version), npm, and GNU Make, run the following from the repository root. On Windows, use Git Bash. The default Make target is also `build`. If you use nvm, run `nvm use 26` first. After upgrading from an older Node.js version, run `make -B install` first to force dependency reinstallation.
+## Requirements
+
+- Go: see [go.mod](../go.mod) for the required version.
+- Node.js 26.13.0 or a newer 26.x version and npm. The root `.nvmrc` specifies the default version; run `nvm use 26` to select an installed 26.x version.
+- GNU Make and a POSIX shell; use Git Bash on Windows.
+
+These tools are needed for development and builds, but not on the deployment machine. See [frontend development](../frontend/README.md#development-and-checks) for running the backend and frontend separately and configuring Vite's proxy.
+
+## Build and Run
 
 ```sh
 make build
-```
 
-The Makefile runs `npm ci` on the first build, after dependency manifests or npm configuration change, or after `node_modules` is removed. Otherwise it reuses installed dependencies, then builds the frontend and compiles Go with the `embedweb` build tag. Any failed step stops the build. The same ordering is preserved with `make -j`. Output defaults to `release/gothrough.exe` on Windows and `release/gothrough` on Linux/macOS. If your Windows Make command is named `mingw32-make`, use it in place of `make`.
-
-The build also copies the default configuration to `config/config.yaml` under the output directory. An existing file is preserved so deployment settings are not overwritten. Configuration files, certificates, and private keys remain external.
-
-Start the application on Windows in Git Bash:
-
-```sh
+# Windows / Git Bash
 ./release/gothrough.exe
-```
 
-On Linux/macOS:
-
-```sh
+# Linux / macOS
 ./release/gothrough
 ```
 
-Available targets and options:
+Open `http://localhost:8080` by default. The build installs dependencies as needed, generates frontend assets, and compiles Go with `embedweb`. Deploy the executable, external configuration, and any required certificates; Node.js is not needed on the target machine. The application needs read/write access to its data directory. See [configuration](configuration.md) for ports, TLS, and data paths.
+
+The default configuration is copied to `config/config.yaml` under the output directory without overwriting an existing file. Configuration, certificates, and runtime data remain external.
 
 | Command | Purpose |
 | --- | --- |
-| `make` / `make build` | Install dependencies as needed, build the frontend, and package the Go executable |
+| `make` / `make build` | Build the executable with embedded frontend assets |
 | `make install` | Download Go modules and install frontend dependencies as needed |
-| `make test` | Build the frontend, then run backend tests and vet with and without embedded assets |
+| `make test` | Build the frontend, run frontend tests, and run Go tests and vet with and without embedded assets |
 | `make OUTPUT=release/custom.exe` | Set a custom output file path |
 | `make OUT_DIR=out` | Change the default output directory |
 | `make help` | Show command help |
 
-The Makefile uses `sh` and POSIX commands throughout; it does not invoke cmd or PowerShell. `make install` runs `go mod download` and, when needed, `npm ci`, preparing dependencies only. `make build` and `make test` install dependencies automatically before building and synchronizing frontend assets. Override the tool commands with `GO` and `NPM`. For cross-compilation, select the target through the standard `GOOS` and `GOARCH` environment variables; the output extension is selected automatically from the Go target platform. For example, in Git Bash, run `GOOS=linux GOARCH=amd64 make build`. These settings apply only to that command.
-
-The dependency installation marker is stored in `frontend/node_modules/.gothrough-deps-installed` and excluded from Git. Timestamps on `package.json`, `package-lock.json`, and an existing `.npmrc` determine whether reinstallation is needed. The first build using this version of the Makefile installs dependencies once. Run `make -B install` to force reinstallation after switching Node.js/npm versions, changing npm environment settings, or suspecting damaged dependencies. Do not run forced installation alongside other build tasks because it removes and recreates `node_modules`.
-
-Frontend source and assets are still rebuilt and fully synchronized, preventing stale output after source files are deleted. TypeScript and Go continue to reuse their own compilation caches. The main speed improvement comes from avoiding repeated dependency installations that can take tens of seconds, while still performing the necessary frontend generation steps.
-
-To set a custom output path:
+Override tool commands with `GO` and `NPM`. Cross-compilation uses standard Go environment variables; the output extension follows the target platform:
 
 ```sh
-make build OUTPUT=release/custom.exe
+GOOS=linux GOARCH=amd64 make build
 ```
 
-After deployment, open `http://localhost:8080` or the configured backend address. Frontend HTML, JavaScript, and CSS are included in the executable. The deployment machine does not need Node.js or `frontend/dist`. Runtime configuration, TLS certificates, and data are not embedded. The application needs permission to create, read, and write the data root, set through `storage.data_dir` or `GOTHROUGH_DATA_DIR`; see the [configuration guide](configuration.md). The Makefile preserves existing configuration files, and older configuration files remain usable. When developing with `go run`, explicitly set the data directory to avoid storing data beside the temporary executable.
+## Dependencies and Embedded Assets
 
-`internal/webassets/embed.go` uses `go:embed all:dist` to embed build output from its own directory. Vite still writes to `frontend/dist`. After building the frontend, the Makefile's internal asset rule fully synchronizes the output into `internal/webassets/dist`, removing old files from that generated directory to prevent stale hashed assets. Both `make build` and `make test` do this automatically. Parallel builds also wait for synchronization before compiling Go. A single `make -j2 build test` invocation builds and synchronizes the frontend only once.
+Builds install dependencies automatically. Run `make -B install` after changing Node.js/npm versions or if dependencies are damaged. Do not force installation alongside other builds.
 
-Before manually using `-tags embedweb`, you can run `make test` to generate and validate embedded assets. Compilation fails if the generated assets are missing. After changing the frontend, synchronize and compile again. Both `dist` directories and `release` are excluded from Git, so CI must perform the same build steps.
+Ordinary `go run ./cmd`, `go test ./...`, and `go build ./...` need no frontend output. Before manually running Go commands with `-tags embedweb`, run `make build` to generate assets. Rebuild after frontend changes.
 
-Gin retains all API routes. GET/HEAD requests that do not match an API route are handled by the embedded asset routing. Page routes such as `/`, `/upload`, and `/files` return the SPA entry point, supporting direct navigation and refreshes. Missing API routes, static assets, and other paths return 404. When adding frontend page routes, also update the page fallback list in `internal/router/web.go`. Hashed Vite assets use long-lived caching; HTML and public assets use `no-cache`.
+When adding frontend pages, update the SPA fallback routes in `internal/router/web.go`.
 
-Ordinary `go run ./cmd`, `go test ./...`, and `go build ./...` commands do not embed pages or require generated `dist` directories. Continue using the Vite development proxy with these commands. Frontend API calls use same-origin `/api` paths, without additional cross-origin configuration.
+## Checks and Continuous Integration
 
-## Embedded Build Checks
-
-After building and synchronizing the frontend, run the following, or use `make test` to check both the ordinary backend and the embedded build:
+Run locally:
 
 ```sh
-go test -tags embedweb ./...
-go vet -tags embedweb ./...
+make install
+npm --prefix frontend run lint
+make -j2 build test
 ```
+
+`make test` includes frontend tests and Go tests and vet with and without embedded assets, so separate runs are unnecessary. With CGO and a C compiler available, also run:
+
+```sh
+CGO_ENABLED=1 go test -race -tags embedweb ./...
+```
+
+The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on main pushes, `v*` tags, pull requests, and manual Actions runs. A new run for the same branch cancels the previous run.
+
+| Job | Environment | Checks |
+| --- | --- | --- |
+| Backend | Ubuntu and Windows, CGO disabled | Ordinary Go tests, vet, builds without embedded assets; Linux also tests image tag rules |
+| Frontend and embedded build | Ubuntu, CGO enabled | Frontend lint, tests, build; embedded Go build, tests, vet, and race detection |
+| Verify Docker image | Ubuntu, PRs, tags, and manual runs only | amd64 container pages, chunked uploads, download integrity, and restart persistence |
+| Publish versioned Docker image | Ubuntu, version tags after checks pass | Publish amd64/arm64 images |
+
+Go uses the version in `go.mod`; Node.js uses 26.x, and dependencies follow the lockfile. On Windows without a C toolchain, run the other checks locally and inspect Linux race results in CI. Image credentials, tag rules, and release steps are documented in [Docker deployment](docker.md#automated-builds-and-publishing-on-github).

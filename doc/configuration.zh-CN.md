@@ -34,11 +34,9 @@ server:
 
 `storage.data_dir` 指定数据根目录，包含 `uploads/`、`temp_uploads/` 和 `clipboard/`。相对路径以配置文件所在目录为基准；未加载配置文件时，环境变量中的相对路径以工作目录为基准。默认配置填写 `".."`，因此开发数据保存在项目根目录，发布包的数据保存在 `release/` 中。
 
-如果配置文件和环境变量均未指定数据目录，使用可执行文件所在目录；不再通过 `go-build`、`JetBrains` 等路径片段猜测开发环境。旧配置配合 `go run` 使用时，请补上 `storage.data_dir: ".."` 或设置环境变量。空字符串和纯空白的数据目录会被拒绝。
+如果配置文件和环境变量均未指定数据目录，使用可执行文件所在目录。使用 `go run` 时，请通过配置或环境变量指定数据目录，避免写入临时可执行文件目录。空字符串和纯空白的数据目录会被拒绝。
 
 可通过 `GOTHROUGH_DATA_DIR` 覆盖数据目录，例如 `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd`。修改目录不会自动搬迁旧数据；需要在服务停止后自行迁移，或继续指向原目录。一个数据根目录只供一个服务进程使用。
-
-初始化返回错误，由程序入口统一记录并退出。创建目录、存储写入与硬链接检查通过后才清理旧上传会话；读取或清理失败会明确报错，不会被静默忽略。
 
 ## 环境变量
 
@@ -86,7 +84,22 @@ clipboard:
 
 `max_size_mb` 同时限制上传图片和规范化 PNG 的字节数（1–50 MiB）；`max_pixels` 限制宽 × 高（1–40000000）；`max_total_size_mb` 限制历史中图片的总大小（不得小于单张上限，最大 10240 MiB）。超过总容量时拒绝新图片，不自动清空历史。降低限制不删除已有记录。图片解码最多同时执行一次，繁忙时返回 429。`enabled: false` 仅禁止新增图片，不影响已有图片和文本功能。
 
-对应环境变量为 `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS`、`GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB`。前端从接口读取实际限制，配置修改后重启生效。
+| 环境变量 | 对应配置 |
+| --- | --- |
+| `GOTHROUGH_CLIPBOARD_IMAGE_ENABLED` | `clipboard.image.enabled` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_SIZE_MB` | `clipboard.image.max_size_mb` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_PIXELS` | `clipboard.image.max_pixels` |
+| `GOTHROUGH_CLIPBOARD_IMAGE_MAX_TOTAL_SIZE_MB` | `clipboard.image.max_total_size_mb` |
+
+前端从接口读取实际限制，配置修改后重启生效。
+
+## 剪贴板数据
+
+文本和图片元数据保存在数据根目录的 `clipboard/history.json`，图片位于 `clipboard/images/`；它们与上传文件分开存储，不出现在文件列表中。备份、恢复或迁移时，请停止服务并处理整个 `clipboard/` 目录。一个数据根目录只供一个服务进程使用。
+
+服务启动时检查历史和图片是否有效。历史损坏、图片缺失或与元数据不匹配时，启动报错并保留历史文件；请检查日志并恢复备份。历史加载成功后会清理无引用的程序图片文件。
+
+图片统一转为 PNG，不保留原图元数据（包括 JPEG EXIF 方向）；删除、清空和超出最近 100 条的自动淘汰会同时清理对应图片。
 
 ## 前端开发代理
 

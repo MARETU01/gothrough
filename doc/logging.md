@@ -4,7 +4,7 @@ English | [简体中文](logging.zh-CN.md)
 
 [Back to the project README](../README.md)
 
-The backend uses Go's standard `log/slog` package and writes text logs to standard output by default. Startup events, business events, HTTP requests, and errors share timestamps, levels, messages, and structured fields. Request failure messages in the frontend console are separate from backend logs and are not reported to the server automatically.
+The backend writes text logs to standard output by default, with optional JSON formatting and rotating files.
 
 ## Configuration
 
@@ -32,21 +32,17 @@ logging:
 - `file.max_size_mb`: target size of each file in MiB, from 1 to 1024. A single oversized record remains intact rather than splitting a JSON record.
 - `file.max_backups`: retain 1–100 backup files, defaulting to 5, in addition to the current file. Backups are named `gothrough.log.1`, `.2`, and so on, with `.1` being the newest. The oldest files are deleted when the limit is exceeded.
 
-Restart the server for changes to take effect. Failed configuration or certificate validation does not create a log file. Errors that occur before logging is initialized use basic text output on the console. With file output enabled, failure to create or open the file prevents startup. If writing or rotation fails at runtime, console logging continues and a `logging.file_failed` event is reported once for each continuous failure period.
+Restart the server for changes to take effect. When file output is enabled, failure to create or open the log file prevents startup. Runtime write or rotation failures report `logging.file_failed` while console output continues.
 
-## Correlating Requests and Business Events
+## Troubleshooting
 
-Each HTTP request receives a new `request_id`, returned in the `X-Request-ID` response header. A client-supplied header of the same name is not used directly. Find the ID in the response headers in your browser's developer tools, then search for the same field in logs to locate related business events and the request result.
+1. Find the failed request in browser developer tools and copy its `X-Request-ID` response header.
+2. Search console output or log files for the matching `request_id` to inspect the status and full error cause. API responses provide public messages; system paths and other details are available in logs.
+3. For uploads, search by `session_id` to trace related events; chunk requests also have `chunk_index`. Clipboard operations can be correlated by `entry_id`.
 
-Access logs include `method`, `route` (the route template), `status`, `duration_ms`, `remote_ip`, and `response_bytes`, along with a recorded error cause when a request fails. `remote_ip` comes from the TCP connection address. Behind a reverse proxy, it is usually the proxy address; forwarded headers are not used directly.
+Access logs include `method`, `route`, `status`, `duration_ms`, `remote_ip`, and `response_bytes`. `remote_ip` comes from the TCP connection and is usually the proxy address behind a reverse proxy. The server generates a new ID for each request.
 
-Upload, file, and clipboard endpoints do not return raw underlying error strings. Internal errors produce concise operation failure messages. Known errors, such as insufficient disk space, storage permission failures, or invalid sessions, retain specific user-facing messages without disk paths or system details from wrapped errors. Full causes are recorded in request logs and can be located through the `X-Request-ID` response header. Failed upload completion responses use the same public message in their `error` and `message` fields.
-
-Upload creation, completion, and cancellation events include `session_id`. Completion also records the file size and session duration in milliseconds, with the start time recorded at second precision. Upload status and chunk requests can be correlated with a valid UUID session ID; chunk requests also record `chunk_index`. Events from background cleanup and server shutdown have no HTTP request ID, but include a session ID or cleanup count.
-
-Clipboard publishing records `entry_id` and `size_bytes`; deletion and clearing record their results. Logs do not deliberately record request bodies, file contents, clipboard text, Authorization headers, complete query strings, or panic values. Panics record the value's type and stack trace. File deletion events may include relative filenames, and storage errors may include disk paths.
-
-Common events include `server.started`, `server.stopping`, `server.stopped`, `server.failed`, `http.request`, `http.panic`, `upload.started`, `upload.completed`, `upload.cancelled`, `upload.expired`, `upload.cleanup_failed`, `clipboard.created`, `clipboard.deleted`, and `clipboard.cleared`.
+Logs do not deliberately record file contents, clipboard text, or Authorization headers. File events may include relative filenames, and storage errors may include disk paths; review these fields before sharing logs.
 
 ## Docker and Direct Execution
 

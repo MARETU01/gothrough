@@ -1,71 +1,81 @@
-# 前端嵌入与发布打包
+# 构建与检查
 
 [English](build.md) | 简体中文
 
 [返回项目首页](../README.zh-CN.md)
 
-本页命令均在项目根目录执行；监听端口和 TLS 设置见[配置说明](configuration.zh-CN.md)。
+以下命令在项目根目录执行，Windows 使用 Git Bash；若 Make 命令名为 `mingw32-make`，请替换示例中的 `make`。
 
-安装 Go、Node.js 26 LTS（26.13.0 或更高的 26.x 版本）/ npm 和 GNU Make 后，在仓库根目录执行（Windows 使用 Git Bash；默认目标也是 `build`）。使用 nvm 时先执行 `nvm use 26`；从旧版 Node.js 升级后先执行 `make -B install` 强制重装依赖：
+## 环境要求
+
+- Go：版本要求见 [go.mod](../go.mod)。
+- Node.js 26.13.0 或更高的 26.x 版本及 npm；仓库根目录的 `.nvmrc` 指定默认版本，可执行 `nvm use 26` 选择已安装的 26.x。
+- GNU Make 和 POSIX shell；Windows 使用 Git Bash。
+
+这些工具用于开发和构建，部署机器无需安装。前后端分开启动及 Vite 代理配置见[前端开发](../frontend/README.zh-CN.md#本地开发与检查)。
+
+## 构建与运行
 
 ```sh
 make build
-```
 
-Makefile 在首次构建、依赖清单或 npm 配置变更、删除 `node_modules` 后执行 `npm ci`，其他时候复用已安装依赖，再执行前端构建和带 `embedweb` 标签的 Go 构建。任何一步失败会停止；`make -j` 也保持这些步骤的先后顺序。Windows 自动输出 `release/gothrough.exe`，Linux/macOS 输出 `release/gothrough`。Windows 若命令名为 `mingw32-make`，将命令中的 `make` 替换为 `mingw32-make`。
-
-打包同时将默认配置复制到输出目录的 `config/config.yaml`；如果该文件已存在则保留，不覆盖部署配置。配置文件、证书和私钥均保持外置。
-
-Windows 在 Git Bash 中启动：
-
-```sh
+# Windows / Git Bash
 ./release/gothrough.exe
-```
 
-Linux/macOS 启动：
-
-```sh
+# Linux / macOS
 ./release/gothrough
 ```
 
-可用目标和参数：
+默认访问 `http://localhost:8080`。构建按需安装依赖、生成前端资源，再以 `embedweb` 标签编译 Go。部署只需可执行文件、外部配置及所需证书，目标机器无需 Node.js。程序还需有数据目录的读写权限；端口、TLS 和数据目录规则见[配置说明](configuration.zh-CN.md)。
+
+默认配置复制到输出目录的 `config/config.yaml`，已有文件不会被覆盖。配置、证书和运行数据均不嵌入程序。
 
 | 命令 | 用途 |
 | --- | --- |
-| `make` / `make build` | 按需安装依赖、构建前端并打包 Go |
+| `make` / `make build` | 构建包含前端的可执行文件 |
 | `make install` | 下载 Go 模块并按需安装前端依赖 |
-| `make test` | 构建前端，再运行普通及嵌入版后端测试和 vet |
+| `make test` | 构建前端、运行前端测试，以及普通和嵌入版 Go 测试与 vet |
 | `make OUTPUT=release/custom.exe` | 自定义输出文件路径 |
 | `make OUT_DIR=out` | 修改默认输出目录 |
 | `make help` | 查看命令说明 |
 
-Makefile 统一使用 `sh` 和 POSIX 命令，不调用 cmd 或 PowerShell。`make install` 执行 `go mod download` 并按需执行 `npm ci`，只准备依赖；`make build` 和 `make test` 会自动先安装依赖，再构建、同步前端资源。可通过 `GO`、`NPM` 指定工具命令。跨平台打包通过标准 `GOOS`、`GOARCH` 环境变量指定目标，输出扩展名根据 Go 目标平台自动选择。例如在 Git Bash 中执行 `GOOS=linux GOARCH=amd64 make build`，这些设置仅影响本次命令。
-
-依赖安装标记保存在 `frontend/node_modules/.gothrough-deps-installed`，不纳入 Git。`package.json`、`package-lock.json` 和已有 `.npmrc` 的时间戳用于判断是否需要重装；首次切换到这版 Makefile 会先安装一次。更换 Node.js/npm 版本、修改 npm 环境参数或怀疑依赖损坏时执行 `make -B install` 强制重新安装。不要同时运行强制安装和其他构建任务，因为它会删除并重新创建 `node_modules`。
-
-前端源码和资源仍会正常重新构建、完整同步，避免删除文件后残留旧产物；TypeScript 与 Go 继续复用各自的编译缓存。主要提速来自跳过每次几十秒的重复依赖安装，不跳过必要的前端生成步骤。
-
-自定义输出路径：
+通过 `GO`、`NPM` 可指定工具命令。交叉编译使用标准 Go 环境变量，输出扩展名随目标平台选择：
 
 ```sh
-make build OUTPUT=release/custom.exe
+GOOS=linux GOARCH=amd64 make build
 ```
 
-发布后访问 `http://localhost:8080`（或实际后端监听地址）。前端 HTML、JS、CSS 已包含在程序中，部署机器不需要 Node.js，也不需要携带 `frontend/dist`。运行配置、TLS 证书和数据不会嵌入可执行文件。程序需有创建和读写数据根目录的权限；目录由 `storage.data_dir` 或 `GOTHROUGH_DATA_DIR` 设置，详见[配置说明](configuration.zh-CN.md)。Makefile 不覆盖已有配置，旧配置仍可使用；开发时若用 `go run`，请显式补上数据目录，避免数据落入临时可执行文件目录。
+## 依赖与嵌入资源
 
-`internal/webassets/embed.go` 通过 `go:embed all:dist` 嵌入同目录下的构建产物。Vite 仍输出到 `frontend/dist`；Makefile 的内部资源规则构建前端后，将产物完整同步到 `internal/webassets/dist`，清除该生成目录中的旧文件，避免过期哈希资源残留。`make build` 和 `make test` 会自动执行此步骤，并行执行时也会先完成同步再开始 Go 编译。同一次 `make -j2 build test` 调用只构建和同步一次前端。
+构建会自动安装所需依赖。切换 Node.js/npm 版本或依赖异常时，执行 `make -B install` 强制重装；不要与其他构建任务同时运行。
 
-手动使用 `-tags embedweb` 前可先执行 `make test` 生成并验证嵌入资源，缺少嵌入产物会编译失败；修改前端后需重新同步和编译。两个 `dist` 目录与 `release` 均不纳入 Git，CI 也需要执行相同构建流程。
+普通 `go run ./cmd`、`go test ./...`、`go build ./...` 不需要前端产物。手动执行带 `-tags embedweb` 的 Go 命令前，先运行 `make build` 生成资源；修改前端后需重新构建。
 
-Gin 保留所有接口，未命中接口的 GET/HEAD 请求由嵌入资源处理。`/`、`/upload`、`/files` 返回 SPA 入口，直接访问和刷新正常；不存在的 API、静态资源和其他路径返回 404。以后增加前端页面路由时，需同步更新 `internal/router/web.go` 的页面回退列表。带哈希的 Vite 资源长期缓存，HTML 与公共资源使用 `no-cache`。
+新增前端页面时，同步更新 `internal/router/web.go` 的 SPA 回退路由。
 
-普通 `go run ./cmd`、`go test ./...`、`go build ./...` 不嵌入页面，也不要求生成 `dist`，继续配合 Vite 开发代理使用。前端 API 保持同源 `/api`，无需额外跨域配置。
+## 检查与持续集成
 
-### 嵌入版检查
-
-前端构建并同步完成后执行（或直接运行 `make test`，同时检查普通后端版本）：
+本地执行：
 
 ```sh
-go test -tags embedweb ./...
-go vet -tags embedweb ./...
+make install
+npm --prefix frontend run lint
+make -j2 build test
 ```
+
+`make test` 已包含前端测试、普通及嵌入版 Go 测试和 vet，无需重复运行。具备 CGO 和 C 编译器时补充 race 检测：
+
+```sh
+CGO_ENABLED=1 go test -race -tags embedweb ./...
+```
+
+工作流位于 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，在 main push、`v*` 标签、PR 和 Actions 手动运行时触发。同一分支的新运行会取消旧运行。
+
+| 任务 | 环境 | 检查 |
+| --- | --- | --- |
+| Backend | Ubuntu、Windows，CGO 关闭 | 普通 Go 测试、vet、无嵌入资源构建；Linux 另测镜像标签规则 |
+| Frontend and embedded build | Ubuntu，CGO 开启 | 前端 lint、测试、构建，Go 嵌入版构建、测试、vet 和 race 检测 |
+| Verify Docker image | Ubuntu，仅 PR、标签和手动运行 | amd64 容器页面、分块上传、下载一致性及重启持久化 |
+| Publish versioned Docker image | Ubuntu，仅版本标签且检查通过 | 发布 amd64/arm64 镜像 |
+
+Go 版本从 `go.mod` 读取，Node.js 使用 26.x，依赖按 lockfile 安装。Windows 无 C 工具链时，可在本地完成其他检查并查看 CI 的 Linux race 结果。镜像凭据、标签规则和发布步骤集中在 [Docker 部署](docker.zh-CN.md#github-自动构建与发布)。
