@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { FilePreview } from './FilePreview';
 import { getFilePreview, saveFileText } from '@/services/files';
 import { AxiosError } from 'axios';
@@ -7,11 +7,6 @@ import { AxiosError } from 'axios';
 vi.mock('@/services/files', async original => ({
   ...await original<typeof import('@/services/files')>(), getFilePreview: vi.fn(), saveFileText: vi.fn(),
 }));
-
-beforeEach(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', ''); } });
-  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open'); } });
-});
 
 it('saves edits with the preview version and updates the preview', async () => {
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'old', version: 'v1' });
@@ -33,18 +28,19 @@ it('keeps drafts after conflicts and asks before discarding on escape or reload'
   const reason = new AxiosError('conflict');
   reason.response = { data: { code: 'TEXT_CONFLICT' }, status: 409, statusText: '', headers: {}, config: {} as never };
   vi.mocked(saveFileText).mockRejectedValue(reason);
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   const onClose = vi.fn();
   render(<FilePreview name="file.txt" onClose={onClose} />);
   fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my draft' } });
   fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }));
   expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByRole('group', { name: /有尚未保存的修改/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   expect((await screen.findByRole('alert')).textContent).toContain('文件已被其他操作修改');
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('my draft');
-  confirm.mockReturnValue(true);
   fireEvent.click(screen.getByRole('button', { name: '重新加载文件' }));
+  fireEvent.click(screen.getByRole('button', { name: '放弃修改' }));
   await screen.findByText('other device');
   expect(screen.queryByRole('textbox')).toBeNull();
 });

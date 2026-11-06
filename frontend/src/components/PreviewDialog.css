@@ -1,0 +1,17 @@
+.preview-dialog { width: min(1000px, calc(100vw - 40px)); max-width: 100vw; max-height: 90dvh; margin: auto; padding: 0; box-sizing: border-box; border: 1px solid #a7d8d2; border-radius: 14px; color: #345650; background: #fff; box-shadow: 0 20px 80px #0004; }
+.preview-dialog::backdrop { background: #102f2bb3; }
+.preview-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #d1e8e4; }
+.preview-dialog-header h2 { font-size: 18px; overflow-wrap: anywhere; min-width: 0; margin: 0; }
+.preview-dialog-header > div { display: flex; gap: 8px; flex-shrink: 0; }
+.preview-dialog-header a { text-decoration: none; }
+.preview-dialog-body { padding: 20px; overflow: auto; max-height: calc(90dvh - 100px); }
+.preview-dialog-body pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; font-size: 14px; }
+.preview-dialog-body img, .preview-dialog-body video { display: block; margin: auto; max-width: 100%; max-height: 68dvh; object-fit: contain; }
+.preview-dialog-body audio { display: block; width: 100%; margin: 30px auto; }
+.preview-dialog-body iframe { display: block; width: 100%; height: 65dvh; border: 0; }
+@media (max-width: 600px) {
+  .preview-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+  .preview-dialog-header { padding: 14px; }
+  .preview-dialog-body { padding: 14px; max-height: calc(100dvh - 100px); }
+  .preview-dialog-body iframe { height: 75dvh; }
+}

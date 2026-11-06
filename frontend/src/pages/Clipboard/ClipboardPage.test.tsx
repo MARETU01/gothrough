@@ -153,6 +153,22 @@ it('writes a PNG image to the clipboard during the click gesture', async () => {
   expect(writeText).not.toHaveBeenCalled();
 });
 
+it('opens images in the shared preview dialog and pauses polling until it closes', async () => {
+  history = [imageRecord()];
+  await openPollingPage();
+  const trigger = screen.getByRole('button', { name: '预览 共享图片 1' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog', { name: '共享图片 1' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: '下载' }).getAttribute('href')).toBe('/api/clipboard/image-1/image?download=1');
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 3);
+  expect(listClipboard).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+  expect(document.activeElement).toBe(trigger);
+  await advancePoll();
+  expect(listClipboard).toHaveBeenCalledTimes(2);
+});
+
 it('offers image download and manual copy when clipboard permission is denied', async () => {
   history = [imageRecord()];
   vi.stubGlobal('ClipboardItem', class {});
@@ -162,7 +178,7 @@ it('offers image download and manual copy when clipboard permission is denied', 
   await screen.findByAltText('共享图片 1');
   fireEvent.click(screen.getByRole('button', { name: '复制记录 1' }));
   await screen.findByText(/无法直接复制图片/);
-  expect(screen.getByRole('link', { name: '打开图片' }).getAttribute('href')).toBe('/api/clipboard/image-1/image');
+  expect(screen.getByRole('button', { name: '打开图片' })).toBeTruthy();
   expect(screen.getAllByRole('link', { name: '下载图片' })[0].getAttribute('href')).toBe('/api/clipboard/image-1/image?download=1');
 });
 

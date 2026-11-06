@@ -19,9 +19,8 @@
 .app-action[data-slot='button'] svg { width: 16px; height: 16px; flex-shrink: 0; }
 .app-action[data-slot='button']:focus-visible { outline: 3px solid #00796b; outline-offset: 3px; }
 .upload-page .button-container > .app-action { flex: 1; }
-.upload-page .browse-btn { display: inline-flex; align-items: center; height: 40px; padding: 0 18px; font-size: 14px; font-weight: 600; }
 .upload-page .upload-icon { display: inline-flex; }
-.files-toolbar input, .files-toolbar select { height: 40px; }
+.files-toolbar input { height: 40px; }
 .app-message { display: flex; align-items: center; gap: 10px; border: 1px solid #a7d8d2; background: #eff8f6; color: #345650; padding: 12px 14px; border-radius: 10px; font-size: 14px; text-align: left; margin: 0 0 16px; }
 .app-message > svg { flex-shrink: 0; }
 .app-message > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -33,5 +32,8 @@
 .app-dialog p { font-size: 14px; line-height: 1.7; color: #546e6a; overflow-wrap: anywhere; }
 .app-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .app-spin { animation: app-spin 1s linear infinite; }
+.app-confirm { padding: 16px; margin-bottom: 16px; border: 1px solid #efb4b0; border-radius: 10px; background: #fff1f1; color: #a52e29; }
+.app-confirm p { margin: 0 0 12px; }
+.app-confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 @keyframes app-spin { to { transform: rotate(360deg); } }
 @media (max-width: 600px) { .app-message { flex-wrap: wrap; } .app-dialog { padding: 22px; } }

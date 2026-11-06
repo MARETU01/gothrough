@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/utils"
@@ -40,7 +41,7 @@ func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 			Name:        filepath.ToSlash(rel),
 			Size:        info.Size(),
 			SizeDisplay: utils.FormatFileSize(info.Size()),
-			Mtime:       info.ModTime().Format("2006-01-02 15:04:05"),
+			Mtime:       info.ModTime().Format(time.RFC3339Nano),
 		})
 		totalSize += info.Size()
 		return nil
@@ -50,7 +51,9 @@ func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Mtime > entries[j].Mtime
+		left, _ := time.Parse(time.RFC3339Nano, entries[i].Mtime)
+		right, _ := time.Parse(time.RFC3339Nano, entries[j].Mtime)
+		return left.After(right)
 	})
 
 	return entries, totalSize, nil

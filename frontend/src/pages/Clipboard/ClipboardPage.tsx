@@ -1,7 +1,12 @@
 import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef, useState } from 'react';
-import { Clipboard, Copy, Download, ExternalLink, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { Clipboard, Copy, Download, Send } from 'lucide-react';
+import { ConfirmPanel } from '@/components/ConfirmActions';
+import { DeleteAction, DeleteButton } from '@/components/DeleteButton';
+import { RefreshButton } from '@/components/RefreshButton';
+import { Timestamp } from '@/components/Timestamp';
+import { ImagePreview } from '@/components/MediaPreview';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
 import {
@@ -38,12 +43,13 @@ export default function ClipboardPage() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [manualCopy, setManualCopy] = useState<ClipboardEntry | null>(null);
+  const [previewing, setPreviewing] = useState<ClipboardEntry | null>(null);
   const [copying, setCopying] = useState(false);
   const copyInProgress = useRef(false);
   const operation = useRef(false);
   const byteLength = new Blob([text]).size;
   const tooLarge = byteLength > CLIPBOARD_MAX_BYTES;
-  const autoPaused = busy || confirming !== null || confirmingAll || copying || manualCopy !== null;
+  const autoPaused = busy || confirming !== null || confirmingAll || copying || manualCopy !== null || previewing !== null;
   const autoRefresh = useCallback(async () => {
     if (operation.current || copyInProgress.current || window.getSelection()?.isCollapsed === false) return;
     await reload({ background: true });
@@ -187,7 +193,7 @@ export default function ClipboardPage() {
           {manualCopy.type === 'image' ? <>
             <p>{t("无法直接复制图片，请使用 HTTPS 或 localhost 并允许剪贴板权限；也可以打开或下载图片后手动复制。")}</p>
             <div className="clipboard-entry-actions">
-              <Button asChild variant="outline"><a href={manualCopy.image?.url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{t("打开图片")}</a></Button>
+              <Button variant="outline" onClick={() => { cancelBackground(); setPreviewing(manualCopy); }}>{t("打开图片")}</Button>
               <Button asChild variant="outline"><a href={`${manualCopy.image?.url}?download=1`} download><Download aria-hidden="true" />{t("下载图片")}</a></Button>
             </div>
           </> : <>
@@ -206,42 +212,30 @@ export default function ClipboardPage() {
               <p>{autoPaused ? t("操作期间暂停自动更新") : t('clipboard.interval', { seconds: CLIPBOARD_REFRESH_INTERVAL_MS / 1000 })}</p>
             </div>
             <div className="clipboard-entry-actions">
-              <Button variant="outline" disabled={loading || busy} onClick={() => void refresh()}>
-                <RefreshCw aria-hidden="true" />{loading ? t("加载中…") : t("刷新")}
-              </Button>
-              <Button variant="destructive" disabled={loading || busy || !entries.length}
-                onClick={() => { cancelBackground(); setConfirming(null); setConfirmingAll(true); }}>
-                <Trash2 aria-hidden="true" />{t("全部删除")}</Button>
+              <RefreshButton loading={loading} disabled={busy} onClick={() => void refresh()} />
+              <DeleteButton all disabled={loading || busy || !entries.length}
+                onClick={() => { cancelBackground(); setConfirming(null); setConfirmingAll(true); }} />
             </div>
           </div>
           {backgroundError && <p className="clipboard-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
-          {confirmingAll && <div className="clipboard-clear-confirm" role="group" aria-label={t("全部删除确认")}>
-            <p>{t("确定删除所有设备共享的全部记录？删除后无法恢复。")}</p>
-            <div className="clipboard-entry-actions">
-              <Button variant="destructive" disabled={busy || loading} onClick={() => void clearAll()}>{t("确认全部删除")}</Button>
-              <Button variant="outline" disabled={busy} onClick={() => setConfirmingAll(false)}>{t("取消")}</Button>
-            </div>
-          </div>}
+          {confirmingAll && <ConfirmPanel message={t("确定删除所有设备共享的全部记录？删除后无法恢复。")} disabled={busy || loading} onConfirm={() => void clearAll()} onCancel={() => setConfirmingAll(false)} confirmLabel={t("确认全部删除")} />}
           {!loading && !entries.length && !error && <p className="clipboard-empty">{t("还没有共享内容，发布第一段文本吧。")}</p>}
           <ul className="clipboard-list">
             {entries.map((entry, index) => <li key={entry.id}>
               <article className="clipboard-entry" aria-label={t('clipboard.entry', { number: index + 1 })}>
-                {entry.type === 'image' && entry.image ? <a href={entry.image.url} target="_blank" rel="noreferrer">
+                {entry.type === 'image' && entry.image ? <button type="button" className="clipboard-image-preview" aria-label={t('preview.open', { name: t('clipboard.image', { number: index + 1 }) })} onClick={() => { cancelBackground(); setPreviewing(entry); }}>
                   <img className="clipboard-history-image" src={`${entry.image.url}?thumbnail=1`} alt={t('clipboard.image', { number: index + 1 })} loading="lazy" decoding="async"
                     onError={event => {
                       if (event.currentTarget.getAttribute('src') !== entry.image?.url) event.currentTarget.src = entry.image!.url;
                       else event.currentTarget.alt = t("图片加载失败，可打开图片重试");
                     }} />
-                </a> : <pre>{entry.text}</pre>}
+                </button> : <pre>{entry.text}</pre>}
                 <footer>
-                  <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString(i18n.resolvedLanguage)}</time>
+                  <Timestamp value={entry.created_at} />
                   <div className="clipboard-entry-actions">
                     <Button variant="outline" disabled={copying} onClick={() => void copy(entry)} aria-label={t('clipboard.copy', { number: index + 1 })}><Copy aria-hidden="true" />{t("复制")}</Button>
                     {entry.type === 'image' && entry.image && <Button asChild variant="outline"><a href={`${entry.image.url}?download=1`} download><Download aria-hidden="true" />{t("下载图片")}</a></Button>}
-                    {confirming === entry.id ? <>
-                      <Button variant="destructive" disabled={busy} onClick={() => void removeEntry(entry.id)} aria-label={t('clipboard.confirmDelete', { number: index + 1 })}>{t("确认删除")}</Button>
-                      <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>{t("取消")}</Button>
-                    </> : <Button variant="outline" disabled={busy} onClick={() => { cancelBackground(); setConfirming(entry.id); }} aria-label={t('clipboard.delete', { number: index + 1 })}><Trash2 aria-hidden="true" />{t("删除")}</Button>}
+                    <DeleteAction confirming={confirming === entry.id} disabled={busy} label={t('clipboard.delete', { number: index + 1 })} confirmLabel={t('clipboard.confirmDelete', { number: index + 1 })} onRequest={() => { cancelBackground(); setConfirming(entry.id); }} onConfirm={() => void removeEntry(entry.id)} onCancel={() => setConfirming(null)} />
                   </div>
                 </footer>
               </article>
@@ -249,6 +243,7 @@ export default function ClipboardPage() {
           </ul>
         </section>
       </div>
+      {previewing?.image && <ImagePreview key={previewing.id} name={t('clipboard.image', { number: entries.findIndex(entry => entry.id === previewing.id) + 1 })} url={previewing.image.url} downloadUrl={`${previewing.image.url}?download=1`} onClose={() => setPreviewing(null)} />}
     </main>
   );
 }

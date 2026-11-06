@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/MARETU01/gothrough/internal/config"
 )
@@ -32,6 +33,10 @@ func TestStorageEndpointsAndMissingDelete(t *testing.T) {
 			}
 		}
 		if path == "/api/files" {
+			file := body["files"].([]any)[0].(map[string]any)
+			if _, err := time.Parse(time.RFC3339Nano, file["mtime"].(string)); err != nil {
+				t.Fatalf("mtime must include timezone: %v", file["mtime"])
+			}
 			if body["total_size"] != float64(5) || body["has_files"] != true {
 				t.Fatalf("files: %v", body)
 			}

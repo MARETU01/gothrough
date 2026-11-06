@@ -1,0 +1,7 @@
+.app-select { display: inline-flex; position: relative; max-width: 100%; min-width: 0; vertical-align: middle; }
+.app-select-control { appearance: none; width: 100%; min-width: 0; height: 40px; padding: 0 38px 0 14px; border: 1px solid #80cbc4; border-radius: 50px; background: #fff; color: #00695c; font: inherit; font-size: 14px; cursor: pointer; transition: border-color .2s, background .2s; }
+.app-select-control:hover:not(:disabled) { border-color: #00796b; background: #f3faf8; }
+.app-select-control:focus-visible { outline: 3px solid #00796b; outline-offset: 3px; }
+.app-select-control:disabled { cursor: not-allowed; }
+.app-select[data-disabled] { opacity: .5; }
+.app-select-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #00695c; pointer-events: none; }

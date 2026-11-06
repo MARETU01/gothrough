@@ -5,6 +5,8 @@ import { NavLink } from 'react-router-dom';
 import './Navigation.css';
 import { useSharedUploadQueue } from '@/contexts/UploadQueueContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { Button } from '@/components/ui/button';
+import { LockKeyhole } from 'lucide-react';
 
 // 顶部导航组件
 export const Navigation: React.FC = () => {
@@ -20,7 +22,7 @@ export const Navigation: React.FC = () => {
         <NavLink to="/files" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t("文件列表")}</NavLink>
         <NavLink to="/clipboard" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t("剪贴板")}</NavLink>
         <LanguageSwitcher />
-        {access.enabled && <button className="access-logout" type="button" onClick={() => void access.logout()}>{t('auth.lock')}</button>}
+        {access.enabled && <Button variant="outline" type="button" onClick={() => void access.logout()}><LockKeyhole aria-hidden="true" />{t('auth.lock')}</Button>}
       </div>
     </nav>
   );

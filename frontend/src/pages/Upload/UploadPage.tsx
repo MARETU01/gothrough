@@ -41,7 +41,7 @@ const UploadPage: React.FC = () => {
     openFilePicker,
   } = useSharedUploadQueue();
 
-  usePageTitle(t("文件上传 - 分块上传"));
+  usePageTitle(t("文件上传 - GoThrough"));
 
   return (
     <main className="upload-page">
@@ -82,7 +82,7 @@ const UploadPage: React.FC = () => {
               <FolderOpen size={48} aria-hidden="true" />
             </span>
             <span className="upload-text">{t("拖放文件或文件夹到此处或点击浏览")}</span>
-            <span className="browse-btn">{t("选择文件")}</span>
+            <Button asChild><span>{t("选择文件")}</span></Button>
           </button>
           <input
             ref={fileInputRef}

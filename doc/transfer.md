@@ -22,9 +22,13 @@ All backend endpoints use the `/api` prefix.
 
 Encode filenames when using them as URL path parameters.
 
+File list `mtime` values use RFC3339 timestamps with timezone offsets. The UI displays them in the viewer's local timezone and selected language, and sorts by the actual instant.
+
 ### File preview
 
 The file list opens previews in a modal, full screen on phones. Close it or press Escape to return to the list. Images, UTF-8 text, PDFs, and browser-supported audio/video are supported, with a download fallback.
+
+Clipboard images use the same preview dialog. Automatic clipboard updates pause while it is open and resume after closing.
 
 `GET /api/files/*filename?preview=info` returns `kind`, `mime_type`, and `text`. The kind is `text`, `image`, `pdf`, `audio`, or `video`; only text previews contain a text body. Text is limited to 1 MiB (413 for oversized files); unsupported types or encodings return 415. HTML, SVG, and source code are displayed as plain text without executing content.
 

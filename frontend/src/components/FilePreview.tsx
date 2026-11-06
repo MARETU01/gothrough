@@ -4,14 +4,17 @@ import { downloadFileUrl, getFilePreview, previewFileUrl, saveFileText, type Fil
 import { apiErrorDescriptor, getErrorBody } from '@/services/errors';
 import { translateMessage, type Message } from '@/i18n/messages';
 import { Button } from './ui/button';
+import { PreviewDialog } from './PreviewDialog';
+import { MediaPreview } from './MediaPreview';
+import { ConfirmPanel } from './ConfirmActions';
+import { RefreshButton } from './RefreshButton';
+import { StatusMessage } from './StatusMessage';
 import './FilePreview.css';
 
 export function FilePreview({ name, onClose, onSaved }: { name: string; onClose: () => void; onSaved?: () => void }) {
   const { t } = useTranslation();
-  const dialog = useRef<HTMLDialogElement>(null);
   const [info, setInfo] = useState<FilePreviewInfo | null>(null);
   const [error, setError] = useState<Message>('');
-  const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -19,11 +22,17 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   const [editError, setEditError] = useState<Message>('');
   const [conflict, setConflict] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'close' | 'cancel' | 'reload' | null>(null);
+  const editor = useRef<HTMLTextAreaElement>(null);
   const alive = useRef(true);
   const busy = useRef(false);
   const reloadRequest = useRef<AbortController | null>(null);
   const dirty = editing && draft !== info?.text;
   const draftBytes = new TextEncoder().encode(draft).length;
+
+  useEffect(() => {
+    if (editing && !pendingAction) editor.current?.focus();
+  }, [editing, pendingAction]);
 
   useEffect(() => {
     alive.current = true;
@@ -37,8 +46,20 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty, saving]);
 
-  function canDiscard() { return !dirty || window.confirm(t('edit.discard')); }
-  function close() { if (!busy.current && !reloading && canDiscard()) onClose(); }
+  function performAction(action: 'close' | 'cancel' | 'reload') {
+    if (action === 'close') onClose();
+    else if (action === 'reload') void reload();
+    else { setEditing(false); setEditError(''); }
+  }
+  function requestAction(action: 'close' | 'cancel' | 'reload') {
+    if (busy.current || reloading) return;
+    if (dirty) setPendingAction(action);
+    else performAction(action);
+  }
+  function close() {
+    if (pendingAction) setPendingAction(null);
+    else requestAction('close');
+  }
 
   async function save() {
     if (busy.current || !info?.version || draftBytes > 1048576) return;
@@ -61,7 +82,7 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   }
 
   async function reload() {
-    if (busy.current || reloading || !canDiscard()) return;
+    if (busy.current || reloading) return;
     const controller = new AbortController();
     reloadRequest.current = controller;
     setReloading(true); setEditError('');
@@ -75,15 +96,6 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   }
 
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const element = dialog.current!;
-    element.showModal();
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { element.close(); document.body.style.overflow = overflow; previous?.focus(); };
-  }, []);
-
-  useEffect(() => {
     const controller = new AbortController();
     void getFilePreview(name, controller.signal).then(result => {
       if (!controller.signal.aborted) setInfo(result);
@@ -94,39 +106,27 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   }, [name]);
 
   const url = previewFileUrl(name);
-  const failed = () => setError({ key: 'preview.failed' });
-  return <dialog ref={dialog} className="file-preview" aria-labelledby="file-preview-title" onCancel={event => { event.preventDefault(); close(); }}>
-    <header className="file-preview-header">
-      <h2 id="file-preview-title">{name}</h2>
-      <div>
-        <Button asChild variant="outline"><a href={downloadFileUrl(name)} download>{t('下载')}</a></Button>
-        <Button variant="outline" autoFocus disabled={saving || reloading} onClick={close}>{t('关闭')}</Button>
-      </div>
-    </header>
-    <div className="file-preview-body">
-      {error ? <p role="alert">{translateMessage(error)}</p> : !info ? <p role="status">{t('preview.loading')}</p> : <>
+  return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving || reloading} onClose={close}>
+      {pendingAction && <ConfirmPanel message={t('edit.discard')} confirmLabel={t('edit.discardConfirm')} cancelLabel={t('edit.keepEditing')} onConfirm={() => { const action = pendingAction; setPendingAction(null); performAction(action); }} onCancel={() => setPendingAction(null)} />}
+      {error ? <StatusMessage tone="error">{translateMessage(error)}</StatusMessage> : !info ? <StatusMessage tone="loading">{t('preview.loading')}</StatusMessage> : <>
         {info.kind === 'text' && <>
           <div className="file-editor-toolbar">
             {editing ? <>
-              <Button disabled={saving || reloading || !dirty || conflict || draftBytes > 1048576} onClick={() => void save()}>{t(saving ? 'edit.saving' : 'edit.save')}</Button>
-              <Button variant="outline" disabled={saving || reloading} onClick={() => { if (canDiscard()) { setEditing(false); setEditError(''); } }}>{t('edit.cancel')}</Button>
+              <Button disabled={saving || reloading || !!pendingAction || !dirty || conflict || draftBytes > 1048576} onClick={() => void save()}>{t(saving ? 'edit.saving' : 'edit.save')}</Button>
+              <Button variant="outline" disabled={saving || reloading || !!pendingAction} onClick={() => requestAction('cancel')}>{t('edit.cancel')}</Button>
               <span>{t('edit.bytes', { count: draftBytes })}</span>
             </> : <Button variant="outline" disabled={!info.version || reloading} onClick={() => { setDraft(info.text); setEditing(true); setEditError(''); setSaved(false); }}>{t('edit.button')}</Button>}
-            {conflict && <Button variant="outline" disabled={saving || reloading} onClick={() => void reload()}>{t(reloading ? 'preview.loading' : 'edit.reload')}</Button>}
+            {conflict && <RefreshButton loading={reloading} disabled={saving || !!pendingAction} onClick={() => requestAction('reload')} label={t('edit.reload')} />}
           </div>
-          {editError && <p role="alert">{translateMessage(editError)}</p>}
-          {saved && <p role="status">{t('edit.saved')}</p>}
+          {editError && <StatusMessage tone="error">{translateMessage(editError)}</StatusMessage>}
+          {saved && <StatusMessage tone="success">{t('edit.saved')}</StatusMessage>}
           {editing ? <>
             <label className="sr-only" htmlFor="file-editor-text">{t('edit.content')}</label>
-            <textarea id="file-editor-text" className="file-editor-text" autoFocus spellCheck={false} value={draft} disabled={saving || reloading} aria-invalid={draftBytes > 1048576} onChange={event => setDraft(event.target.value)} />
-            {draftBytes > 1048576 && <p role="alert">{t('errors.TEXT_TOO_LARGE')}</p>}
+            <textarea ref={editor} id="file-editor-text" className="file-editor-text" spellCheck={false} value={draft} disabled={saving || reloading || !!pendingAction} aria-invalid={draftBytes > 1048576} onChange={event => setDraft(event.target.value)} />
+            {draftBytes > 1048576 && <StatusMessage tone="error">{t('errors.TEXT_TOO_LARGE')}</StatusMessage>}
           </> : <pre>{info.text}</pre>}
         </>}
-        {info.kind === 'image' && <>{!loaded && <p role="status">{t('preview.loading')}</p>}<img src={url} alt={name} onLoad={() => setLoaded(true)} onError={failed} /></>}
-        {info.kind === 'pdf' && <><p>{t('preview.pdfHint')}</p><iframe src={url} title={name} onError={failed} /></>}
-        {info.kind === 'audio' && <audio controls preload="metadata" src={url} onError={failed} />}
-        {info.kind === 'video' && <video controls playsInline preload="metadata" src={url} onError={failed} />}
+        {info.kind !== 'text' && <MediaPreview key={url} kind={info.kind} url={url} name={name} />}
       </>}
-    </div>
-  </dialog>;
+  </PreviewDialog>;
 }

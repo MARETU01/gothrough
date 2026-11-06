@@ -1,15 +1,20 @@
 import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteFile, downloadFileUrl, listFiles, type FileListResponse } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { StatusMessage } from '@/components/StatusMessage';
 import { FilePreview } from '@/components/FilePreview';
-import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
+import { DeleteAction } from '@/components/DeleteButton';
+import { RefreshButton } from '@/components/RefreshButton';
+import { Timestamp } from '@/components/Timestamp';
+import { timestampValue } from '@/utils/dateTime';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
@@ -31,12 +36,7 @@ export default function FilesPage() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (confirming === null) return;
-    const timer = setTimeout(() => setConfirming(null), 3000);
-    return () => clearTimeout(timer);
-  }, [confirming]);
+  const deleteInProgress = useRef(false);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
@@ -45,7 +45,7 @@ export default function FilesPage() {
     return files.sort((a, b) => {
       const comparison = field === 'size' ? a.size - b.size
         : field === 'name' ? a.name.localeCompare(b.name, i18n.resolvedLanguage, { numeric: true })
-        : a.mtime.localeCompare(b.mtime);
+        : timestampValue(a.mtime) - timestampValue(b.mtime);
       return (direction === 'asc' ? comparison : -comparison) || a.name.localeCompare(b.name);
     });
   }, [data, query, sort, i18n.resolvedLanguage]);
@@ -57,9 +57,8 @@ export default function FilesPage() {
   const diskPercent = Math.min(100, Math.max(0, data?.disk_pct ?? 0));
 
   async function handleDelete(name: string) {
-    if (deleting !== null) return;
-    if (confirming !== name) { setConfirming(name); return; }
-    setConfirming(null);
+    if (deleteInProgress.current || confirming !== name) return;
+    deleteInProgress.current = true;
     setDeleting(name);
     setError('');
     setNotice('');
@@ -72,8 +71,9 @@ export default function FilesPage() {
       setNotice(message('files.deleted', { name }));
       await refresh();
     } catch (err) {
-      if (mounted.current) { setConfirming(null); setError(message('files.deleteFailed', { name, error: apiErrorDescriptor(err) })); }
+      if (mounted.current) setError(message('files.deleteFailed', { name, error: apiErrorDescriptor(err) }));
     } finally {
+      deleteInProgress.current = false;
       if (mounted.current) setDeleting(null);
     }
   }
@@ -84,7 +84,7 @@ export default function FilesPage() {
         <header className="files-header">
           <div><h1>{t("已上传文件")}</h1><p>{t("浏览和管理已上传的文件")}</p></div>
           <div className="files-actions">
-            <Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? 'app-spin' : undefined} />{t("刷新列表")}</Button>
+            <RefreshButton loading={loading} disabled={deleting !== null} onClick={() => void refresh()} />
             <Button asChild><Link to="/upload"><Upload aria-hidden="true" />{t("上传文件")}</Link></Button>
           </div>
         </header>
@@ -102,24 +102,28 @@ export default function FilesPage() {
         </section>}
         <div className="files-toolbar">
           <input type="search" aria-label={t("搜索文件名")} placeholder={t("搜索文件名…")} value={query} onChange={event => { setQuery(event.target.value); setPage(1); setConfirming(null); }} />
-          <select aria-label={t("文件排序")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
+          <Select aria-label={t("文件排序")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
             {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          </Select>
           <span className="files-count">{t('files.count', { count: filtered.length })}{query.trim() && data ? t('files.total', { count: data.files.length }) : ''}</span>
         </div>
-        {error && <StatusMessage tone="error" action={<Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}>{t("重新加载")}</Button>}>{translateMessage(error)}</StatusMessage>}
+        {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={deleting !== null} onClick={() => void refresh()} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
         {data && <section aria-label={t("文件列表")} aria-busy={loading}>
           {filtered.length > 0 ? <div className="files-table-scroll"><table>
             <thead><tr><th scope="col">{t("文件名")}</th><th scope="col">{t("大小")}</th><th scope="col">{t("修改时间")}</th><th scope="col">{t("操作")}</th></tr></thead>
             <tbody>{pageFiles.map(file => <tr key={file.name}>
-              <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.mtime}</td>
-              <td><div className="files-row-actions">
+              <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time"><Timestamp value={file.mtime} /></td>
+              <td><div className="files-row-actions"><div className="files-action-controls">
                 <Button type="button" variant="outline" size="sm" aria-label={t('preview.open', { name: file.name })} onClick={() => setPreviewing(file.name)}>{t('preview.button')}</Button>
                 <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
-                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={t(confirming === file.name ? 'files.confirmDelete' : 'files.delete', { name: file.name })} onClick={() => void handleDelete(file.name)}>
-                  <Trash2 aria-hidden="true" />{deleting === file.name ? t("删除中…") : confirming === file.name ? t("确认删除？") : t("删除")}
-                </Button>
+                <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => setConfirming(file.name)} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
+              </div><div className="files-actions-sizing" aria-hidden="true">
+                <Button asChild variant="outline" size="sm"><span>{t('preview.button')}</span></Button>
+                <Button asChild variant="outline" size="sm"><span><Download aria-hidden="true" />{t('下载')}</span></Button>
+                <Button asChild variant="destructive"><span>{t('确认删除')}</span></Button>
+                <Button asChild variant="ghost"><span>{t('取消')}</span></Button>
+              </div>
               </div></td>
             </tr>)}</tbody>
           </table></div> : <div className="files-empty">{data.files.length === 0 ? <>{t("还没有上传文件，先去")}<Link to="/upload">{t("上传文件")}</Link>{t("吧。")}</> : <>{t("没有找到匹配的文件。")}<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>{t("清除搜索")}</Button></>}</div>}

@@ -6,14 +6,7 @@
   justify-content: center;
   align-items: center;
   padding: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 16px;
-}
-
-/* 原页面通过 * 选择器给所有元素（含按钮 / 输入框）统一了字体 */
-.upload-page button,
-.upload-page input {
-  font-family: inherit;
 }
 
 /* 卡片样式与 Home 的 .feature-card 一致：半透明白 + 15px 圆角 + 薄荷描边 */
@@ -49,17 +42,6 @@
   gap: 20px;
 }
 
-.upload-page .nav-links a {
-  color: #00796b;
-  text-decoration: none;
-  font-weight: 600;
-  transition: color 0.2s;
-}
-
-.upload-page .nav-links a:hover {
-  color: #26a69a;
-}
-
 .upload-page .upload-area {
   border: 2px dashed #80cbc4;
   border-radius: 10px;
@@ -85,23 +67,6 @@
 .upload-page .upload-text {
   color: #555;
   margin-bottom: 20px;
-}
-
-.upload-page .browse-btn {
-  background: linear-gradient(to right, #00796b, #26a69a);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 50px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 121, 107, 0.3);
-}
-
-.upload-page .browse-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 121, 107, 0.4);
 }
 
 .upload-page input[type='file'] {
