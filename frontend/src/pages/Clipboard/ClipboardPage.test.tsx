@@ -65,7 +65,7 @@ it('publishes literal multiline text, refreshes history, and copies it', async (
   await screen.findByText('还没有共享内容，发布第一段文本吧。');
   const text = '  中文\n<script>alert(1)</script>\t ';
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: text } });
-  fireEvent.click(screen.getByRole('button', { name: '发布文本' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   await screen.findByRole('article', { name: '记录 1' });
   expect(createClipboard).toHaveBeenCalledWith(text);
   expect(screen.getByLabelText('输入或粘贴文本').getAttribute('disabled')).toBeNull();
@@ -89,7 +89,7 @@ it('previews and publishes a selected image without changing the text draft, rel
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: 'text draft' } });
   fireEvent.change(input, { target: { files: [file] } });
   expect(screen.getByAltText('待发布图片预览').getAttribute('src')).toBe('blob:preview');
-  fireEvent.click(screen.getByRole('button', { name: '发布图片' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   await screen.findByText('图片已发布。');
   await waitFor(() => expect(screen.queryByAltText('待发布图片预览')).toBeNull());
   expect(createClipboardImage).toHaveBeenCalledWith(file);
@@ -106,7 +106,7 @@ it('accepts pasted screenshots and keeps the image draft after publication fails
   fireEvent.paste(screen.getByLabelText('输入或粘贴文本'), { clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }] } });
   expect(screen.getByAltText('待发布图片预览')).toBeTruthy();
   vi.mocked(createClipboardImage).mockRejectedValueOnce(new Error('upload failed'));
-  fireEvent.click(screen.getByRole('button', { name: '发布图片' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   expect((await screen.findByRole('alert')).textContent).toContain('upload failed');
   expect(screen.getByAltText('待发布图片预览')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '移除图片' }));
@@ -154,7 +154,7 @@ it('uses server image limits and rejects unsupported local files', async () => {
   await screen.findByText(/每张最多 1 MiB/);
   fireEvent.change(screen.getByLabelText(/选择图片，或/), { target: { files: [new File(['svg'], 'a.svg', { type: 'image/svg+xml' })] } });
   expect(screen.getByRole('alert').textContent).toContain('PNG 或 JPEG');
-  expect((screen.getByRole('button', { name: '发布图片' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: '发布' }) as HTMLButtonElement).disabled).toBe(true);
   expect(createClipboardImage).not.toHaveBeenCalled();
 });
 
@@ -162,7 +162,7 @@ it('rejects whitespace and counts the UTF-8 byte limit', async () => {
   render(createElement(ClipboardPage));
   await screen.findByText('还没有共享内容，发布第一段文本吧。');
   const input = screen.getByLabelText('输入或粘贴文本');
-  const publish = screen.getByRole('button', { name: '发布文本' }) as HTMLButtonElement;
+  const publish = screen.getByRole('button', { name: '发布' }) as HTMLButtonElement;
   fireEvent.change(input, { target: { value: ' \n\t　' } });
   expect(publish.disabled).toBe(true);
   fireEvent.change(input, { target: { value: '中'.repeat(Math.floor(CLIPBOARD_MAX_BYTES / 3) + 1) } });
@@ -173,15 +173,30 @@ it('rejects whitespace and counts the UTF-8 byte limit', async () => {
   expect(createClipboard).not.toHaveBeenCalled();
 });
 
+it('uses one submit button and removing an image does not publish either draft', async () => {
+  render(createElement(ClipboardPage));
+  await waitFor(() => expect((screen.getByLabelText(/选择图片，或/) as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '保留的文本' } });
+  fireEvent.change(screen.getByLabelText(/选择图片，或/), { target: { files: [new File(['png'], 'a.png', { type: 'image/png' })] } });
+  expect(screen.getAllByRole('button', { name: '发布' })).toHaveLength(1);
+  expect(screen.getByText(/本次发布图片，文本草稿将保留/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '移除图片' }));
+  expect(createClipboardImage).not.toHaveBeenCalled();
+  expect(createClipboard).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
+  await screen.findByText('文本已发布。');
+  expect(createClipboard).toHaveBeenCalledWith('保留的文本');
+});
+
 it('keeps the draft after a failed publish and allows retry', async () => {
   vi.mocked(createClipboard).mockRejectedValueOnce(new Error('磁盘不可写'));
   render(createElement(ClipboardPage));
   await screen.findByText('还没有共享内容，发布第一段文本吧。');
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '保留草稿' } });
-  fireEvent.click(screen.getByRole('button', { name: '发布文本' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   expect((await screen.findByRole('alert')).textContent).toContain('磁盘不可写');
   expect((screen.getByLabelText('输入或粘贴文本') as HTMLTextAreaElement).value).toBe('保留草稿');
-  fireEvent.click(screen.getByRole('button', { name: '发布文本' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   await screen.findByRole('article', { name: '记录 1' });
   expect(createClipboard).toHaveBeenCalledTimes(2);
 });
@@ -300,7 +315,7 @@ it('invalidates the validator after a successful mutation even when the full res
   await openPollingPage();
   vi.mocked(listClipboard).mockRejectedValueOnce(new Error('resync failed'));
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: 'new' } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布文本' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布' })); });
   expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
   // The server can return to the original representation before the next poll.
   history = [record('old')];
@@ -365,7 +380,7 @@ it('pauses polling during publication and resumes after its list refresh', async
   let finish!: (entry: ClipboardEntry) => void;
   vi.mocked(createClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '发布中' } });
-  fireEvent.click(screen.getByRole('button', { name: '发布文本' }));
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
   await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 3);
   expect(listClipboard).toHaveBeenCalledTimes(1);
   await act(async () => {
@@ -438,7 +453,7 @@ it('retains data and operation errors after a failed poll and retries automatica
   await openPollingPage();
   vi.mocked(createClipboard).mockRejectedValueOnce(new Error('发布失败'));
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '草稿' } });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布文本' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布' })); });
   vi.mocked(listClipboard).mockRejectedValueOnce(new Error('offline'));
   await advancePoll();
   expect(screen.getByText('当前内容')).toBeTruthy();

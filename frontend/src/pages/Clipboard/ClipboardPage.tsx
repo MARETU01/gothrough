@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
-import { Clipboard, Copy, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { Clipboard, Copy, Download, ExternalLink, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
 import {
   CLIPBOARD_MAX_BYTES, CLIPBOARD_MAX_ENTRIES,
-  createClipboard, createClipboardImage, fetchClipboardImage, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry,
+  createClipboard, createClipboardImage, fetchClipboardImage, getClipboardImageSettings, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry, type ClipboardImageSettings,
 } from '@/services/clipboard';
 import { apiErrorMessage } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
@@ -17,6 +17,9 @@ import { ClipboardImageComposer } from './ClipboardImageComposer';
 export default function ClipboardPage() {
   const [text, setText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const { data: imageSettings, error: imageSettingsError, refresh: reloadImageSettings } =
+    useRemoteData<ClipboardImageSettings | null>(getClipboardImageSettings, null);
+  const imageInvalid = !!imageFile && (!['image/png', 'image/jpeg'].includes(imageFile.type) || !!imageSettings && imageFile.size > imageSettings.max_size_mb * 1024 * 1024);
   const etag = useRef<string | undefined>(undefined);
   const loadEntries = useCallback(async (signal?: AbortSignal, context?: RemoteLoadContext) => {
     const result = await listClipboard(signal, context?.background ? etag.current : undefined);
@@ -81,6 +84,13 @@ export default function ClipboardPage() {
   };
 
   const publish = () => {
+    if (imageFile) {
+      if (!imageSettings?.enabled || imageInvalid) return;
+      return runMutation(() => createClipboardImage(imageFile), entry => {
+        setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
+        setImageFile(null);
+      }, '图片已发布。');
+    }
     if (!text.trim() || tooLarge) return;
     return runMutation(() => createClipboard(text), entry => {
       setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
@@ -103,10 +113,6 @@ export default function ClipboardPage() {
       setConfirmingAll(false);
       setManualCopy(null);
     }, '全部记录已删除。');
-
-  const publishImage = (file: File) => runMutation(() => createClipboardImage(file), entry => {
-    setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
-  }, '图片已发布。');
 
   const copy = async (entry: ClipboardEntry) => {
     if (copyInProgress.current) return;
@@ -153,29 +159,34 @@ export default function ClipboardPage() {
         </header>
 
         <form className="clipboard-composer" onSubmit={event => { event.preventDefault(); void publish(); }}>
-          <label htmlFor="clipboard-text">输入或粘贴文本</label>
+          <div className="clipboard-compose-header">
+            <label htmlFor="clipboard-text">输入或粘贴文本</label>
+            <Button type="submit" disabled={busy || (imageFile ? !imageSettings?.enabled || imageInvalid : !text.trim() || tooLarge)}>
+              <Send aria-hidden="true" />{busy ? '处理中…' : '发布'}
+            </Button>
+          </div>
           <textarea id="clipboard-text" value={text} disabled={busy} rows={6}
             placeholder="在这里输入或粘贴文本……" aria-describedby="clipboard-limit"
             aria-invalid={tooLarge} onChange={event => setText(event.target.value)} />
+          <ClipboardImageComposer file={imageFile} onSelect={setImageFile} busy={busy}
+            settings={imageSettings} error={imageSettingsError} invalid={imageInvalid} onRetry={() => void reloadImageSettings()} />
           <div className="clipboard-compose-actions">
-            <p id="clipboard-limit" className={tooLarge ? 'clipboard-limit-error' : ''}>
-              {byteLength.toLocaleString()} / {CLIPBOARD_MAX_BYTES.toLocaleString()} 字节 · 每条最多 64 KiB
+            <p id="clipboard-limit" className={!imageFile && tooLarge ? 'clipboard-limit-error' : ''}>
+              {imageFile ? '本次发布图片，文本草稿将保留。移除图片后可发布文本。'
+                : `${byteLength.toLocaleString()} / ${CLIPBOARD_MAX_BYTES.toLocaleString()} 字节 · 每条最多 64 KiB`}
             </p>
-            <Button type="submit" disabled={busy || !text.trim() || tooLarge}>
-              <Send aria-hidden="true" />{busy ? '处理中…' : '发布文本'}
-            </Button>
           </div>
         </form>
-
-        <ClipboardImageComposer file={imageFile} onSelect={setImageFile} onPublish={publishImage} busy={busy} />
 
         {error && <StatusMessage tone="error">{error}</StatusMessage>}
         {notice && <StatusMessage tone="success">{notice}</StatusMessage>}
         {manualCopy && <section className="clipboard-manual" aria-label="手动复制">
           {manualCopy.type === 'image' ? <>
             <p>无法直接复制图片，请使用 HTTPS 或 localhost 并允许剪贴板权限；也可以打开或下载图片后手动复制。</p>
-            <a href={manualCopy.image?.url} target="_blank" rel="noreferrer">打开图片</a>{' · '}
-            <a href={`${manualCopy.image?.url}?download=1`}>下载图片</a>
+            <div className="clipboard-entry-actions">
+              <Button asChild variant="outline"><a href={manualCopy.image?.url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />打开图片</a></Button>
+              <Button asChild variant="outline"><a href={`${manualCopy.image?.url}?download=1`} download><Download aria-hidden="true" />下载图片</a></Button>
+            </div>
           </> : <>
           <label htmlFor="clipboard-manual-text">无法自动复制，请复制下方已选中的文本（Ctrl+C / ⌘C，或长按复制）。</label>
           <textarea id="clipboard-manual-text" readOnly rows={4} value={manualCopy.text}
@@ -221,7 +232,7 @@ export default function ClipboardPage() {
                   <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString()}</time>
                   <div className="clipboard-entry-actions">
                     <Button variant="outline" disabled={copying} onClick={() => void copy(entry)} aria-label={`复制记录 ${index + 1}`}><Copy aria-hidden="true" />复制</Button>
-                    {entry.type === 'image' && entry.image && <a href={`${entry.image.url}?download=1`}>下载图片</a>}
+                    {entry.type === 'image' && entry.image && <Button asChild variant="outline"><a href={`${entry.image.url}?download=1`} download><Download aria-hidden="true" />下载图片</a></Button>}
                     {confirming === entry.id ? <>
                       <Button variant="destructive" disabled={busy} onClick={() => void removeEntry(entry.id)} aria-label={`确认删除记录 ${index + 1}`}>确认删除</Button>
                       <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>取消</Button>
