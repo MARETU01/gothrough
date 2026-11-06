@@ -18,6 +18,7 @@ import (
 type Settings struct {
 	Server  ServerSettings  `yaml:"server"`
 	Storage StorageSettings `yaml:"storage"`
+	Logging LoggingSettings `yaml:"logging"`
 	Source  string          `yaml:"-"`
 }
 
@@ -56,6 +57,7 @@ func Load(path string) (*Settings, error) {
 func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) (*Settings, error) {
 	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 8080}, Source: "内置默认值"}
 	cfg.Storage.DataDir = exeDir
+	cfg.Logging = DefaultLoggingSettings()
 	if path == "" {
 		path, _ = lookup("GOTHROUGH_CONFIG")
 	}
@@ -126,6 +128,61 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 		cfg.Storage.DataDir = filepath.Join(base, cfg.Storage.DataDir)
 	}
 	cfg.Storage.DataDir = filepath.Clean(cfg.Storage.DataDir)
+	for _, binding := range []struct {
+		name   string
+		target *string
+	}{
+		{"GOTHROUGH_LOG_LEVEL", &cfg.Logging.Level}, {"GOTHROUGH_LOG_FORMAT", &cfg.Logging.Format},
+		{"GOTHROUGH_LOG_FILE_PATH", &cfg.Logging.File.Path},
+	} {
+		if value, ok := lookup(binding.name); ok {
+			*binding.target = value
+		}
+	}
+	for _, binding := range []struct {
+		name   string
+		target *bool
+	}{
+		{"GOTHROUGH_ACCESS_LOG", &cfg.Logging.AccessLog}, {"GOTHROUGH_LOG_POLLING", &cfg.Logging.LogPolling},
+		{"GOTHROUGH_LOG_CHUNKS", &cfg.Logging.LogChunks}, {"GOTHROUGH_LOG_FILE_ENABLED", &cfg.Logging.File.Enabled},
+	} {
+		if value, ok := lookup(binding.name); ok {
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, fmt.Errorf("%s 必须为 true 或 false", binding.name)
+			}
+			*binding.target = parsed
+		}
+	}
+	for _, binding := range []struct {
+		name   string
+		target *int
+	}{
+		{"GOTHROUGH_LOG_FILE_MAX_SIZE_MB", &cfg.Logging.File.MaxSizeMB},
+		{"GOTHROUGH_LOG_FILE_MAX_BACKUPS", &cfg.Logging.File.MaxBackups},
+	} {
+		if value, ok := lookup(binding.name); ok {
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, fmt.Errorf("%s 必须是整数", binding.name)
+			}
+			*binding.target = parsed
+		}
+	}
+	cfg.Logging.Level = strings.ToLower(strings.TrimSpace(cfg.Logging.Level))
+	cfg.Logging.Format = strings.ToLower(strings.TrimSpace(cfg.Logging.Format))
+	if err := cfg.Logging.Validate(); err != nil {
+		return nil, err
+	}
+	if cfg.Logging.File.Path != "" && !filepath.IsAbs(cfg.Logging.File.Path) {
+		cfg.Logging.File.Path = filepath.Join(cfg.Storage.DataDir, cfg.Logging.File.Path)
+	}
+	if cfg.Logging.File.Enabled {
+		tempDir := filepath.Join(cfg.Storage.DataDir, "temp_uploads")
+		if rel, err := filepath.Rel(tempDir, cfg.Logging.File.Path); err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))) {
+			return nil, fmt.Errorf("日志文件不能保存在临时上传目录中")
+		}
+	}
 	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
 		return nil, fmt.Errorf("server.port 必须在 1 到 65535 之间")
 	}

@@ -1,4 +1,15 @@
 # Environment variables override these values; see doc/configuration.md.
+logging:
+  level: "info"
+  format: "text" # text or json
+  access_log: true # Successful requests; failures still follow WARN/ERROR levels.
+  log_polling: false
+  log_chunks: false
+  file:
+    enabled: false
+    path: "logs/gothrough.log" # Relative to storage.data_dir.
+    max_size_mb: 10
+    max_backups: 5
 storage:
   # Relative to this config file; ".." keeps data beside the config/ directory.
   data_dir: ".."

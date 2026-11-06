@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -284,7 +284,9 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 		return "", 0, utils.StorageError("发布上传文件失败", err)
 	}
 	entry.closed = true
-	_ = entry.file.Close()
+	if err := entry.file.Close(); err != nil {
+		slog.Warn("关闭已发布的上传文件失败", "event", "upload.close_failed", "session_id", id, "error", err)
+	}
 	s.remove(entry)
 	return entry.info.FinalFilename, stat.Size(), nil
 }
@@ -296,7 +298,7 @@ func (s *UploadService) remove(entry *transferSession) {
 	s.mu.Unlock()
 	if err := os.RemoveAll(entry.info.ChunksDir); err != nil {
 		// The published file is already durable; stale temporary files are removed at startup.
-		log.Printf("清理上传临时文件失败: %v", err)
+		slog.Warn("清理上传临时文件失败", "event", "upload.cleanup_failed", "session_id", entry.info.SessionID, "error", err)
 	}
 }
 
@@ -334,11 +336,15 @@ func (s *UploadService) ExpireIdle(age time.Duration) {
 		entry.mu.Unlock()
 		if stale && !entry.closed {
 			entry.closed = true
-			_ = entry.file.Close()
+			if err := entry.file.Close(); err != nil {
+				slog.Warn("关闭过期上传文件失败", "event", "upload.close_failed", "session_id", entry.info.SessionID, "error", err)
+			}
 			s.remove(entry)
+			slog.Info("过期上传会话已清理", "event", "upload.expired", "session_id", entry.info.SessionID, "size_bytes", entry.info.TotalSize)
 		}
 		entry.lifecycle.Unlock()
 	}
+	slog.Debug("闲置上传会话检查完成", "event", "upload.cleanup_scan", "sessions", len(entries))
 }
 
 func (s *UploadService) Close() {
@@ -348,7 +354,17 @@ func (s *UploadService) Close() {
 		ids = append(ids, id)
 	}
 	s.mu.RUnlock()
+	closed := 0
 	for _, id := range ids {
-		_ = s.CancelSession(id)
+		if err := s.CancelSession(id); err != nil {
+			if !errors.Is(err, ErrSession) {
+				slog.Warn("关闭上传会话失败", "event", "upload.shutdown_cleanup_failed", "session_id", id, "error", err)
+			}
+		} else {
+			closed++
+		}
+	}
+	if closed > 0 {
+		slog.Info("服务关闭时已释放上传会话", "event", "upload.shutdown_cleanup", "sessions", closed)
 	}
 }

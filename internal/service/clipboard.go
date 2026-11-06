@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,7 +137,11 @@ func (s *ClipboardService) save(entries []model.ClipboardEntry) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer func() {
+		if err := os.Remove(f.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("清理剪贴板临时文件失败", "event", "clipboard.cleanup_failed", "error", err)
+		}
+	}()
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(entries); err != nil {
 		return err

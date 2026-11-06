@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,9 +52,7 @@ func Init(dataDir string) error {
 		return err
 	}
 	BaseDir, UploadFolder, TempFolder, ClipboardFolder = base, upload, temp, clipboard
-	log.Printf("数据目录: %s", BaseDir)
-	log.Printf("上传目录: %s", UploadFolder)
-	log.Printf("临时目录: %s", TempFolder)
+	slog.Info("数据目录已初始化", "event", "storage.ready", "data_dir", BaseDir, "upload_dir", UploadFolder, "temp_dir", TempFolder, "clipboard_dir", ClipboardFolder)
 	return nil
 }
 
@@ -70,6 +68,7 @@ func cleanupTempUploads(dir string) error {
 		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
 			return utils.StorageError("清理残留上传失败", err)
 		}
+		slog.Info("残留上传会话已清理", "event", "upload.startup_cleanup", "session_id", entry.Name())
 	}
 	return nil
 }

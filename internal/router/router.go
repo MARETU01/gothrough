@@ -3,14 +3,17 @@ package router
 import (
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
+	"github.com/MARETU01/gothrough/internal/logging"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 )
 
 // 注册所有路由
-func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler) *gin.Engine {
+func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, logSettings config.LoggingSettings) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+	r.Use(logging.HTTP(slog.Default(), logSettings), logging.Recovery())
 
 	r.MaxMultipartMemory = config.MaxMultipartMemory
 

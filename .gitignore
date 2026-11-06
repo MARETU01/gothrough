@@ -37,6 +37,7 @@ go.work.sum
 /uploads/
 /temp_uploads/
 /clipboard/
+/logs/
 
 # Local TLS certificates and private keys
 /config/certs/

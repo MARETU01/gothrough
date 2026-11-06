@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"log"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,25 +15,46 @@ import (
 
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
+	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/router"
 	"github.com/MARETU01/gothrough/internal/service"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Print(err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run() (runErr error) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	var closer io.Closer
+	defer func() {
+		if runErr != nil {
+			slog.Error("服务启动或运行失败", "event", "server.failed", "error", runErr)
+		}
+		if closer != nil {
+			runErr = errors.Join(runErr, closer.Close())
+		}
+	}()
 	configPath := flag.String("config", "", "YAML config path (or GOTHROUGH_CONFIG)")
 	flag.Parse()
 	settings, err := config.Load(*configPath)
 	if err != nil {
 		return err
 	}
-	log.Printf("配置来源: %s", settings.Source)
+	logger, closer, err := logging.New(settings.Logging, os.Stdout)
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(logger)
+	slog.Info("配置已加载", "event", "config.loaded", "source", settings.Source)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return serve(ctx, settings)
+}
+
+func serve(ctx context.Context, settings *config.Settings) error {
 	if err := config.Init(settings.Storage.DataDir); err != nil {
 		return err
 	}
@@ -39,38 +62,48 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
+	cleanupCtx, stopCleanup := context.WithCancel(ctx)
 	uploadService := service.NewUploadService()
 	defer uploadService.Close()
+	cleanupDone := make(chan struct{})
 	go func() {
+		defer close(cleanupDone)
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				uploadService.ExpireIdle(24 * time.Hour)
-			case <-ctx.Done():
+			case <-cleanupCtx.Done():
 				return
 			}
 		}
 	}()
+	defer func() { stopCleanup(); <-cleanupDone }()
 	uploadHandler := handler.NewUploadHandler(uploadService)
 	clipboardHandler := handler.NewClipboardHandler(clipboardService)
-	r := router.SetupRouter(uploadHandler, clipboardHandler)
+	r := router.SetupRouter(uploadHandler, clipboardHandler, settings.Logging)
 
 	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,
-		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Minute, IdleTimeout: 90 * time.Second}
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Minute, IdleTimeout: 90 * time.Second,
+		ErrorLog: slog.NewLogLogger(slog.Default().With("event", "server.http_error").Handler(), slog.LevelError)}
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+	protocol := "http"
+	if settings.Server.TLS.Enabled {
+		protocol = "https"
+	}
+	slog.Info("服务已开始监听", "event", "server.started", "protocol", protocol, "address", listener.Addr().String())
 	errorsCh := make(chan error, 1)
 	go func() {
 		if settings.Server.TLS.Enabled {
-			log.Printf("启动 HTTPS 文件传输服务器，监听 %s", address)
-			errorsCh <- server.ListenAndServeTLS(settings.Server.TLS.CertFile, settings.Server.TLS.KeyFile)
+			errorsCh <- server.ServeTLS(listener, settings.Server.TLS.CertFile, settings.Server.TLS.KeyFile)
 		} else {
-			log.Printf("启动 HTTP 文件传输服务器，监听 %s", address)
-			errorsCh <- server.ListenAndServe()
+			errorsCh <- server.Serve(listener)
 		}
 	}()
 	select {
@@ -79,11 +112,16 @@ func run() error {
 			return err
 		}
 	case <-ctx.Done():
+		slog.Info("服务开始关闭", "event", "server.stopping", "grace_period_seconds", 30)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			_ = server.Close()
+			slog.Warn("优雅关闭未完成，正在强制关闭连接", "event", "server.shutdown_timeout", "error", err)
+			if closeErr := server.Close(); closeErr != nil {
+				slog.Error("关闭 HTTP 连接失败", "event", "server.close_failed", "error", closeErr)
+			}
 		}
 	}
+	slog.Info("HTTP 服务已停止", "event", "server.stopped")
 	return nil
 }

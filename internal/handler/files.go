@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/MARETU01/gothrough/internal/config"
+	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +18,7 @@ import (
 func (h *UploadHandler) ListUploads(c *gin.Context) {
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
+		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -40,18 +42,25 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 
 	root, err := os.OpenRoot(config.UploadFolder)
 	if err != nil {
+		_ = c.Error(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 	defer root.Close()
 	file, err := root.Open(rel)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			_ = c.Error(err)
+		}
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
+		if err != nil {
+			_ = c.Error(err)
+		}
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
@@ -75,10 +84,12 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
+		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	logging.FromContext(c.Request.Context()).Info("文件已删除", "event", "file.deleted", "relative_path", rel)
 	c.JSON(http.StatusOK, gin.H{
 		"status":   "deleted",
 		"filename": rel,
@@ -89,6 +100,7 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 func (h *UploadHandler) DiskInfo(c *gin.Context) {
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
+		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

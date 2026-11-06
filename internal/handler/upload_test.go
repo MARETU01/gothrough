@@ -36,7 +36,7 @@ func setup(t testing.TB) (*service.UploadService, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard))
+	return s, router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard), config.DefaultLoggingSettings())
 }
 
 func post(t *testing.T, h http.Handler, path, contentType string, body io.Reader) *httptest.ResponseRecorder {

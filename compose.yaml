@@ -9,6 +9,11 @@ services:
       - ./config/config.yaml:/app/config/config.yaml:ro
     restart: unless-stopped
     stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   gothrough-data:

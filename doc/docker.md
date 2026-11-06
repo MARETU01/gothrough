@@ -53,6 +53,8 @@ docker run -d --name gothrough \
 
 访问 `http://localhost:8080`。容器以 UID/GID `10001:10001` 运行。程序退出时可获得最多 40 秒的停止宽限期，配合应用自身的 30 秒请求等待时间。
 
+应用日志统一输出到标准输出，可使用 `docker compose logs -f --tail=100` 查看。Compose 的 Docker 日志按每文件 `10m`、最多 `3` 个文件轮转。应用默认不额外写日志文件；JSON 格式、访问日志过滤和可选文件输出见[日志说明](logging.md)。
+
 ### 使用 Compose
 
 ```sh

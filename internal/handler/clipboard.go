@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 
+	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/service"
 	"github.com/gin-gonic/gin"
@@ -62,6 +62,7 @@ func (h *ClipboardHandler) Create(c *gin.Context) {
 		clipboardFailure(c, err)
 		return
 	}
+	logging.FromContext(c.Request.Context()).Info("剪贴板文本已发布", "event", "clipboard.created", "entry_id", entry.ID, "size_bytes", len(entry.Text))
 	c.JSON(http.StatusCreated, entry)
 }
 
@@ -76,6 +77,7 @@ func (h *ClipboardHandler) Delete(c *gin.Context) {
 		clipboardFailure(c, err)
 		return
 	}
+	logging.FromContext(c.Request.Context()).Info("剪贴板记录已删除", "event", "clipboard.deleted", "entry_id", c.Param("id"))
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
@@ -85,10 +87,11 @@ func (h *ClipboardHandler) Clear(c *gin.Context) {
 		clipboardFailure(c, err)
 		return
 	}
+	logging.FromContext(c.Request.Context()).Info("剪贴板记录已清空", "event", "clipboard.cleared")
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
 func clipboardFailure(c *gin.Context, err error) {
-	log.Printf("剪贴板存储失败: %v", err)
+	_ = c.Error(err)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "剪贴板存储失败，请稍后重试"})
 }

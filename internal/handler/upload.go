@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
+	"uuid"
 
 	"github.com/MARETU01/gothrough/internal/config"
+	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/service"
 	"github.com/MARETU01/gothrough/internal/utils"
@@ -38,6 +41,8 @@ func (h *UploadHandler) UploadInit(c *gin.Context) {
 		uploadError(c, err)
 		return
 	}
+	withUploadSession(c, session.SessionID)
+	logging.FromContext(c.Request.Context()).Info("上传会话已创建", "event", "upload.started", "size_bytes", session.TotalSize, "total_chunks", session.TotalChunks)
 
 	c.JSON(http.StatusOK, gin.H{
 		"session_id":       session.SessionID,
@@ -102,6 +107,8 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 }
 
 func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io.Reader) {
+	withUploadSession(c, id)
+	logging.WithRequestFields(c, "chunk_index", index)
 	count, err := h.uploadService.WriteChunk(id, index, body)
 	if err != nil {
 		uploadError(c, err)
@@ -113,9 +120,11 @@ func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io
 // 查询上传进度
 func (h *UploadHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
+	withUploadSession(c, sessionID)
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
+		_ = c.Error(err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -144,15 +153,18 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 	if !ok {
 		return
 	}
+	withUploadSession(c, sessionID)
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
+		_ = c.Error(err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
 	finalFilename, actualSize, err := h.uploadService.CompleteSession(sessionID)
 	if err != nil {
+		_ = c.Error(err)
 		if errors.Is(err, service.ErrMissingChunks) {
 			missing := []int{}
 			for i := 0; i < session.TotalChunks; i++ {
@@ -178,6 +190,10 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 		return
 	}
 
+	if started, parseErr := time.Parse(time.RFC3339, session.CreatedAt); parseErr == nil {
+		logging.WithRequestFields(c, "upload_elapsed_ms", max(0, time.Since(started).Milliseconds()))
+	}
+	logging.FromContext(c.Request.Context()).Info("文件上传已完成", "event", "upload.completed", "size_bytes", actualSize)
 	c.JSON(http.StatusOK, gin.H{
 		"original_filename": session.OriginalFilename,
 		"saved_filename":    finalFilename,
@@ -193,11 +209,14 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 	if !ok {
 		return
 	}
+	withUploadSession(c, sessionID)
 
 	if err := h.uploadService.CancelSession(sessionID); err != nil {
+		_ = c.Error(err)
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	logging.FromContext(c.Request.Context()).Info("上传会话已取消", "event", "upload.cancelled")
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":     "cancelled",
@@ -215,7 +234,15 @@ func sessionIDFromRequest(c *gin.Context) (string, bool) {
 }
 
 func uploadError(c *gin.Context, err error) {
+	_ = c.Error(err)
 	c.JSON(uploadErrorStatus(c, err), gin.H{"error": err.Error()})
+}
+
+func withUploadSession(c *gin.Context, id string) {
+	// Only normalized UUIDs become log fields; arbitrary request values are omitted.
+	if parsed, err := uuid.Parse(id); err == nil {
+		logging.WithRequestFields(c, "session_id", parsed.String())
+	}
 }
 
 func uploadErrorStatus(c *gin.Context, err error) int {
