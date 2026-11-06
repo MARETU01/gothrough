@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/model"
@@ -20,7 +21,20 @@ func NewClipboardHandler(s *service.ClipboardService) *ClipboardHandler {
 
 func (h *ClipboardHandler) List(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"entries": h.service.List()})
+	body, etag := h.service.Snapshot()
+	c.Header("ETag", etag)
+	// GET uses weak comparison. Our validators contain only hexadecimal digits,
+	// so splitting a client's list cannot split a matching opaque tag.
+	for _, value := range c.Request.Header.Values("If-None-Match") {
+		for _, candidate := range strings.Split(value, ",") {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "*" || strings.TrimPrefix(candidate, "W/") == etag {
+				c.Status(http.StatusNotModified)
+				return
+			}
+		}
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
 }
 
 func (h *ClipboardHandler) Create(c *gin.Context) {

@@ -106,3 +106,46 @@ func TestClipboardHTTPValidation(t *testing.T) {
 		t.Fatalf("escaped boundary: %d %s", res.Code, res.Body.String())
 	}
 }
+
+func TestClipboardConditionalList(t *testing.T) {
+	_, h := setup(t)
+	get := func(validators ...string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/clipboard", nil)
+		for _, value := range validators {
+			req.Header.Add("If-None-Match", value)
+		}
+		res := httptest.NewRecorder()
+		h.ServeHTTP(res, req)
+		return res
+	}
+	initial := get()
+	etag := initial.Header().Get("ETag")
+	if initial.Code != 200 || !strings.HasPrefix(etag, `"`) || !strings.HasSuffix(etag, `"`) {
+		t.Fatalf("initial response: %d %q", initial.Code, etag)
+	}
+	for _, validators := range [][]string{{etag}, {"W/" + etag}, {`"other", W/` + etag}, {"*"}, {`"other"`, etag}} {
+		res := get(validators...)
+		if res.Code != 304 || res.Body.Len() != 0 || res.Header().Get("ETag") != etag || res.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("conditional response for %q: %d %s", validators, res.Code, res.Body.String())
+		}
+	}
+	for _, value := range []string{`"different"`, strings.Trim(etag, `"`), "w/" + etag} {
+		if res := get(value); res.Code != 200 || res.Body.String() != initial.Body.String() {
+			t.Fatalf("nonmatching validator %q: %d", value, res.Code)
+		}
+	}
+	created := post(t, h, "/api/clipboard", "application/json", strings.NewReader(`{"text":"new text"}`))
+	if created.Code != 201 {
+		t.Fatal(created.Body.String())
+	}
+	changed := get(etag)
+	if changed.Code != 200 || changed.Header().Get("ETag") == etag || !strings.Contains(changed.Body.String(), "new text") {
+		t.Fatalf("changed response: %d %s", changed.Code, changed.Body.String())
+	}
+	clear := httptest.NewRecorder()
+	h.ServeHTTP(clear, httptest.NewRequest(http.MethodDelete, "/api/clipboard", nil))
+	if res := get(changed.Header().Get("ETag")); clear.Code != 200 || res.Code != 200 || res.Body.String() != initial.Body.String() || res.Header().Get("ETag") != etag {
+		t.Fatalf("cleared response: %d %s", res.Code, res.Body.String())
+	}
+}

@@ -1,8 +1,45 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useRemoteData } from './useRemoteData';
+import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from './useRemoteData';
 
 afterEach(cleanup);
+
+it('keeps the same data on an unchanged response and clears only sync errors', async () => {
+  const entries = ['existing'];
+  const load = vi.fn<() => Promise<string[] | typeof NOT_MODIFIED>>()
+    .mockResolvedValueOnce(entries).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(NOT_MODIFIED);
+  const hook = renderHook(() => useRemoteData<string[]>(load, []));
+  await waitFor(() => expect(hook.result.current.data).toBe(entries));
+  act(() => hook.result.current.setError('operation failed'));
+  await act(async () => { await hook.result.current.refresh({ background: true }); });
+  expect(hook.result.current.backgroundError).toBe('offline');
+  await act(async () => { await hook.result.current.refresh({ background: true }); });
+  expect(hook.result.current.data).toBe(entries);
+  expect(hook.result.current.backgroundError).toBe('');
+  expect(hook.result.current.error).toBe('operation failed');
+});
+
+it('commits response metadata only with accepted data, including cancelled late responses', async () => {
+  const pending = deferred<string>();
+  const commit = vi.fn();
+  const staleCommit = vi.fn();
+  const load = vi.fn<(signal?: AbortSignal, context?: RemoteLoadContext) => Promise<string>>()
+    .mockImplementationOnce(async (_, context) => { context?.onAccepted(commit); return 'initial'; })
+    .mockImplementationOnce(async (_, context) => {
+      const data = await pending.promise;
+      context?.onAccepted(staleCommit);
+      return data;
+    });
+  const hook = renderHook(() => useRemoteData(load, ''));
+  await waitFor(() => expect(hook.result.current.data).toBe('initial'));
+  expect(commit).toHaveBeenCalledOnce();
+  let poll!: Promise<void>;
+  act(() => { poll = hook.result.current.refresh({ background: true }); });
+  act(() => hook.result.current.cancelBackground());
+  await act(async () => { pending.resolve('stale'); await poll; });
+  expect(staleCommit).not.toHaveBeenCalled();
+  expect(hook.result.current.data).toBe('initial');
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

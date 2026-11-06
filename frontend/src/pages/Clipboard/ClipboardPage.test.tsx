@@ -25,7 +25,10 @@ beforeEach(() => {
     history = [];
     return { status: 'deleted' };
   });
-  vi.mocked(listClipboard).mockImplementation(async () => ({ entries: [...history] }));
+  vi.mocked(listClipboard).mockImplementation(async (_, etag) => {
+    const current = JSON.stringify(history);
+    return etag === current ? { notModified: true, etag: current } : { entries: [...history], etag: current };
+  });
   vi.mocked(createClipboard).mockImplementation(async text => {
     const entry = record(text);
     history.unshift(entry);
@@ -184,6 +187,58 @@ function setVisibility(value: 'hidden' | 'visible') {
   Object.defineProperty(document, 'visibilityState', { configurable: true, value });
   fireEvent(document, new Event('visibilitychange'));
 }
+
+it('uses conditional background reads, preserves content on 304, and forces manual reads', async () => {
+  history = [record('unchanged')];
+  const view = await openPollingPage();
+  const tag = JSON.stringify(history);
+  expect(vi.mocked(listClipboard).mock.calls[0][1]).toBeUndefined();
+  const article = screen.getByRole('article');
+  vi.mocked(listClipboard).mockRejectedValueOnce(new Error('offline'));
+  await advancePoll();
+  expect(screen.getByText(/自动更新暂不可用/)).toBeTruthy();
+  await advancePoll();
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBe(tag);
+  expect(screen.getByRole('article')).toBe(article);
+  expect(screen.queryByText(/自动更新暂不可用/)).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '刷新' })); });
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
+  view.unmount();
+  await act(async () => { render(createElement(ClipboardPage)); });
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
+});
+
+it('invalidates the validator after a successful mutation even when the full resync fails', async () => {
+  history = [record('old')];
+  await openPollingPage();
+  vi.mocked(listClipboard).mockRejectedValueOnce(new Error('resync failed'));
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: 'new' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布文本' })); });
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
+  // The server can return to the original representation before the next poll.
+  history = [record('old')];
+  await advancePoll();
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
+  expect(screen.queryByText('new')).toBeNull();
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  await advancePoll();
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBe(JSON.stringify(history));
+});
+
+it('does not retain the validator of an aborted response', async () => {
+  history = [record('kept')];
+  await openPollingPage();
+  const tag = JSON.stringify(history);
+  let finish!: (value: { entries: ClipboardEntry[]; etag: string }) => void;
+  vi.mocked(listClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  fireEvent.click(screen.getByRole('button', { name: '全部删除' }));
+  await act(async () => { finish({ entries: [], etag: '"stale"' }); });
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  await advancePoll();
+  expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBe(tag);
+  expect(screen.getByText('kept')).toBeTruthy();
+});
 
 it('automatically loads additions and deletions without changing a draft, then stops on unmount', async () => {
   history = [record('旧内容')];

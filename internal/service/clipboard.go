@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,8 @@ type ClipboardService struct {
 	mu      sync.RWMutex
 	path    string
 	entries []model.ClipboardEntry
+	body    string
+	etag    string
 }
 
 func NewClipboardService(dir string) (*ClipboardService, error) {
@@ -42,6 +45,7 @@ func NewClipboardService(dir string) (*ClipboardService, error) {
 	s := &ClipboardService{path: filepath.Join(dir, "history.json"), entries: []model.ClipboardEntry{}}
 	f, err := os.Open(s.path)
 	if errors.Is(err, os.ErrNotExist) {
+		s.updateSnapshot()
 		return s, nil
 	}
 	if err != nil {
@@ -73,7 +77,25 @@ func NewClipboardService(dir string) (*ClipboardService, error) {
 	if s.entries == nil {
 		s.entries = []model.ClipboardEntry{}
 	}
+	s.updateSnapshot()
 	return s, nil
+}
+
+// Snapshot returns an immutable JSON representation and its matching validator.
+// Both are replaced together, only after a mutation has been persisted.
+func (s *ClipboardService) Snapshot() (body, etag string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.body, s.etag
+}
+
+func (s *ClipboardService) updateSnapshot() {
+	// ClipboardEntry contains only strings, so marshaling cannot fail.
+	data, _ := json.Marshal(struct {
+		Entries []model.ClipboardEntry `json:"entries"`
+	}{s.entries})
+	s.body = string(data)
+	s.etag = fmt.Sprintf(`"%x"`, sha256.Sum256(data))
 }
 
 func validClipboardText(text string) bool {
@@ -100,6 +122,7 @@ func (s *ClipboardService) Create(text string) (model.ClipboardEntry, error) {
 		return model.ClipboardEntry{}, err
 	}
 	s.entries = next
+	s.updateSnapshot()
 	return entry, nil
 }
 
@@ -116,6 +139,7 @@ func (s *ClipboardService) Delete(id string) error {
 			return err
 		}
 		s.entries = next
+		s.updateSnapshot()
 		return nil
 	}
 	return ErrClipboardNotFound
@@ -129,6 +153,7 @@ func (s *ClipboardService) Clear() error {
 		return err
 	}
 	s.entries = next
+	s.updateSnapshot()
 	return nil
 }
 

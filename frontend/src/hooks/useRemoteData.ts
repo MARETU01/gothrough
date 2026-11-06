@@ -3,7 +3,15 @@ import { apiErrorMessage } from '@/services/errors';
 
 // Only the latest request can update the page. Cancel before mutations so an
 // older list response cannot bring deleted records back into view.
-export function useRemoteData<T>(load: (signal?: AbortSignal) => Promise<T>, initialData: T) {
+export const NOT_MODIFIED = Symbol('not modified');
+
+export interface RemoteLoadContext {
+  background: boolean;
+  // Commit metadata only when this request's data is accepted by the page.
+  onAccepted: (commit: () => void) => void;
+}
+
+export function useRemoteData<T>(load: (signal?: AbortSignal, context?: RemoteLoadContext) => Promise<T | typeof NOT_MODIFIED>, initialData: T) {
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
@@ -44,9 +52,11 @@ export function useRemoteData<T>(load: (signal?: AbortSignal) => Promise<T>, ini
       setBackgroundError('');
     }
     try {
-      const result = await load(controller.signal);
+      const accepted: { commit?: () => void } = {};
+      const result = await load(controller.signal, { background, onAccepted: commit => { accepted.commit = commit; } });
       if (mounted.current && !controller.signal.aborted) {
-        setData(result);
+        accepted.commit?.();
+        if (result !== NOT_MODIFIED) setData(result);
         setLoadError('');
         setBackgroundError('');
       }

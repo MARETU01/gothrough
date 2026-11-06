@@ -7,16 +7,21 @@ import {
   createClipboard, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry,
 } from '@/services/clipboard';
 import { apiErrorMessage } from '@/services/errors';
-import { useRemoteData } from '@/hooks/useRemoteData';
+import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
 import './ClipboardPage.css';
 
-const loadEntries = async (signal?: AbortSignal) => (await listClipboard(signal)).entries;
-
 export default function ClipboardPage() {
   const [text, setText] = useState('');
+  const etag = useRef<string | undefined>(undefined);
+  const loadEntries = useCallback(async (signal?: AbortSignal, context?: RemoteLoadContext) => {
+    const result = await listClipboard(signal, context?.background ? etag.current : undefined);
+    // Cancelled responses must never advance the validator independently of data.
+    context?.onAccepted(() => { etag.current = result.etag; });
+    return result.notModified ? NOT_MODIFIED : result.entries;
+  }, []);
   usePageTitle('共享剪贴板 - GoThrough');
   const { data: entries, setData: setEntries, loading, error, setError, backgroundError, refresh: reload, cancel, cancelBackground, mounted } =
     useRemoteData<ClipboardEntry[]>(loadEntries, []);
@@ -59,6 +64,7 @@ export default function ClipboardPage() {
     try {
       const result = await action();
       if (!mounted.current) return;
+      etag.current = undefined;
       onSuccess(result);
       setNotice(successMessage);
       await refresh();

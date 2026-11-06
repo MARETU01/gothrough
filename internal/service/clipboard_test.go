@@ -1,6 +1,8 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -117,6 +119,7 @@ func TestClipboardFailedSavePreservesHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	body, etag := s.Snapshot()
 	// A directory at the destination makes atomic replacement fail on all hosts.
 	s.path = filepath.Join(dir, "blocked")
 	if err := os.Mkdir(s.path, 0700); err != nil {
@@ -136,6 +139,9 @@ func TestClipboardFailedSavePreservesHistory(t *testing.T) {
 	}
 	if entries := s.List(); len(entries) != 1 || entries[0] != entry {
 		t.Fatal("failed mutation changed memory")
+	}
+	if gotBody, gotTag := s.Snapshot(); gotBody != body || gotTag != etag {
+		t.Fatal("failed mutation changed snapshot")
 	}
 	reopened, err := NewClipboardService(dir)
 	if err != nil || len(reopened.List()) != 1 || reopened.List()[0] != entry {
@@ -164,6 +170,10 @@ func TestClipboardConcurrentMutations(t *testing.T) {
 				return
 			}
 			_ = s.List()
+			body, etag := s.Snapshot()
+			if etag != fmt.Sprintf(`"%x"`, sha256.Sum256([]byte(body))) {
+				t.Error("snapshot and validator disagree")
+			}
 			if i%2 == 0 {
 				if err := s.Delete(entry.ID); err != nil {
 					t.Error(err)
@@ -175,6 +185,52 @@ func TestClipboardConcurrentMutations(t *testing.T) {
 	reopened, err := NewClipboardService(dir)
 	if err != nil || len(reopened.List()) != 12 {
 		t.Fatalf("concurrent data lost: %v", err)
+	}
+}
+
+func TestClipboardSnapshotAcrossMutationsAndRestart(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewClipboardService(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyBody, emptyTag := s.Snapshot()
+	if emptyBody != `{"entries":[]}` || emptyTag == "" {
+		t.Fatalf("empty snapshot: %s %s", emptyBody, emptyTag)
+	}
+	first, err := s.Create("snapshot <text>\n中文")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, tag := s.Snapshot()
+	var snapshot struct {
+		Entries []model.ClipboardEntry `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(body), &snapshot); err != nil || len(snapshot.Entries) != 1 || snapshot.Entries[0] != first || tag == emptyTag {
+		t.Fatalf("created snapshot: %s %s %v", body, tag, err)
+	}
+	reopened, err := NewClipboardService(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotBody, gotTag := reopened.Snapshot(); gotBody != body || gotTag != tag {
+		t.Fatal("unchanged history got a different validator after restart")
+	}
+	second, err := s.Create("second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(second.ID); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody, gotTag := s.Snapshot(); gotBody != body || gotTag != tag {
+		t.Fatal("deleting newest record did not restore prior representation")
+	}
+	if err := s.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody, gotTag := s.Snapshot(); gotBody != emptyBody || gotTag != emptyTag {
+		t.Fatal("clear did not restore empty representation")
 	}
 }
 

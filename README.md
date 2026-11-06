@@ -103,7 +103,9 @@ Makefile                开发检查和发布构建入口
 
 剪贴板沿用共享访问模式，所有能访问服务的人均可查看、发布和删除记录。历史文件损坏时启动会报错并保留原文件，不会自动覆盖。一个数据目录只供一个服务进程使用。
 
-接口为 `GET /api/clipboard`（返回 `entries` 数组）、`POST /api/clipboard`（JSON 请求体 `{"text":"共享内容"}`，返回创建的记录）、`DELETE /api/clipboard/:id`（删除单条）和 `DELETE /api/clipboard`（清空全部）。每条记录包含 `id`、`text`、`created_at`；剪贴板响应禁止缓存。
+接口为 `GET /api/clipboard`（返回 `entries` 数组）、`POST /api/clipboard`（JSON 请求体 `{"text":"共享内容"}`，返回创建的记录）、`DELETE /api/clipboard/:id`（删除单条）和 `DELETE /api/clipboard`（清空全部）。每条记录包含 `id`、`text`、`created_at`；剪贴板响应设置 `Cache-Control: no-store`。
+
+列表响应附带内容版本 `ETag`，后台自动更新通过 `If-None-Match` 校验版本：内容未变时返回 `304`，无列表正文，页面保留现有内容；内容变化时返回完整列表和新版本。版本仅随当前页面数据保存在内存中，不增加本地持久化缓存。首次加载、手动刷新以及发布、删除、清空成功后的同步均完整获取列表。轮询间隔不变，条件请求用于减少重复传输和解析，并非实时推送。
 
 ## 文档
 
