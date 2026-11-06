@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"image"
 	"image/png"
+
+	"github.com/MARETU01/gothrough/internal/config"
 )
 
 const thumbnailEdge = 320
@@ -67,7 +69,7 @@ func (s *ClipboardService) Thumbnail(id string) ([]byte, error) {
 	}
 	defer f.Close()
 	dim, err := png.DecodeConfig(f)
-	if err != nil || dim.Width <= 0 || dim.Height <= 0 || int64(dim.Width) > 40_000_000/int64(dim.Height) {
+	if err != nil || dim.Width <= 0 || dim.Height <= 0 || int64(dim.Width) > config.MaxClipboardImagePixels/int64(dim.Height) {
 		return nil, ErrClipboardImage
 	}
 	if _, err := f.Seek(0, 0); err != nil {

@@ -20,14 +20,12 @@ export interface UploadSession {
   sessionId: string;
   totalChunks: number;
   chunkSize: number;
-  totalSize: number;
   receivedChunks: number;
   finalFilename: string;
 }
 
-/** 单文件上传控制器：暂停 / 取消标志 + AbortController */
+/** 单文件上传控制器：取消标志 + AbortController */
 export interface UploadController {
-  paused: boolean;
   cancelled: boolean;
   /** 取消时立即中断进行中的 axios 分块请求 */
   abort: AbortController;

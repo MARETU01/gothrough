@@ -59,8 +59,7 @@ func (h *ClipboardHandler) Image(c *gin.Context) {
 		if errors.Is(err, service.ErrClipboardNotFound) {
 			respondError(c, err, http.StatusNotFound, "CLIPBOARD_NOT_FOUND", service.ErrClipboardNotFound.Error())
 		} else if errors.Is(err, service.ErrBusy) {
-			c.Header("Retry-After", "1")
-			respondError(c, err, http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error())
+			respondBusy(c, err)
 		} else if err != nil {
 			respondError(c, err, http.StatusInternalServerError, "IMAGE_READ_FAILED", "读取剪贴板图片失败，请稍后重试")
 		} else {
@@ -100,8 +99,7 @@ func clipboardImageFailure(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrClipboardImage):
 		respondError(c, err, http.StatusBadRequest, "INVALID_IMAGE", service.ErrClipboardImage.Error())
 	case errors.Is(err, service.ErrBusy):
-		c.Header("Retry-After", "1")
-		respondError(c, err, http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error())
+		respondBusy(c, err)
 	default:
 		respondError(c, err, http.StatusInternalServerError, "IMAGE_PUBLISH_FAILED", "图片发布失败，请稍后重试")
 	}

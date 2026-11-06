@@ -10,7 +10,6 @@ const itemFor = (): UploadItem => ({
     sessionId: "test",
     totalChunks: 3,
     chunkSize: 5,
-    totalSize: 12,
     receivedChunks: 0,
     finalFilename: "test",
   },

@@ -49,7 +49,6 @@ export function useRemoteData<T>(load: (signal?: AbortSignal, context?: RemoteLo
     if (!background) {
       setLoading(true);
       setError('');
-      setLoadError('');
       setBackgroundError('');
     }
     try {

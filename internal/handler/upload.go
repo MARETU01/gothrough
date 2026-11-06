@@ -265,8 +265,7 @@ func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
 	case errors.Is(err, utils.ErrHardlinkUnsupported):
 		return http.StatusInternalServerError, "HARDLINK_UNSUPPORTED", utils.ErrHardlinkUnsupported.Error()
 	case errors.Is(err, service.ErrBusy):
-		c.Header("Retry-After", "1")
-		return http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error()
+		return busyErrorDetails(c)
 	case errors.As(err, &tooLarge):
 		return http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "请求体过大"
 	}

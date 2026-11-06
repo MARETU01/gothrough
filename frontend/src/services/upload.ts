@@ -82,14 +82,16 @@ export function uploadChunk({
   signal,
   onProgress,
 }: UploadChunkOptions) {
-  const form = new FormData();
+  let body: Blob | FormData = chunk;
   if (transport !== 'raw') {
+    const form = new FormData();
     form.append('session_id', sessionId);
     form.append('chunk_index', String(chunkIndex));
     form.append('chunk', chunk);
+    body = form;
   }
 
-  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, transport === 'raw' ? chunk : form, {
+  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, body, {
     ...(transport === 'raw' ? {
       params: { session_id: sessionId, chunk_index: chunkIndex },
       headers: { 'Content-Type': 'application/octet-stream' },

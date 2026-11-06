@@ -111,8 +111,17 @@ export const useUploadQueue = () => {
       wakeWorkers();
     };
   }, [wakeWorkers]);
-  const hasUploading = items.some((i) => i.state === "uploading");
-  const hasUnfinished = running || items.some((item) => item.state !== "success");
+  let pendingCount = 0;
+  let successCount = 0;
+  let errorCount = 0;
+  let totalSpeed = 0;
+  for (const item of items) {
+    if (item.state === "pending") pendingCount++;
+    else if (item.state === "success") successCount++;
+    else if (item.state === "error") errorCount++;
+    else if (item.state === "uploading" && !globalPaused) totalSpeed += item.speed;
+  }
+  const hasUnfinished = running || successCount !== items.length;
   useEffect(() => {
     if (!hasUnfinished) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -191,7 +200,6 @@ export const useUploadQueue = () => {
   const uploadFileChunked = useCallback(
     async (item: UploadItem, run: { cancelled: boolean }) => {
       const controller: UploadController = {
-        paused: false,
         cancelled: false,
         abort: new AbortController(),
       };
@@ -210,7 +218,7 @@ export const useUploadQueue = () => {
       };
       const waitForResume = async () => {
         checkActive();
-        while (globalPausedRef.current || controller.paused) {
+        while (globalPausedRef.current) {
           item.state = "paused";
           item.speed = 0;
           refreshFileList();
@@ -243,7 +251,6 @@ export const useUploadQueue = () => {
           sessionId: data.session_id,
           totalChunks: data.total_chunks,
           chunkSize: data.chunk_size || CHUNK_SIZE,
-          totalSize: item.file.size,
           receivedChunks: 0,
           finalFilename: data.final_filename,
         };
@@ -439,7 +446,6 @@ export const useUploadQueue = () => {
     itemsRef.current.forEach((i) => {
       if (i.uploadController) {
         clocksRef.current.get(i)?.pause();
-        i.uploadController.paused = true;
         i.speed = 0;
       }
     });
@@ -450,7 +456,6 @@ export const useUploadQueue = () => {
     setGlobalPaused(false);
     itemsRef.current.forEach((i) => {
       if (i.uploadController) {
-        i.uploadController.paused = false;
         if (!i.uploadController.cancelled) clocksRef.current.get(i)?.resume();
       }
     });
@@ -499,16 +504,6 @@ export const useUploadQueue = () => {
     (fileKey: string) => startUploads(fileKey),
     [startUploads],
   );
-  const pendingCount = items.filter((i) => i.state === "pending").length;
-  const uploadingCount = items.filter((i) => i.state === "uploading").length;
-  const pausedCount = items.filter((i) => i.state === "paused").length;
-  const successCount = items.filter((i) => i.state === "success").length;
-  const errorCount = items.filter((i) => i.state === "error").length;
-  const totalSpeed = globalPaused
-    ? 0
-    : items
-        .filter((i) => i.state === "uploading")
-        .reduce((sum, i) => sum + i.speed, 0);
   return {
     items,
     globalPaused,
@@ -520,12 +515,8 @@ export const useUploadQueue = () => {
     totalSpeed,
     queueElapsedMs,
     pendingCount,
-    uploadingCount,
-    pausedCount,
     successCount,
     errorCount,
-    activeCount: running ? Math.max(1, uploadingCount + pausedCount) : 0,
-    hasUploading,
     fileInputRef,
     startAllUploads: () => startUploads(),
     retryItem,

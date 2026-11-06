@@ -25,7 +25,6 @@ const UploadPage: React.FC = () => {
     pendingCount,
     errorCount,
     successCount,
-    activeCount,
     running,
     canceling,
     retryItem,
@@ -124,7 +123,7 @@ const UploadPage: React.FC = () => {
         </div>
         <div className="button-container">
           {items.length > 0 &&
-            (activeCount > 0 ? (
+            (running ? (
               <>
                 {canceling ? (
                   <span role="status">{t("正在取消，请稍候…")}</span>
