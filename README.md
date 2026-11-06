@@ -1,5 +1,12 @@
 # GoThrough
 
+[![CI](https://img.shields.io/github/actions/workflow/status/MARETU01/gothrough/ci.yml?branch=main&logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/actions/workflows/ci.yml)
+[![GitHub tag](https://img.shields.io/github/v/tag/MARETU01/gothrough?logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/tags)
+[![Go version](https://img.shields.io/github/go-mod/go-version/MARETU01/gothrough?logo=go&style=flat-square)](https://github.com/MARETU01/gothrough/blob/main/go.mod)
+[![Docker Image Size](https://img.shields.io/docker/image-size/maretu01/gothrough?sort=semver&arch=amd64&logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
+[![Docker Pulls](https://img.shields.io/docker/pulls/maretu01/gothrough?logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+
 English | [简体中文](README.zh-CN.md)
 
 A file transfer and shared clipboard tool built with Go + Gin and React + TypeScript. Deploy it as a single executable with the frontend included.
@@ -11,6 +18,14 @@ A file transfer and shared clipboard tool built with Go + Gin and React + TypeSc
 - Share text and images across devices, including screenshot pasting, previews, copying, and downloads. History survives restarts.
 - Simplified Chinese and English interface; uploads continue during in-app navigation.
 - HTTP / HTTPS, YAML and environment configuration, and text / JSON logs.
+
+## Use Cases
+
+- Transfer files and folders between personal devices on a local network.
+- Share text, links, and screenshots between a phone and a computer.
+- Run a temporary file sharing service on a home server or within a trusted network.
+
+The service uses shared access without user authentication; use it where everyone with access is trusted.
 
 ## Quick Start
 

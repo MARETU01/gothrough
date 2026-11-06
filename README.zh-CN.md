@@ -1,5 +1,13 @@
 # GoThrough
 
+[![CI](https://img.shields.io/github/actions/workflow/status/MARETU01/gothrough/ci.yml?branch=main&logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/actions/workflows/ci.yml)
+[![GitHub tag](https://img.shields.io/github/v/tag/MARETU01/gothrough?logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/tags)
+[![Go version](https://img.shields.io/github/go-mod/go-version/MARETU01/gothrough?logo=go&style=flat-square)](https://github.com/MARETU01/gothrough/blob/main/go.mod)
+[![Go Report Card](https://goreportcard.com/badge/github.com/MARETU01/gothrough?style=flat-square)](https://goreportcard.com/report/github.com/MARETU01/gothrough)
+[![Docker Image Size](https://img.shields.io/docker/image-size/maretu01/gothrough?sort=semver&arch=amd64&logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
+[![Docker Pulls](https://img.shields.io/docker/pulls/maretu01/gothrough?logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+
 [English](README.md) | 简体中文
 
 基于 Go + Gin 和 React + TypeScript 的文件上传与共享剪贴板工具，可部署为包含前端的单个可执行文件。
@@ -11,6 +19,14 @@
 - 跨设备共享文本与图片，支持粘贴截图、预览、复制及下载，历史记录在重启后保留。
 - 界面支持简体中文与英文；站内切换页面时上传继续进行。
 - 支持 HTTP / HTTPS、YAML 与环境变量配置，以及文本 / JSON 日志。
+
+## 适用场景
+
+- 在局域网中的个人设备之间传输文件和文件夹。
+- 在手机与电脑之间共享文本、链接和截图。
+- 在家庭服务器或可信网络中搭建临时文件共享服务。
+
+服务采用共享访问模式，未提供用户鉴权，适合访问者均可信的环境。
 
 ## 快速开始
 
