@@ -69,11 +69,11 @@ func (h *ClipboardHandler) Create(c *gin.Context) {
 		if len(req.Text) > service.ClipboardMaxBytes {
 			status = http.StatusRequestEntityTooLarge
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		respondError(c, err, status, service.ErrClipboardText.Error())
 		return
 	}
 	if err != nil {
-		clipboardFailure(c, err)
+		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板文本已发布", "event", "clipboard.created", "entry_id", entry.ID, "size_bytes", len(entry.Text))
@@ -84,11 +84,11 @@ func (h *ClipboardHandler) Delete(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	err := h.service.Delete(c.Param("id"))
 	if errors.Is(err, service.ErrClipboardNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondError(c, err, http.StatusNotFound, service.ErrClipboardNotFound.Error())
 		return
 	}
 	if err != nil {
-		clipboardFailure(c, err)
+		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板记录已删除", "event", "clipboard.deleted", "entry_id", c.Param("id"))
@@ -98,14 +98,9 @@ func (h *ClipboardHandler) Delete(c *gin.Context) {
 func (h *ClipboardHandler) Clear(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	if err := h.service.Clear(); err != nil {
-		clipboardFailure(c, err)
+		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板记录已清空", "event", "clipboard.cleared")
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
-}
-
-func clipboardFailure(c *gin.Context, err error) {
-	_ = c.Error(err)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "剪贴板存储失败，请稍后重试"})
 }

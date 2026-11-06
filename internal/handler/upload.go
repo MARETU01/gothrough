@@ -99,7 +99,7 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 
 	file, err := chunkFile.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取分块失败"})
+		respondError(c, err, http.StatusInternalServerError, "读取分块失败，请稍后重试")
 		return
 	}
 	defer file.Close()
@@ -124,8 +124,7 @@ func (h *UploadHandler) UploadStatus(c *gin.Context) {
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		uploadError(c, err)
 		return
 	}
 
@@ -157,8 +156,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		uploadError(c, err)
 		return
 	}
 
@@ -180,12 +178,13 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(uploadErrorStatus(c, err), gin.H{
+		status, message := uploadErrorDetails(c, err)
+		c.JSON(status, gin.H{
 			"original_filename": session.OriginalFilename,
 			"saved_filename":    session.FinalFilename,
 			"status":            "failed",
-			"message":           err.Error(),
-			"error":             err.Error(),
+			"message":           message,
+			"error":             message,
 		})
 		return
 	}
@@ -212,8 +211,7 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 	withUploadSession(c, sessionID)
 
 	if err := h.uploadService.CancelSession(sessionID); err != nil {
-		_ = c.Error(err)
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		uploadError(c, err)
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("上传会话已取消", "event", "upload.cancelled")
@@ -234,8 +232,8 @@ func sessionIDFromRequest(c *gin.Context) (string, bool) {
 }
 
 func uploadError(c *gin.Context, err error) {
-	_ = c.Error(err)
-	c.JSON(uploadErrorStatus(c, err), gin.H{"error": err.Error()})
+	status, message := uploadErrorDetails(c, err)
+	respondError(c, err, status, message)
 }
 
 func withUploadSession(c *gin.Context, id string) {
@@ -245,27 +243,30 @@ func withUploadSession(c *gin.Context, id string) {
 	}
 }
 
-func uploadErrorStatus(c *gin.Context, err error) int {
-	status := http.StatusInternalServerError
+func uploadErrorDetails(c *gin.Context, err error) (int, string) {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.Is(err, service.ErrSession):
-		status = http.StatusNotFound
-	case errors.Is(err, service.ErrChunk), errors.Is(err, service.ErrPath):
-		status = http.StatusBadRequest
+		return http.StatusNotFound, service.ErrSession.Error()
+	case errors.Is(err, service.ErrChunk):
+		return http.StatusBadRequest, service.ErrChunk.Error()
+	case errors.Is(err, service.ErrPath):
+		return http.StatusBadRequest, service.ErrPath.Error()
 	case errors.Is(err, service.ErrPathConflict):
-		status = http.StatusConflict
+		return http.StatusConflict, service.ErrPathConflict.Error()
 	case errors.Is(err, utils.ErrStorageFull):
-		status = http.StatusInsufficientStorage
+		return http.StatusInsufficientStorage, utils.ErrStorageFull.Error()
 	case errors.Is(err, utils.ErrStoragePermission):
-		status = http.StatusForbidden
+		return http.StatusForbidden, utils.ErrStoragePermission.Error()
 	case errors.Is(err, utils.ErrStorageReadOnly):
-		status = http.StatusServiceUnavailable
+		return http.StatusServiceUnavailable, utils.ErrStorageReadOnly.Error()
+	case errors.Is(err, utils.ErrHardlinkUnsupported):
+		return http.StatusInternalServerError, utils.ErrHardlinkUnsupported.Error()
 	case errors.Is(err, service.ErrBusy):
-		status = http.StatusTooManyRequests
 		c.Header("Retry-After", "1")
+		return http.StatusTooManyRequests, service.ErrBusy.Error()
 	case errors.As(err, &tooLarge):
-		status = http.StatusRequestEntityTooLarge
+		return http.StatusRequestEntityTooLarge, "请求体过大"
 	}
-	return status
+	return http.StatusInternalServerError, "上传失败，请稍后重试"
 }
