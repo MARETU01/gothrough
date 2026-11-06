@@ -8,6 +8,9 @@ temp_uploads
 clipboard
 logs
 doc
+# Documentation and Go tests are not inputs to the production build.
+**/README*.md
+**/*_test.go
 **/node_modules
 **/dist
 **/dist-ssr

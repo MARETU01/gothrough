@@ -49,6 +49,8 @@ type UploadService struct {
 	tempDir   string
 	slots     chan struct{}
 	diskUsage func(string) (utils.DiskUsage, error)
+	listingMu sync.Mutex
+	listing   *fileListing
 }
 
 func NewUploadService() *UploadService {
@@ -283,6 +285,7 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	if err != nil {
 		return "", 0, utils.StorageError("发布上传文件失败", err)
 	}
+	s.invalidateFiles()
 	entry.closed = true
 	if err := entry.file.Close(); err != nil {
 		slog.Warn("关闭已发布的上传文件失败", "event", "upload.close_failed", "session_id", id, "error", err)

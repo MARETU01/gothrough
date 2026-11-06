@@ -110,6 +110,8 @@ it('previews and publishes a selected image without changing the text draft, rel
   await waitFor(() => expect(screen.queryByAltText('待发布图片预览')).toBeNull());
   expect(createClipboardImage).toHaveBeenCalledWith(file);
   expect((screen.getByLabelText('输入或粘贴文本') as HTMLTextAreaElement).value).toBe('text draft');
+  expect(screen.getByAltText('共享图片 1').getAttribute('src')).toBe('/api/clipboard/image-1/image?thumbnail=1');
+  fireEvent.error(screen.getByAltText('共享图片 1'));
   expect(screen.getByAltText('共享图片 1').getAttribute('src')).toBe('/api/clipboard/image-1/image');
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
   view.unmount();

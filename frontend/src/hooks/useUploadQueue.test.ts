@@ -64,6 +64,61 @@ afterEach(() => {
 });
 
 describe("upload queue lifecycle", () => {
+  it("honors Retry-After and waits for resume without polling timers", async () => {
+    vi.useFakeTimers();
+    vi.mocked(uploadChunk).mockRejectedValueOnce({ isAxiosError: true,
+      response: { status: 429, headers: { 'retry-after': '1' }, data: { code: 'SERVER_BUSY' } } });
+    const hook = renderHook(useUploadQueue);
+    expect(vi.getTimerCount()).toBe(0);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(uploadChunk).toHaveBeenCalledTimes(1);
+    act(() => hook.result.current.pauseAll());
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(hook.result.current.items[0].state).toBe('paused');
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(uploadChunk).toHaveBeenCalledTimes(1);
+    await act(async () => { hook.result.current.resumeAll(); await run; });
+    expect(uploadChunk).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels a queued retry without sending another chunk", async () => {
+    vi.useFakeTimers();
+    vi.mocked(uploadChunk).mockRejectedValueOnce({ isAxiosError: true, code: 'ERR_NETWORK' });
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    await act(async () => { hook.result.current.cancelAll(); await run; });
+    expect(uploadChunk).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.running).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("wakes paused chunk workers on cancellation", async () => {
+    vi.useFakeTimers();
+    const chunks = deferred<{ received: number }>();
+    vi.mocked(initUpload).mockResolvedValue(session('paused', 4));
+    vi.mocked(uploadChunk).mockReturnValue(chunks.promise);
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1, 20);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    act(() => hook.result.current.pauseAll());
+    await act(async () => { chunks.resolve({ received: 3 }); });
+    expect(hook.result.current.items[0].state).toBe('paused');
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { hook.result.current.cancelAll(); await run; });
+    expect(uploadChunk).toHaveBeenCalledTimes(3);
+    expect(completeUpload).not.toHaveBeenCalled();
+    expect(hook.result.current.running).toBe(false);
+  });
+
   it("excludes repeated pauses during initialization and completion and freezes final elapsed time", async () => {
     vi.useFakeTimers();
     const init = deferred<ReturnType<typeof session>>();

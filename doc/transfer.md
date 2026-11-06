@@ -32,7 +32,7 @@ Encode filenames when using them as URL path parameters.
 | DELETE | `/api/clipboard` | Clear all entries |
 | GET | `/api/clipboard/image-config` | Get image availability and configured limits |
 | POST | `/api/clipboard/image` | Publish a PNG/JPEG using the multipart field `image` |
-| GET | `/api/clipboard/:id/image` | Serve the PNG; add `?download=1` to download |
+| GET | `/api/clipboard/:id/image` | Serve the original PNG; `?download=1` downloads it, `?thumbnail=1` serves a thumbnail |
 
 Successful publication returns the created entry. Entries include `id` and `created_at`; `type` identifies the entry type, with a missing value treated as text for compatibility. Text entries contain `text`; image entries contain `image` metadata. Text is treated as plain text, limited to 65,536 UTF-8 bytes per entry. The latest 100 entries across text and images are retained.
 
@@ -40,11 +40,15 @@ Clipboard responses use `Cache-Control: no-store`. Lists provide an `ETag`; `If-
 
 See [configuration](configuration.md#image-clipboard) for image limits, decoding concurrency, and storage recovery rules.
 
+Lists display PNG thumbnails with a maximum edge of 320 pixels; copying and downloading use the original. Thumbnails are cached in memory and released when entries are deleted or evicted. After restart, they are rebuilt on first access and need no separate backup.
+
 ## Upload Flow
 
 1. Initialize with the filename, size, and optional `relative_path` to obtain a session, chunk size, and transport mode.
 2. Send chunks using the returned size. `upload_transport: "raw"` indicates an `application/octet-stream` request body; use multipart if the server does not advertise this capability. The server also accepts multipart clients.
 3. After sending all chunks, call completion. The server validates the file size and chunk completeness before publishing the file. Use the cancellation endpoint to cancel a task.
+
+The frontend retries network and transient server failures at most twice, using backoff and honoring `Retry-After`. Waiting periods above 60 seconds stop automatic retries. Invalid requests and permanent storage errors fail immediately; cancellation interrupts retry waits.
 
 Folder uploads use `relative_path` to preserve the top-level folder and subdirectories, such as `documents/photos/image.jpg`. File listing, downloading, and deletion use paths relative to the upload directory; encode URL path parameters. Empty folders are not preserved. Conflicting names are renamed without overwriting existing content.
 
@@ -63,5 +67,6 @@ Folder uploads use `relative_path` to preserve the top-level folder and subdirec
 | Session expiration | Sessions idle for over 24 hours are cleaned up every 5 minutes, except those with active writes |
 | Restarts and resuming | Sessions stay in memory; restarting clears temporary uploads and does not support resuming them |
 | Downloads | Range requests are supported |
+| File list cache | File listings, counts, and totals are cached for 2 seconds and invalidated on upload completion or deletion; external changes appear after expiration, while disk free space is queried live |
 
 For failed requests, use the `X-Request-ID` response header to find server logs. See [troubleshooting](logging.md#troubleshooting).

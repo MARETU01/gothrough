@@ -57,5 +57,5 @@ test: internal/webassets/dist/index.html
 help:
 	@echo make build          - Reuse unchanged dependencies and build the embedded executable
 	@echo make install        - Download Go modules and install frontend dependencies as needed
-	@echo make test           - Build frontend, then run backend tests and vet with and without embedded assets
+	@echo make test           - Build frontend, run frontend tests, then backend tests and vet with and without embedded assets
 	@echo make OUTPUT=release/custom.exe - Customize the output file

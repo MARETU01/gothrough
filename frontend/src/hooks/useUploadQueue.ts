@@ -23,8 +23,10 @@ import {
   createUploadSnapshot,
   getFileKey,
   recalcLoadedBytes,
+  confirmChunk,
 } from "@/utils/upload";
-import { errorMessage, sleep } from "@/utils/misc";
+import { errorMessage } from "@/utils/misc";
+import { uploadRetryDelay, waitForRetry } from "@/utils/uploadRetry";
 import { createElapsedClock } from "@/utils/elapsed";
 import { collectDroppedFiles, getUploadPath } from "@/utils/droppedFiles";
 
@@ -48,6 +50,21 @@ export const useUploadQueue = () => {
   const globalPausedRef = useRef(false);
   const mountedRef = useRef(true);
   const runRef = useRef<{ cancelled: boolean } | null>(null);
+  const wakeWaiters = useRef(new Set<() => void>());
+  const wakeWorkers = useCallback(() => {
+    for (const wake of wakeWaiters.current) wake();
+    wakeWaiters.current.clear();
+  }, []);
+  const waitForChange = useCallback((signal?: AbortSignal) => new Promise<void>(resolve => {
+    if (signal?.aborted) { resolve(); return; }
+    const wake = () => {
+      wakeWaiters.current.delete(wake);
+      signal?.removeEventListener('abort', wake);
+      resolve();
+    };
+    wakeWaiters.current.add(wake);
+    signal?.addEventListener('abort', wake, { once: true });
+  }), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const snapshotsRef = useRef(new WeakMap<UploadItem, UploadViewItem>());
   const clocksRef = useRef(new WeakMap<UploadItem, ReturnType<typeof createElapsedClock>>());
@@ -82,16 +99,18 @@ export const useUploadQueue = () => {
   }, []);
   const setGlobalPaused = useCallback((paused: boolean) => {
     globalPausedRef.current = paused;
+    if (!paused) wakeWorkers();
     if (mountedRef.current) setGlobalPausedState(paused);
-  }, []);
+  }, [wakeWorkers]);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (runRef.current) runRef.current.cancelled = true;
       itemsRef.current.forEach(stopItem);
+      wakeWorkers();
     };
-  }, []);
+  }, [wakeWorkers]);
   const hasUploading = items.some((i) => i.state === "uploading");
   const hasUnfinished = running || items.some((item) => item.state !== "success");
   useEffect(() => {
@@ -106,7 +125,10 @@ export const useUploadQueue = () => {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [hasUnfinished]);
   useEffect(() => {
+    if (!running || globalPaused || canceling) return;
     const samples = new WeakMap<UploadItem, { bytes: number; time: number }>();
+    const started = Date.now();
+    itemsRef.current.forEach(item => samples.set(item, { bytes: item.transferredBytes, time: started }));
     const timer = setInterval(() => {
       const now = Date.now();
       let changed = false;
@@ -126,7 +148,7 @@ export const useUploadQueue = () => {
       if (changed || runRef.current) refreshFileList();
     }, 500);
     return () => clearInterval(timer);
-  }, [refreshFileList]);
+  }, [refreshFileList, running, globalPaused, canceling]);
   const handleSelection = (files: FileList | File[]) => {
     const keys = new Set(itemsRef.current.map((i) => getFileKey(i.file)));
     Array.from(files).forEach((file) => {
@@ -141,7 +163,8 @@ export const useUploadQueue = () => {
         savedFilename: "",
         uploadController: null,
         inflightBytes: new Map(),
-        confirmedBytes: new Map(),
+        confirmedChunks: new Set(),
+        confirmedBytes: 0,
         transferredBytes: 0,
         loadedBytes: 0,
         elapsedMs: null,
@@ -191,7 +214,7 @@ export const useUploadQueue = () => {
           item.state = "paused";
           item.speed = 0;
           refreshFileList();
-          await sleep(100);
+          await waitForChange(controller.abort.signal);
           checkActive();
         }
         item.state = "uploading";
@@ -203,7 +226,8 @@ export const useUploadQueue = () => {
       item.session = null;
       item.savedFilename = "";
       item.inflightBytes.clear();
-      item.confirmedBytes.clear();
+      item.confirmedChunks.clear();
+      item.confirmedBytes = 0;
       item.transferredBytes = 0;
       item.loadedBytes = 0;
       refreshFileList();
@@ -283,26 +307,26 @@ export const useUploadQueue = () => {
                     }
                   },
                 });
-              try {
-                await send();
-              } catch (err) {
-                if (
-                  isStopped() ||
-                  isCanceledError(err) ||
-                  controller.abort.signal.aborted
-                )
-                  throw err;
-                item.inflightBytes.delete(index);
-                attempt.loaded = 0;
-                await waitForResume();
-                await send();
+              for (let retry = 0; ; retry++) {
+                try {
+                  await send();
+                  break;
+                } catch (err) {
+                  if (isStopped() || isCanceledError(err) || controller.abort.signal.aborted) throw err;
+                  const delay = uploadRetryDelay(err, retry);
+                  if (delay === null) throw err;
+                  item.inflightBytes.delete(index);
+                  attempt.loaded = 0;
+                  await waitForRetry(delay, controller.abort.signal);
+                  await waitForResume();
+                }
               }
               checkActive();
               if (controller.abort.signal.aborted) return;
               recordTransferred(chunk.size);
               item.inflightBytes.delete(index);
-              item.confirmedBytes.set(index, chunk.size);
-              session.receivedChunks = item.confirmedBytes.size;
+              confirmChunk(item, index, chunk.size);
+              session.receivedChunks = item.confirmedChunks.size;
               recalcLoadedBytes(item);
               refreshFileList();
             }
@@ -361,7 +385,7 @@ export const useUploadQueue = () => {
         refreshFileList();
       }
     },
-    [refreshFileList],
+    [refreshFileList, waitForChange],
   );
   const startUploads = useCallback(
     async (fileKey?: string) => {
@@ -383,7 +407,7 @@ export const useUploadQueue = () => {
       const worker = async () => {
         while (!run.cancelled && mountedRef.current && run.nextFileIndex < pending.length) {
           if (globalPausedRef.current) {
-            await sleep(100);
+            await waitForChange();
             continue;
           }
           const item = pending[run.nextFileIndex++];
@@ -407,7 +431,7 @@ export const useUploadQueue = () => {
           setStatus({ text: message('upload.canceled'), type: "success" });
       }
     },
-    [uploadFileChunked, setGlobalPaused, refreshFileList],
+    [uploadFileChunked, setGlobalPaused, refreshFileList, waitForChange],
   );
   const pauseAll = () => {
     queueClockRef.current?.pause();

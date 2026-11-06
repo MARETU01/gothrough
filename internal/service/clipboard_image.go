@@ -74,6 +74,10 @@ func (s *ClipboardService) CreateImage(input io.Reader) (model.ClipboardEntry, e
 	if err := png.Encode(encoded, decoded); err != nil {
 		return model.ClipboardEntry{}, err
 	}
+	thumbnail, err := encodeThumbnail(decoded)
+	if err != nil {
+		return model.ClipboardEntry{}, err
+	}
 	entry := model.ClipboardEntry{ID: uuid.NewV7().String(), Type: "image", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	entry.Image = model.ClipboardImage{URL: "/api/clipboard/" + entry.ID + "/image", MimeType: "image/png", Size: int64(encoded.Len()), Width: dim.Width, Height: dim.Height}
 	s.mu.Lock()
@@ -109,6 +113,7 @@ func (s *ClipboardService) CreateImage(input io.Reader) (model.ClipboardEntry, e
 		s.removeImage(name)
 		return model.ClipboardEntry{}, err
 	}
+	s.thumbnails[entry.ID] = thumbnail
 	return entry, nil
 }
 

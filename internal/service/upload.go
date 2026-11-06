@@ -75,5 +75,9 @@ func (s *UploadService) DeleteFile(filename string) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("只能删除文件")
 	}
-	return root.Remove(rel)
+	if err := root.Remove(rel); err != nil {
+		return err
+	}
+	s.invalidateFiles()
+	return nil
 }

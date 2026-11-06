@@ -3,10 +3,17 @@ services:
     build: .
     image: gothrough:local
     ports:
+      # Override the host port; the application still listens on 8080 in the container.
       - "${GOTHROUGH_HTTP_PORT:-8080}:8080"
     volumes:
       - gothrough-data:/data
-      - ./config/config.yaml:/app/config/config.yaml:ro
+      - type: bind
+        source: ./config/config.yaml
+        target: /app/config/config.yaml
+        read_only: true
+        bind:
+          # Fail if the file is missing instead of creating a directory at this path.
+          create_host_path: false
     restart: unless-stopped
     stop_grace_period: 40s
     logging:

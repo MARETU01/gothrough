@@ -69,6 +69,16 @@ func TestClipboardImageHTTP(t *testing.T) {
 	if _, err := png.Decode(bytes.NewReader(res.Body.Bytes())); err != nil {
 		t.Fatal(err)
 	}
+	res = get(entry.Image.URL + "?thumbnail=1")
+	if res.Code != 200 || res.Header().Get("Content-Type") != "image/png" || res.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("thumbnail: %d %v", res.Code, res.Header())
+	}
+	if _, err := png.Decode(bytes.NewReader(res.Body.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	if res = get(entry.Image.URL + "?thumbnail=1&download=1"); !bytes.Equal(res.Body.Bytes(), imageData.Bytes()) {
+		t.Fatal("thumbnail query changed download content")
+	}
 	if res = get(entry.Image.URL + "?download=1"); !strings.Contains(res.Header().Get("Content-Disposition"), "attachment") {
 		t.Fatal("missing download disposition")
 	}
@@ -79,6 +89,9 @@ func TestClipboardImageHTTP(t *testing.T) {
 	}
 	if res = get(entry.Image.URL); res.Code != 404 || !strings.Contains(res.Body.String(), "error") {
 		t.Fatalf("deleted image accessible: %d", res.Code)
+	}
+	if res = get(entry.Image.URL + "?thumbnail=1"); res.Code != 404 {
+		t.Fatalf("deleted thumbnail accessible: %d", res.Code)
 	}
 	if res = get("/api/clipboard"); res.Header().Get("ETag") != initial.Header().Get("ETag") {
 		t.Fatal("delete did not restore empty snapshot")

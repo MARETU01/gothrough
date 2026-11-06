@@ -227,8 +227,11 @@ export default function ClipboardPage() {
             {entries.map((entry, index) => <li key={entry.id}>
               <article className="clipboard-entry" aria-label={t('clipboard.entry', { number: index + 1 })}>
                 {entry.type === 'image' && entry.image ? <a href={entry.image.url} target="_blank" rel="noreferrer">
-                  <img className="clipboard-history-image" src={entry.image.url} alt={t('clipboard.image', { number: index + 1 })} loading="lazy"
-                    onError={event => { event.currentTarget.alt = t("图片加载失败，可打开图片重试"); }} />
+                  <img className="clipboard-history-image" src={`${entry.image.url}?thumbnail=1`} alt={t('clipboard.image', { number: index + 1 })} loading="lazy" decoding="async"
+                    onError={event => {
+                      if (event.currentTarget.getAttribute('src') !== entry.image?.url) event.currentTarget.src = entry.image!.url;
+                      else event.currentTarget.alt = t("图片加载失败，可打开图片重试");
+                    }} />
                 </a> : <pre>{entry.text}</pre>}
                 <footer>
                   <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString(i18n.resolvedLanguage)}</time>

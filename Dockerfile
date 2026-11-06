@@ -13,14 +13,14 @@ RUN npm run build
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+# Keep modules in the layer: GitHub Actions exports layers, not cache mounts.
+RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY --from=frontend /src/frontend/dist/ ./internal/webassets/dist/
 ARG TARGETOS
 ARG TARGETARCH
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -tags embedweb -trimpath -ldflags="-s -w" -o /out/gothrough ./cmd
 

@@ -54,6 +54,20 @@ func (h *ClipboardHandler) CreateImage(c *gin.Context) {
 func (h *ClipboardHandler) Image(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
+	if c.Query("thumbnail") == "1" && c.Query("download") != "1" {
+		data, err := h.service.Thumbnail(c.Param("id"))
+		if errors.Is(err, service.ErrClipboardNotFound) {
+			respondError(c, err, http.StatusNotFound, "CLIPBOARD_NOT_FOUND", service.ErrClipboardNotFound.Error())
+		} else if errors.Is(err, service.ErrBusy) {
+			c.Header("Retry-After", "1")
+			respondError(c, err, http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error())
+		} else if err != nil {
+			respondError(c, err, http.StatusInternalServerError, "IMAGE_READ_FAILED", "读取剪贴板图片失败，请稍后重试")
+		} else {
+			c.Data(http.StatusOK, "image/png", data)
+		}
+		return
+	}
 	f, err := h.service.OpenImage(c.Param("id"))
 	if errors.Is(err, service.ErrClipboardNotFound) {
 		respondError(c, err, http.StatusNotFound, "CLIPBOARD_NOT_FOUND", service.ErrClipboardNotFound.Error())

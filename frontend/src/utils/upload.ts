@@ -34,6 +34,13 @@ export const createUploadSnapshot = (
 export const getFileKey = (file: File) =>
   `${getUploadPath(file)}-${file.size}-${file.lastModified}`;
 
+/** Count each acknowledgement once, including short final chunks. */
+export const confirmChunk = (item: UploadItem, index: number, bytes: number) => {
+  if (item.confirmedChunks.has(index)) return;
+  item.confirmedChunks.add(index);
+  item.confirmedBytes += bytes;
+};
+
 /**
  * 汇总「服务端已确认的分块字节 + 正在传输分块的实时已发送字节」，
  * 结果裁剪到 [0, file.size]，供进度条与剩余时间使用。
@@ -53,13 +60,9 @@ export const recalcLoadedBytes = (item: UploadItem) => {
   item.inflightBytes.forEach((bytes) => {
     inflight += bytes;
   });
-  let confirmed = 0;
-  item.confirmedBytes.forEach((bytes) => {
-    confirmed += bytes;
-  });
   // Retrying a chunk should not make the displayed progress jump backwards.
   item.loadedBytes = Math.min(
     file.size,
-    Math.max(item.loadedBytes, confirmed + inflight),
+    Math.max(item.loadedBytes, item.confirmedBytes + inflight),
   );
 };

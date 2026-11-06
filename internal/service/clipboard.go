@@ -40,6 +40,8 @@ type ClipboardService struct {
 	imageDir      string
 	imageSettings config.ClipboardImageSettings
 	imageSlot     chan struct{}
+	thumbnailMu   sync.Mutex
+	thumbnails    map[string][]byte
 }
 
 func NewClipboardService(dir string, options ...config.ClipboardImageSettings) (*ClipboardService, error) {
@@ -56,6 +58,7 @@ func NewClipboardService(dir string, options ...config.ClipboardImageSettings) (
 		return nil, err
 	}
 	s.imageSlot = make(chan struct{}, 1)
+	s.thumbnails = make(map[string][]byte)
 	if err := os.MkdirAll(s.imageDir, 0700); err != nil {
 		return nil, err
 	}
@@ -190,6 +193,7 @@ func (s *ClipboardService) commit(next []model.ClipboardEntry) error {
 	for _, entry := range previous {
 		if entry.Type == "image" && !retained[entry.ID] {
 			s.removeImage(entry.ID + ".png")
+			delete(s.thumbnails, entry.ID)
 		}
 	}
 	return nil
