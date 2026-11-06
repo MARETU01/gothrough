@@ -1,10 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/MARETU01/gothrough/internal/utils"
 )
 
 const (
@@ -22,39 +25,51 @@ var (
 	BaseDir         string
 )
 
-func Init() {
-	exePath, err := os.Executable()
+func Init(dataDir string) error {
+	if strings.TrimSpace(dataDir) == "" {
+		return fmt.Errorf("数据目录不能为空")
+	}
+	base, err := filepath.Abs(dataDir)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("解析数据目录: %w", err)
 	}
-	BaseDir = filepath.Dir(exePath)
-
-	// go run 或 IDE 临时构建目录时，使用当前工作目录
-	if strings.Contains(BaseDir, "go-build") || strings.Contains(BaseDir, "JetBrains") {
-		BaseDir, _ = os.Getwd()
-	}
-
-	UploadFolder = filepath.Join(BaseDir, "uploads")
-	TempFolder = filepath.Join(BaseDir, "temp_uploads")
-	ClipboardFolder = filepath.Join(BaseDir, "clipboard")
-
-	if err := os.MkdirAll(UploadFolder, 0755); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.MkdirAll(TempFolder, 0700); err != nil {
-		log.Fatal(err)
-	}
-
-	// 清理上次残留的临时分块
-	if entries, err := os.ReadDir(TempFolder); err == nil {
-		for _, entry := range entries {
-			path := filepath.Join(TempFolder, entry.Name())
-			if entry.IsDir() {
-				_ = os.RemoveAll(path)
-			}
+	upload := filepath.Join(base, "uploads")
+	temp := filepath.Join(base, "temp_uploads")
+	clipboard := filepath.Join(base, "clipboard")
+	for _, dir := range []struct {
+		path string
+		mode os.FileMode
+	}{{upload, 0755}, {temp, 0700}, {clipboard, 0700}} {
+		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
+			return utils.StorageError("创建数据目录失败", err)
 		}
 	}
-
+	// Validate storage before removing any leftover upload sessions.
+	if err := utils.CheckStorage(temp, upload); err != nil {
+		return err
+	}
+	if err := cleanupTempUploads(temp); err != nil {
+		return err
+	}
+	BaseDir, UploadFolder, TempFolder, ClipboardFolder = base, upload, temp, clipboard
+	log.Printf("数据目录: %s", BaseDir)
 	log.Printf("上传目录: %s", UploadFolder)
 	log.Printf("临时目录: %s", TempFolder)
+	return nil
+}
+
+func cleanupTempUploads(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return utils.StorageError("读取临时上传目录失败", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return utils.StorageError("清理残留上传失败", err)
+		}
+	}
+	return nil
 }

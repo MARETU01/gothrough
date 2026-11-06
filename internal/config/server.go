@@ -16,8 +16,13 @@ import (
 )
 
 type Settings struct {
-	Server ServerSettings `yaml:"server"`
-	Source string         `yaml:"-"`
+	Server  ServerSettings  `yaml:"server"`
+	Storage StorageSettings `yaml:"storage"`
+	Source  string          `yaml:"-"`
+}
+
+type StorageSettings struct {
+	DataDir string `yaml:"data_dir"`
 }
 
 type ServerSettings struct {
@@ -39,17 +44,18 @@ func (s ServerSettings) Address() string { return net.JoinHostPort(s.Host, strco
 func Load(path string) (*Settings, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("获取可执行文件路径失败: %w", err)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("获取工作目录失败: %w", err)
 	}
 	return loadSettings(path, filepath.Dir(exe), cwd, os.LookupEnv)
 }
 
 func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) (*Settings, error) {
 	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 8080}, Source: "内置默认值"}
+	cfg.Storage.DataDir = exeDir
 	if path == "" {
 		path, _ = lookup("GOTHROUGH_CONFIG")
 	}
@@ -110,6 +116,16 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	if value, ok := lookup("GOTHROUGH_TLS_KEY_FILE"); ok {
 		cfg.Server.TLS.KeyFile = value
 	}
+	if value, ok := lookup("GOTHROUGH_DATA_DIR"); ok {
+		cfg.Storage.DataDir = value
+	}
+	if strings.TrimSpace(cfg.Storage.DataDir) == "" {
+		return nil, fmt.Errorf("storage.data_dir / GOTHROUGH_DATA_DIR 不能为空")
+	}
+	if !filepath.IsAbs(cfg.Storage.DataDir) {
+		cfg.Storage.DataDir = filepath.Join(base, cfg.Storage.DataDir)
+	}
+	cfg.Storage.DataDir = filepath.Clean(cfg.Storage.DataDir)
 	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
 		return nil, fmt.Errorf("server.port 必须在 1 到 65535 之间")
 	}

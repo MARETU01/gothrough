@@ -32,7 +32,9 @@ func run() error {
 		return err
 	}
 	log.Printf("配置来源: %s", settings.Source)
-	config.Init()
+	if err := config.Init(settings.Storage.DataDir); err != nil {
+		return err
+	}
 	clipboardService, err := service.NewClipboardService(config.ClipboardFolder)
 	if err != nil {
 		return err

@@ -29,11 +29,9 @@ RUN apk add --no-cache ca-certificates \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app \
     && mkdir -p /app/config /data/uploads /data/temp_uploads /data/clipboard \
-    && ln -s /data/uploads /app/uploads \
-    && ln -s /data/temp_uploads /app/temp_uploads \
-    && ln -s /data/clipboard /app/clipboard \
     && chown -R app:app /data
 WORKDIR /app
+ENV GOTHROUGH_DATA_DIR=/data
 COPY --from=backend /out/gothrough /app/gothrough
 COPY config/config.yaml /app/config/config.yaml
 USER 10001:10001

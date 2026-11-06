@@ -78,15 +78,17 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 ```text
 /app/gothrough          可执行文件，不放入数据卷
 /app/config/           外部配置与可挂载的证书目录
-/app/uploads           符号链接 → /data/uploads
-/app/temp_uploads      符号链接 → /data/temp_uploads
-/app/clipboard         符号链接 → /data/clipboard
+/data/uploads          已上传文件
+/data/temp_uploads     临时上传会话
+/data/clipboard        剪贴板历史
 /data/                 单个持久化数据卷
 ```
 
-当前后端根据可执行文件位置确定数据目录；镜像通过符号链接，将上传文件、临时文件和剪贴板历史统一落到 `/data`。这样无需改变应用现有目录规则，且升级镜像不会从数据卷读取旧版本可执行文件。升级前已存在的数据卷中，应用会自动创建 `clipboard` 子目录。
+镜像内置 `GOTHROUGH_DATA_DIR=/data`，直接将上传文件、临时文件和剪贴板历史放入数据卷，不再使用 `/app` 下的符号链接。数据子目录与旧版本一致，已有数据卷可继续使用。程序会创建缺失的子目录，升级镜像不会从数据卷读取旧版本可执行文件。
 
-**必须将整个 `/data` 挂载为同一个卷。** 不要把 `uploads` 和 `temp_uploads` 分别挂载为两个卷，也不要单独将临时目录放入 tmpfs；上传完成依赖跨目录硬链接，两个独立挂载点会导致发布失败。数据卷底层文件系统也必须支持硬链接。服务启动仍会清理临时上传，容器重启不提供上传续传。
+镜像内置环境变量优先于 YAML 中的 `storage.data_dir`。如需更换容器数据根目录，使用 `-e GOTHROUGH_DATA_DIR=/其他路径`，并同步调整挂载点。
+
+**必须将整个 `/data` 挂载为同一个卷。** 不要把 `uploads` 和 `temp_uploads` 分别挂载为两个卷，也不要单独将临时目录放入 tmpfs；上传完成依赖跨目录硬链接。服务启动和上传初始化会检查写入及硬链接能力，不满足要求时提前报错。服务启动仍会清理临时上传，容器重启不提供上传续传。
 
 默认推荐 Docker 管理的 named volume。使用宿主机 bind mount 时，需预先确保 UID/GID `10001:10001` 能创建和读写上述子目录；镜像不会在启动时自动修改宿主机目录权限。同一个卷不要同时供多个应用实例使用。
 

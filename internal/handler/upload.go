@@ -11,6 +11,7 @@ import (
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/service"
+	"github.com/MARETU01/gothrough/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -167,7 +168,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
+		c.JSON(uploadErrorStatus(c, err), gin.H{
 			"original_filename": session.OriginalFilename,
 			"saved_filename":    session.FinalFilename,
 			"status":            "failed",
@@ -214,6 +215,10 @@ func sessionIDFromRequest(c *gin.Context) (string, bool) {
 }
 
 func uploadError(c *gin.Context, err error) {
+	c.JSON(uploadErrorStatus(c, err), gin.H{"error": err.Error()})
+}
+
+func uploadErrorStatus(c *gin.Context, err error) int {
 	status := http.StatusInternalServerError
 	var tooLarge *http.MaxBytesError
 	switch {
@@ -221,11 +226,19 @@ func uploadError(c *gin.Context, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrChunk), errors.Is(err, service.ErrPath):
 		status = http.StatusBadRequest
+	case errors.Is(err, service.ErrPathConflict):
+		status = http.StatusConflict
+	case errors.Is(err, utils.ErrStorageFull):
+		status = http.StatusInsufficientStorage
+	case errors.Is(err, utils.ErrStoragePermission):
+		status = http.StatusForbidden
+	case errors.Is(err, utils.ErrStorageReadOnly):
+		status = http.StatusServiceUnavailable
 	case errors.Is(err, service.ErrBusy):
 		status = http.StatusTooManyRequests
 		c.Header("Retry-After", "1")
 	case errors.As(err, &tooLarge):
 		status = http.StatusRequestEntityTooLarge
 	}
-	c.JSON(status, gin.H{"error": err.Error()})
+	return status
 }

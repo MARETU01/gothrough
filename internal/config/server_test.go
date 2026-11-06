@@ -88,6 +88,36 @@ func TestEnvironmentOverridesFile(t *testing.T) {
 	}
 }
 
+func TestDataDirectorySettings(t *testing.T) {
+	root := t.TempDir()
+	exeDir, cwd := filepath.Join(root, "bin"), filepath.Join(root, "work")
+	cfg, err := loadSettings("", exeDir, cwd, envMap(nil))
+	if err != nil || cfg.Storage.DataDir != exeDir {
+		t.Fatalf("default root: %v %v", cfg, err)
+	}
+	path := putConfig(t, cwd, "storage:\n  data_dir: ..\n")
+	cfg, err = loadSettings(path, exeDir, cwd, envMap(nil))
+	if err != nil || cfg.Storage.DataDir != cwd {
+		t.Fatalf("relative YAML root: %v %v", cfg, err)
+	}
+	cfg, err = loadSettings(path, exeDir, cwd, envMap(map[string]string{"GOTHROUGH_DATA_DIR": "../../data"}))
+	if err != nil || cfg.Storage.DataDir != filepath.Join(root, "data") {
+		t.Fatalf("env root: %v %v", cfg, err)
+	}
+	if _, err := os.Stat(cfg.Storage.DataDir); !os.IsNotExist(err) {
+		t.Fatal("Load created data directory")
+	}
+	for _, value := range []string{"", "  "} {
+		if _, err := loadSettings(path, exeDir, cwd, envMap(map[string]string{"GOTHROUGH_DATA_DIR": value})); err == nil {
+			t.Fatal("accepted empty root override")
+		}
+	}
+	putConfig(t, cwd, "storage:\n  data_dir: ''\n")
+	if _, err := loadSettings(path, exeDir, cwd, envMap(nil)); err == nil {
+		t.Fatal("accepted empty YAML root")
+	}
+}
+
 func TestInvalidSettings(t *testing.T) {
 	for name, values := range map[string]map[string]string{
 		"port text": {"GOTHROUGH_PORT": "http"}, "port empty": {"GOTHROUGH_PORT": ""},

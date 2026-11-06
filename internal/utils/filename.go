@@ -20,8 +20,12 @@ var illegalCharsRegex = regexp.MustCompile(`[<>:"/\\|?*]`)
 var multiSpaceRegex = regexp.MustCompile(`\s+`)
 var multiUnderscoreRegex = regexp.MustCompile(`_+`)
 
-// 清洗文件名，保留 Unicode，截断到指定长度
-func SanitizeFilenameKeepUnicode(name string, maxLength int) string {
+// A byte limit also bounds UTF-16 length on Windows and leaves room for
+// filesystem metadata conventions. Conflict suffixes are included in this cap.
+const MaxFilenameBytes = 200
+
+// 清洗文件名并按 UTF-8 字节数截断，不拆开 Unicode 字符。
+func SanitizeFilenameKeepUnicode(name string, maxBytes int) string {
 	if name == "" {
 		return ""
 	}
@@ -53,30 +57,50 @@ func SanitizeFilenameKeepUnicode(name string, maxLength int) string {
 		return ""
 	}
 
-	base := name
-	ext := ""
-	lastDot := strings.LastIndex(name, ".")
-	if lastDot > 0 {
-		base = name[:lastDot]
-		ext = name[lastDot:]
-	}
+	return FilenameWithSuffix(name, "", maxBytes)
+}
 
-	if windowsReservedNames[strings.ToUpper(base)] {
+// FilenameWithSuffix fits the stem, extension and complete suffix together.
+// Its input is a sanitized single path component; directory names are untouched.
+func FilenameWithSuffix(name, suffix string, maxBytes int) string {
+	if maxBytes <= len(suffix) {
+		return ""
+	}
+	base, ext := name, ""
+	if dot := strings.LastIndex(name, "."); dot > 0 {
+		base, ext = name[:dot], name[dot:]
+	}
+	if reservedFilename(base) {
 		base = "_" + base
 	}
-
-	if utf8.RuneCountInString(base)+utf8.RuneCountInString(ext) > maxLength {
-		maxKeep := maxLength - utf8.RuneCountInString(ext)
-		if maxKeep < 1 {
-			maxKeep = 1
-		}
-		runes := []rune(base)
-		if len(runes) > maxKeep {
-			base = string(runes[:maxKeep])
-		}
+	ext = strings.TrimRight(truncateUTF8(ext, maxBytes-len(suffix)-1), " .")
+	baseLimit := maxBytes - len(suffix) - len(ext)
+	base = strings.TrimRight(truncateUTF8(base, baseLimit), " .")
+	if base == "" {
+		base = "_"
 	}
+	if suffix == "" && reservedFilename(base) {
+		base = truncateUTF8("_"+base, baseLimit)
+	}
+	return base + suffix + ext
+}
 
-	return strings.TrimRight(base+ext, " .")
+func reservedFilename(base string) bool {
+	first, _, _ := strings.Cut(base, ".")
+	return windowsReservedNames[strings.ToUpper(strings.TrimRight(first, " ."))]
+}
+
+func truncateUTF8(text string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	for !utf8.RuneStart(text[maxBytes]) {
+		maxBytes--
+	}
+	return text[:maxBytes]
 }
 
 // 安全化上传相对路径，防止目录遍历攻击。
@@ -123,9 +147,4 @@ func SafeUploadRelpath(filename, uploadFolder string) string {
 	}
 
 	return rel
-}
-
-func FileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

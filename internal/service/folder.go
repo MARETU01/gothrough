@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ func sanitizeUploadPath(name string) (string, error) {
 		if part == "" || part == "." || part == ".." || strings.Contains(part, ":") {
 			return "", ErrPath
 		}
-		parts[i] = utils.SanitizeFilenameKeepUnicode(part, 200)
+		parts[i] = utils.SanitizeFilenameKeepUnicode(part, utils.MaxFilenameBytes)
 		if parts[i] == "" {
 			return "", ErrPath
 		}
@@ -32,24 +33,34 @@ func sanitizeUploadPath(name string) (string, error) {
 func (s *UploadService) prepareParent(name string) error {
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
-		return err
+		return utils.StorageError("打开上传目录失败", err)
 	}
 	defer root.Close()
-	dir := filepath.Dir(filepath.FromSlash(name))
-	if err := root.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("创建上传目录失败: %w", err)
+	dir := "."
+	parent := filepath.ToSlash(filepath.Dir(filepath.FromSlash(name)))
+	if parent == "." {
+		return nil
 	}
-	// Publishing uses a hard link from the separate temporary directory.
-	// Do not allow a pre-existing symlink or junction to redirect its parent.
-	for dir != "." {
+	// Check each ancestor before creating children, rejecting symlinks and files
+	// before any upload data is accepted. Re-check at publication for local changes.
+	for _, part := range strings.Split(parent, "/") {
+		dir = filepath.Join(dir, part)
 		info, err := root.Lstat(dir)
-		if err != nil {
-			return err
+		if errors.Is(err, os.ErrNotExist) {
+			if err := root.Mkdir(dir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
+				return utils.StorageError("创建上传父目录失败", err)
+			}
+			info, err = root.Lstat(dir)
 		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		if err != nil {
+			return utils.StorageError("检查上传父目录失败", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
 			return ErrPath
 		}
-		dir = filepath.Dir(dir)
+		if !info.IsDir() {
+			return fmt.Errorf("%w: %s 是文件，不能作为目录", ErrPathConflict, filepath.ToSlash(dir))
+		}
 	}
 	return nil
 }

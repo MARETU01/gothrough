@@ -1,4 +1,4 @@
-# 端口与 TLS 配置
+# 服务与数据目录配置
 
 [返回项目首页](../README.md)
 
@@ -9,6 +9,8 @@
 外部配置文件 `config/config.yaml`：
 
 ```yaml
+storage:
+  data_dir: ".."
 server:
   host: "0.0.0.0"
   port: 8080
@@ -24,11 +26,22 @@ server:
 
 字段优先级：**环境变量 > YAML 配置 > 内置默认值**。TLS 开关通过 `server.tls.enabled` 或 `GOTHROUGH_TLS_ENABLED` 设置。环境变量中的空字符串也视为明确覆盖，空端口或无效布尔值会报错。
 
+## 数据目录
+
+`storage.data_dir` 指定数据根目录，包含 `uploads/`、`temp_uploads/` 和 `clipboard/`。相对路径以配置文件所在目录为基准；未加载配置文件时，环境变量中的相对路径以工作目录为基准。默认配置填写 `".."`，因此开发数据保存在项目根目录，发布包的数据保存在 `release/` 中。
+
+如果配置文件和环境变量均未指定数据目录，使用可执行文件所在目录；不再通过 `go-build`、`JetBrains` 等路径片段猜测开发环境。旧配置配合 `go run` 使用时，请补上 `storage.data_dir: ".."` 或设置环境变量。空字符串和纯空白的数据目录会被拒绝。
+
+可通过 `GOTHROUGH_DATA_DIR` 覆盖数据目录，例如 `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd`。修改目录不会自动搬迁旧数据；需要在服务停止后自行迁移，或继续指向原目录。一个数据根目录只供一个服务进程使用。
+
+初始化返回错误，由程序入口统一记录并退出。创建目录、存储写入与硬链接检查通过后才清理旧上传会话；读取或清理失败会明确报错，不会被静默忽略。
+
 ## 环境变量
 
 | 环境变量 | 用途 |
 | --- | --- |
 | `GOTHROUGH_CONFIG` | 指定配置文件路径，低于 `-config` |
+| `GOTHROUGH_DATA_DIR` | 数据根目录，覆盖 `storage.data_dir`；不能为空 |
 | `GOTHROUGH_HOST` | 监听 IP 或主机名，不含协议和端口；IPv6 不加方括号 |
 | `GOTHROUGH_PORT` | 监听端口，范围 1～65535 |
 | `GOTHROUGH_TLS_ENABLED` | TLS 开关，建议填写 `true` / `false` |

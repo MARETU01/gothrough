@@ -62,12 +62,8 @@ func TestFolderUploadRejectsSymlinkParent(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(s.uploadDir, "escape")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	info, err := s.InitSession(model.InitRequest{Filename: "file.txt", RelativePath: "escape/file.txt"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.CompleteSession(info.SessionID); err == nil {
-		t.Fatal("published outside upload directory")
+	if _, err := s.InitSession(model.InitRequest{Filename: "file.txt", RelativePath: "escape/file.txt"}); !errors.Is(err, ErrPath) {
+		t.Fatalf("symlink parent not rejected at initialization: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "file.txt")); !os.IsNotExist(err) {
 		t.Fatalf("outside file: %v", err)

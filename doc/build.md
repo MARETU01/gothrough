@@ -49,7 +49,7 @@ Makefile 统一使用 `sh` 和 POSIX 命令，不调用 cmd 或 PowerShell。`ma
 make build OUTPUT=release/custom.exe
 ```
 
-发布后访问 `http://localhost:8080`（或实际后端监听地址）。前端 HTML、JS、CSS 已包含在程序中，部署机器不需要 Node.js，也不需要携带 `frontend/dist`。现有运行配置、TLS 证书和上传数据仍由后端按原方式读取，不会嵌入可执行文件。运行目录需有创建上传数据目录的权限。
+发布后访问 `http://localhost:8080`（或实际后端监听地址）。前端 HTML、JS、CSS 已包含在程序中，部署机器不需要 Node.js，也不需要携带 `frontend/dist`。运行配置、TLS 证书和数据不会嵌入可执行文件。程序需有创建和读写数据根目录的权限；目录由 `storage.data_dir` 或 `GOTHROUGH_DATA_DIR` 设置，详见[配置说明](configuration.md)。Makefile 不覆盖已有配置，旧配置仍可使用；开发时若用 `go run`，请显式补上数据目录，避免数据落入临时可执行文件目录。
 
 `internal/webassets/embed.go` 通过 `go:embed all:dist` 嵌入同目录下的构建产物。Vite 仍输出到 `frontend/dist`；Makefile 的内部资源规则构建前端后，将产物完整同步到 `internal/webassets/dist`，清除该生成目录中的旧文件，避免过期哈希资源残留。`make build` 和 `make test` 会自动执行此步骤，并行执行时也会先完成同步再开始 Go 编译。同一次 `make -j2 build test` 调用只构建和同步一次前端。
 
