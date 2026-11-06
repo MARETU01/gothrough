@@ -1,5 +1,6 @@
+import type { Message } from '@/i18n/messages';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiErrorMessage } from '@/services/errors';
+import { apiErrorDescriptor } from '@/services/errors';
 
 // Only the latest request can update the page. Cancel before mutations so an
 // older list response cannot bring deleted records back into view.
@@ -14,13 +15,13 @@ export interface RemoteLoadContext {
 export function useRemoteData<T>(load: (signal?: AbortSignal, context?: RemoteLoadContext) => Promise<T | typeof NOT_MODIFIED>, initialData: T) {
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
-  const [actionError, setActionError] = useState('');
-  const [loadError, setLoadError] = useState('');
-  const [backgroundError, setBackgroundError] = useState('');
+  const [actionError, setActionError] = useState<Message>('');
+  const [loadError, setLoadError] = useState<Message>('');
+  const [backgroundError, setBackgroundError] = useState<Message>('');
   const mounted = useRef(false);
   const request = useRef<{ controller: AbortController; background: boolean } | null>(null);
 
-  const setError = useCallback((message: string) => {
+  const setError = useCallback((message: Message) => {
     setActionError(message);
     setLoadError('');
   }, []);
@@ -62,8 +63,8 @@ export function useRemoteData<T>(load: (signal?: AbortSignal, context?: RemoteLo
       }
     } catch (err) {
       if (mounted.current && !controller.signal.aborted) {
-        if (background) setBackgroundError(apiErrorMessage(err));
-        else setLoadError(apiErrorMessage(err));
+        if (background) setBackgroundError(apiErrorDescriptor(err));
+        else setLoadError(apiErrorDescriptor(err));
       }
     } finally {
       if (request.current?.controller === controller) request.current = null;

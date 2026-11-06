@@ -1,3 +1,4 @@
+import type { Message } from '@/i18n/messages';
 /**
  * 上传队列的应用层类型定义（页面 / hook / 工具函数共用）。
  * 服务端请求 / 响应 DTO 仍定义在 @/services/upload，此处只放 UI 状态相关结构。
@@ -34,7 +35,7 @@ export interface UploadController {
 
 /** 队列中的单个上传项（itemsRef / items 数组元素） */
 export interface UploadItem {
-  error: string;
+  error: Message;
   file: File;
   state: UploadState;
   session: UploadSession | null;
@@ -55,7 +56,7 @@ export interface UploadItem {
 
 /** 顶部状态提示消息 */
 export interface StatusMessage {
-  text: string;
+  text: Message;
   type: "success" | "error";
 }
 

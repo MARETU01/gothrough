@@ -32,7 +32,7 @@ func NewUploadHandler(us *service.UploadService) *UploadHandler {
 func (h *UploadHandler) UploadInit(c *gin.Context) {
 	var req model.InitRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Filename == "" || req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 filename 或 total_size"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_UPLOAD", "error": "缺少 filename 或 total_size"})
 		return
 	}
 
@@ -67,12 +67,12 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, config.ChunkSize+1024*1024)
 	if strings.HasPrefix(c.GetHeader("Content-Type"), "application/octet-stream") {
 		if c.Request.ContentLength > config.ChunkSize {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "分块超过大小限制"})
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "CHUNK_TOO_LARGE", "error": "分块超过大小限制"})
 			return
 		}
 		index, err := strconv.Atoi(c.Query("chunk_index"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 chunk_index"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_CHUNK_INDEX", "error": "无效的 chunk_index"})
 			return
 		}
 		h.writeChunk(c, c.Query("session_id"), index, c.Request.Body)
@@ -87,19 +87,19 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 
 	chunkIndex, err := strconv.Atoi(chunkIndexStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 chunk_index"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_CHUNK_INDEX", "error": "无效的 chunk_index"})
 		return
 	}
 
 	chunkFile, err := c.FormFile("chunk")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无分块数据"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "MISSING_CHUNK_DATA", "error": "无分块数据"})
 		return
 	}
 
 	file, err := chunkFile.Open()
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "读取分块失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "CHUNK_READ_FAILED", "读取分块失败，请稍后重试")
 		return
 	}
 	defer file.Close()
@@ -171,6 +171,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 				}
 			}
 			c.JSON(http.StatusBadRequest, gin.H{
+				"code":           "MISSING_CHUNKS",
 				"error":          "缺少分块",
 				"missing_chunks": missing,
 				"total_chunks":   session.TotalChunks,
@@ -178,12 +179,13 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 			})
 			return
 		}
-		status, message := uploadErrorDetails(c, err)
+		status, code, message := uploadErrorDetails(c, err)
 		c.JSON(status, gin.H{
 			"original_filename": session.OriginalFilename,
 			"saved_filename":    session.FinalFilename,
 			"status":            "failed",
 			"message":           message,
+			"code":              code,
 			"error":             message,
 		})
 		return
@@ -225,15 +227,15 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 func sessionIDFromRequest(c *gin.Context) (string, bool) {
 	var req model.SessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.SessionID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 session_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "MISSING_SESSION", "error": "缺少 session_id"})
 		return "", false
 	}
 	return req.SessionID, true
 }
 
 func uploadError(c *gin.Context, err error) {
-	status, message := uploadErrorDetails(c, err)
-	respondError(c, err, status, message)
+	status, code, message := uploadErrorDetails(c, err)
+	respondError(c, err, status, code, message)
 }
 
 func withUploadSession(c *gin.Context, id string) {
@@ -243,30 +245,30 @@ func withUploadSession(c *gin.Context, id string) {
 	}
 }
 
-func uploadErrorDetails(c *gin.Context, err error) (int, string) {
+func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.Is(err, service.ErrSession):
-		return http.StatusNotFound, service.ErrSession.Error()
+		return http.StatusNotFound, "INVALID_SESSION", service.ErrSession.Error()
 	case errors.Is(err, service.ErrChunk):
-		return http.StatusBadRequest, service.ErrChunk.Error()
+		return http.StatusBadRequest, "INVALID_CHUNK", service.ErrChunk.Error()
 	case errors.Is(err, service.ErrPath):
-		return http.StatusBadRequest, service.ErrPath.Error()
+		return http.StatusBadRequest, "INVALID_PATH", service.ErrPath.Error()
 	case errors.Is(err, service.ErrPathConflict):
-		return http.StatusConflict, service.ErrPathConflict.Error()
+		return http.StatusConflict, "PATH_CONFLICT", service.ErrPathConflict.Error()
 	case errors.Is(err, utils.ErrStorageFull):
-		return http.StatusInsufficientStorage, utils.ErrStorageFull.Error()
+		return http.StatusInsufficientStorage, "STORAGE_FULL", utils.ErrStorageFull.Error()
 	case errors.Is(err, utils.ErrStoragePermission):
-		return http.StatusForbidden, utils.ErrStoragePermission.Error()
+		return http.StatusForbidden, "STORAGE_PERMISSION", utils.ErrStoragePermission.Error()
 	case errors.Is(err, utils.ErrStorageReadOnly):
-		return http.StatusServiceUnavailable, utils.ErrStorageReadOnly.Error()
+		return http.StatusServiceUnavailable, "STORAGE_READ_ONLY", utils.ErrStorageReadOnly.Error()
 	case errors.Is(err, utils.ErrHardlinkUnsupported):
-		return http.StatusInternalServerError, utils.ErrHardlinkUnsupported.Error()
+		return http.StatusInternalServerError, "HARDLINK_UNSUPPORTED", utils.ErrHardlinkUnsupported.Error()
 	case errors.Is(err, service.ErrBusy):
 		c.Header("Retry-After", "1")
-		return http.StatusTooManyRequests, service.ErrBusy.Error()
+		return http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error()
 	case errors.As(err, &tooLarge):
-		return http.StatusRequestEntityTooLarge, "请求体过大"
+		return http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "请求体过大"
 	}
-	return http.StatusInternalServerError, "上传失败，请稍后重试"
+	return http.StatusInternalServerError, "UPLOAD_FAILED", "上传失败，请稍后重试"
 }

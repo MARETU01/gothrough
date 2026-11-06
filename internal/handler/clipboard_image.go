@@ -16,7 +16,7 @@ func (h *ClipboardHandler) ImageConfig(c *gin.Context) {
 func (h *ClipboardHandler) CreateImage(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	if !h.service.ImageSettings().Enabled {
-		respondError(c, service.ErrClipboardImageDisabled, http.StatusForbidden, service.ErrClipboardImageDisabled.Error())
+		respondError(c, service.ErrClipboardImageDisabled, http.StatusForbidden, "IMAGE_DISABLED", service.ErrClipboardImageDisabled.Error())
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, int64(h.service.ImageSettings().MaxSizeMB)*1024*1024+65536)
@@ -24,7 +24,7 @@ func (h *ClipboardHandler) CreateImage(c *gin.Context) {
 	// request in Gin's multipart parser before the decoder admission limit.
 	r, err := c.Request.MultipartReader()
 	if err != nil {
-		respondError(c, err, http.StatusBadRequest, "无效的图片请求")
+		respondError(c, err, http.StatusBadRequest, "INVALID_IMAGE_REQUEST", "无效的图片请求")
 		return
 	}
 	part, err := r.NextPart()
@@ -33,13 +33,13 @@ func (h *ClipboardHandler) CreateImage(c *gin.Context) {
 		if errors.As(err, &tooLarge) {
 			clipboardImageFailure(c, err)
 		} else {
-			respondError(c, err, http.StatusBadRequest, "请选择一张有效图片")
+			respondError(c, err, http.StatusBadRequest, "INVALID_IMAGE_SELECTION", "请选择一张有效图片")
 		}
 		return
 	}
 	defer part.Close()
 	if part.FormName() != "image" || part.FileName() == "" {
-		respondError(c, nil, http.StatusBadRequest, "请选择一张图片")
+		respondError(c, nil, http.StatusBadRequest, "MISSING_IMAGE", "请选择一张图片")
 		return
 	}
 	entry, err := h.service.CreateImage(part)
@@ -56,17 +56,17 @@ func (h *ClipboardHandler) Image(c *gin.Context) {
 	c.Header("X-Content-Type-Options", "nosniff")
 	f, err := h.service.OpenImage(c.Param("id"))
 	if errors.Is(err, service.ErrClipboardNotFound) {
-		respondError(c, err, http.StatusNotFound, service.ErrClipboardNotFound.Error())
+		respondError(c, err, http.StatusNotFound, "CLIPBOARD_NOT_FOUND", service.ErrClipboardNotFound.Error())
 		return
 	}
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "读取剪贴板图片失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "IMAGE_READ_FAILED", "读取剪贴板图片失败，请稍后重试")
 		return
 	}
 	defer f.Close()
 	stat, err := f.Stat()
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "读取剪贴板图片失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "IMAGE_READ_FAILED", "读取剪贴板图片失败，请稍后重试")
 		return
 	}
 	c.Header("Content-Type", "image/png")
@@ -80,15 +80,15 @@ func clipboardImageFailure(c *gin.Context, err error) {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.Is(err, service.ErrClipboardImageSize), errors.As(err, &tooLarge):
-		respondError(c, err, http.StatusRequestEntityTooLarge, service.ErrClipboardImageSize.Error())
+		respondError(c, err, http.StatusRequestEntityTooLarge, "IMAGE_TOO_LARGE", service.ErrClipboardImageSize.Error())
 	case errors.Is(err, service.ErrClipboardImageQuota):
-		respondError(c, err, http.StatusConflict, service.ErrClipboardImageQuota.Error())
+		respondError(c, err, http.StatusConflict, "IMAGE_QUOTA", service.ErrClipboardImageQuota.Error())
 	case errors.Is(err, service.ErrClipboardImage):
-		respondError(c, err, http.StatusBadRequest, service.ErrClipboardImage.Error())
+		respondError(c, err, http.StatusBadRequest, "INVALID_IMAGE", service.ErrClipboardImage.Error())
 	case errors.Is(err, service.ErrBusy):
 		c.Header("Retry-After", "1")
-		respondError(c, err, http.StatusTooManyRequests, service.ErrBusy.Error())
+		respondError(c, err, http.StatusTooManyRequests, "SERVER_BUSY", service.ErrBusy.Error())
 	default:
-		respondError(c, err, http.StatusInternalServerError, "图片发布失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "IMAGE_PUBLISH_FAILED", "图片发布失败，请稍后重试")
 	}
 }

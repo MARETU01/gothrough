@@ -1,4 +1,6 @@
-﻿import { memo } from "react";
+import { translateMessage } from '@/i18n/messages';
+import { useTranslation } from 'react-i18next';
+import { memo } from "react";
 import { STATE_LABELS, type UploadViewItem } from "@/types/upload";
 import { formatElapsed, formatETA, formatSize, formatSpeed } from "@/utils/format";
 import { getFileKey } from "@/utils/upload";
@@ -20,6 +22,7 @@ export const UploadFileRow = memo(function UploadFileRow({
   onRemove,
   onRetry,
 }: Props) {
+  const { t } = useTranslation();
   const key = getFileKey(item.file);
   const displayName = getUploadPath(item.file);
   const progress =
@@ -44,50 +47,47 @@ export const UploadFileRow = memo(function UploadFileRow({
         <Button
           type="button"
           variant="ghost" size="sm"
-          aria-label={`移除 ${displayName}`}
+          aria-label={t('upload.remove', { name: displayName })}
           disabled={item.state === "canceling"}
           onClick={() => onRemove(key)}
         >
-          <X aria-hidden="true" />移除
-        </Button>
+          <X aria-hidden="true" />{t("移除")}</Button>
       </div>
       {item.error && (
         <p className="file-error" role="alert">
-          {item.error}
+          {translateMessage(item.error)}
         </p>
       )}
       {item.state === "error" && (
         <Button
           type="button"
           variant="outline" size="sm"
-          aria-label={`重试 ${displayName}`}
+          aria-label={t('upload.retry', { name: displayName })}
           disabled={retryDisabled}
           onClick={() => void onRetry(key)}
         >
-          <RotateCcw aria-hidden="true" />重试此文件
-        </Button>
+          <RotateCcw aria-hidden="true" />{t("重试此文件")}</Button>
       )}
       <div className="file-status">
-        <span>{STATE_LABELS[item.state]}</span>
-        {item.elapsedMs !== null && <span title="不含暂停时间；重试后重新计时">耗时 {formatElapsed(item.elapsedMs)}</span>}
+        <span>{t(STATE_LABELS[item.state])}</span>
+        {item.elapsedMs !== null && <span title={t("不含暂停时间；重试后重新计时")}>{t("耗时")} {formatElapsed(item.elapsedMs)}</span>}
         {item.speed > 0 && (
           <span className="speed">{formatSpeed(item.speed)}</span>
         )}
-        {eta && <span className="eta">剩余 {eta}</span>}
+        {eta && <span className="eta">{t("剩余")}{eta}</span>}
         {item.session && (
-          <span className="chunks">
-            分块 {item.session.receivedChunks}/{item.session.totalChunks}
+          <span className="chunks">{t("分块")}{item.session.receivedChunks}/{item.session.totalChunks}
           </span>
         )}
       </div>
       <div
         className="progress-bar"
         role="progressbar"
-        aria-label={`${displayName} 传输进度`}
+        aria-label={t('upload.progress', { name: displayName })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress}
-        aria-valuetext={`${progress}%，${STATE_LABELS[item.state]}`}
+        aria-valuetext={t('upload.progressText', { progress, state: t(STATE_LABELS[item.state]) })}
       >
         <div className="progress" style={{ width: `${progress}%` }} />
       </div>

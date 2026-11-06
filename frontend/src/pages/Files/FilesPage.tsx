@@ -1,7 +1,9 @@
+import { message, translateMessage, type Message } from '@/i18n/messages';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteFile, downloadFileUrl, listFiles, type FileListResponse } from '@/services/files';
-import { apiErrorMessage } from '@/services/errors';
+import { apiErrorDescriptor } from '@/services/errors';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Button } from '@/components/ui/button';
@@ -10,17 +12,18 @@ import { Download, RefreshCw, Upload, Trash2 } from 'lucide-react';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
-const SORT_OPTIONS = [
-  ['mtime_desc', '最近修改 ↓'], ['mtime_asc', '最近修改 ↑'],
-  ['size_desc', '文件大小 ↓'], ['size_asc', '文件大小 ↑'],
-  ['name_asc', '文件名 A→Z'], ['name_desc', '文件名 Z→A'],
-] as const;
-
 export default function FilesPage() {
-  usePageTitle('已上传文件 - GoThrough');
+  const { t, i18n } = useTranslation();
+  const SORT_OPTIONS = [
+    ['mtime_desc', t("最近修改 ↓")], ['mtime_asc', t("最近修改 ↑")],
+    ['size_desc', t("文件大小 ↓")], ['size_asc', t("文件大小 ↑")],
+    ['name_asc', t("文件名 A→Z")], ['name_desc', t("文件名 Z→A")],
+  ] as const;
+
+  usePageTitle(t("已上传文件 - GoThrough"));
   const { data, setData, loading, error, setError, refresh, cancel, mounted } =
     useRemoteData<FileListResponse | null>(listFiles, null);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<Message>('');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('mtime_desc');
   const [page, setPage] = useState(1);
@@ -39,11 +42,11 @@ export default function FilesPage() {
     const [field, direction] = sort.split('_');
     return files.sort((a, b) => {
       const comparison = field === 'size' ? a.size - b.size
-        : field === 'name' ? a.name.localeCompare(b.name, 'zh-CN', { numeric: true })
+        : field === 'name' ? a.name.localeCompare(b.name, i18n.resolvedLanguage, { numeric: true })
         : a.mtime.localeCompare(b.mtime);
       return (direction === 'asc' ? comparison : -comparison) || a.name.localeCompare(b.name);
     });
-  }, [data, query, sort]);
+  }, [data, query, sort, i18n.resolvedLanguage]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageFiles = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -64,10 +67,10 @@ export default function FilesPage() {
       if (!mounted.current) return;
       setData(previous => previous ? { ...previous, files: previous.files.filter(file => file.name !== name) } : previous);
       setConfirming(null);
-      setNotice(`已删除 ${name}`);
+      setNotice(message('files.deleted', { name }));
       await refresh();
     } catch (err) {
-      if (mounted.current) { setConfirming(null); setError(`删除 ${name} 失败：${apiErrorMessage(err)}`); }
+      if (mounted.current) { setConfirming(null); setError(message('files.deleteFailed', { name, error: apiErrorDescriptor(err) })); }
     } finally {
       if (mounted.current) setDeleting(null);
     }
@@ -77,51 +80,51 @@ export default function FilesPage() {
     <main className="files-page content-page">
       <div className="files-container content-container">
         <header className="files-header">
-          <div><h1>已上传文件</h1><p>浏览和管理已上传的文件</p></div>
+          <div><h1>{t("已上传文件")}</h1><p>{t("浏览和管理已上传的文件")}</p></div>
           <div className="files-actions">
-            <Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? 'app-spin' : undefined} />刷新列表</Button>
-            <Button asChild><Link to="/upload"><Upload aria-hidden="true" />上传文件</Link></Button>
+            <Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}><RefreshCw aria-hidden="true" className={loading ? 'app-spin' : undefined} />{t("刷新列表")}</Button>
+            <Button asChild><Link to="/upload"><Upload aria-hidden="true" />{t("上传文件")}</Link></Button>
           </div>
         </header>
-        {data && <section className="files-disk" aria-label="服务器存储空间">
+        {data && <section className="files-disk" aria-label={t("服务器存储空间")}>
           <dl>
-            <div><dt>上传文件总大小</dt><dd>{data.total_size_display}</dd></div>
-            <div><dt>磁盘可用空间</dt><dd>{data.disk_free_display}</dd></div>
-            <div><dt>磁盘已用 / 总容量</dt><dd>{data.disk_used_display} / {data.disk_total_display}</dd></div>
+            <div><dt>{t("上传文件总大小")}</dt><dd>{data.total_size_display}</dd></div>
+            <div><dt>{t("磁盘可用空间")}</dt><dd>{data.disk_free_display}</dd></div>
+            <div><dt>{t("磁盘已用 / 总容量")}</dt><dd>{data.disk_used_display} / {data.disk_total_display}</dd></div>
           </dl>
           <div className="files-disk-meter">
-            <div className="files-meter-label"><span>磁盘使用率</span><strong>{diskPercent.toFixed(1)}%</strong></div>
-            <div className={`files-meter${data.disk_pct_warning ? ' warning' : ''}`} role="progressbar" aria-label="磁盘使用率" aria-valuemin={0} aria-valuemax={100} aria-valuenow={diskPercent}><div style={{ width: `${diskPercent}%` }} /></div>
-            {data.disk_pct_warning && <p className="files-warning">磁盘使用率已超过 85%，请及时清理文件。</p>}
+            <div className="files-meter-label"><span>{t("磁盘使用率")}</span><strong>{diskPercent.toFixed(1)}%</strong></div>
+            <div className={`files-meter${data.disk_pct_warning ? ' warning' : ''}`} role="progressbar" aria-label={t("磁盘使用率")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={diskPercent}><div style={{ width: `${diskPercent}%` }} /></div>
+            {data.disk_pct_warning && <p className="files-warning">{t("磁盘使用率已超过 85%，请及时清理文件。")}</p>}
           </div>
         </section>}
         <div className="files-toolbar">
-          <input type="search" aria-label="搜索文件名" placeholder="搜索文件名…" value={query} onChange={event => { setQuery(event.target.value); setPage(1); setConfirming(null); }} />
-          <select aria-label="文件排序" value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
+          <input type="search" aria-label={t("搜索文件名")} placeholder={t("搜索文件名…")} value={query} onChange={event => { setQuery(event.target.value); setPage(1); setConfirming(null); }} />
+          <select aria-label={t("文件排序")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
             {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <span className="files-count">{filtered.length} 个文件{query.trim() && data ? ` / 共 ${data.files.length} 个` : ''}</span>
+          <span className="files-count">{t('files.count', { count: filtered.length })}{query.trim() && data ? t('files.total', { count: data.files.length }) : ''}</span>
         </div>
-        {error && <StatusMessage tone="error" action={<Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}>重新加载</Button>}>{error}</StatusMessage>}
-        <div aria-live="polite">{notice && <StatusMessage tone="success">{notice}</StatusMessage>}{loading && <StatusMessage tone="loading">正在加载文件列表…</StatusMessage>}</div>
-        {data && <section aria-label="文件列表" aria-busy={loading}>
+        {error && <StatusMessage tone="error" action={<Button type="button" variant="outline" disabled={loading || deleting !== null} onClick={() => void refresh()}>{t("重新加载")}</Button>}>{translateMessage(error)}</StatusMessage>}
+        <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
+        {data && <section aria-label={t("文件列表")} aria-busy={loading}>
           {filtered.length > 0 ? <div className="files-table-scroll"><table>
-            <thead><tr><th scope="col">文件名</th><th scope="col">大小</th><th scope="col">修改时间</th><th scope="col">操作</th></tr></thead>
+            <thead><tr><th scope="col">{t("文件名")}</th><th scope="col">{t("大小")}</th><th scope="col">{t("修改时间")}</th><th scope="col">{t("操作")}</th></tr></thead>
             <tbody>{pageFiles.map(file => <tr key={file.name}>
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.mtime}</td>
               <td><div className="files-row-actions">
-                <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={`下载 ${file.name}`}><Download aria-hidden="true" />下载</a></Button>
-                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={`${confirming === file.name ? '确认删除' : '删除'} ${file.name}`} onClick={() => void handleDelete(file.name)}>
-                  <Trash2 aria-hidden="true" />{deleting === file.name ? '删除中…' : confirming === file.name ? '确认删除？' : '删除'}
+                <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
+                <Button type="button" variant="destructive" size="sm" disabled={deleting !== null} aria-label={t(confirming === file.name ? 'files.confirmDelete' : 'files.delete', { name: file.name })} onClick={() => void handleDelete(file.name)}>
+                  <Trash2 aria-hidden="true" />{deleting === file.name ? t("删除中…") : confirming === file.name ? t("确认删除？") : t("删除")}
                 </Button>
               </div></td>
             </tr>)}</tbody>
-          </table></div> : <div className="files-empty">{data.files.length === 0 ? <>还没有上传文件，先去<Link to="/upload">上传文件</Link>吧。</> : <>没有找到匹配的文件。<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>清除搜索</Button></>}</div>}
-          {totalPages > 1 && <nav className="files-pagination" aria-label="文件列表分页">
-            <Button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setConfirming(null); }}>上一页</Button>
-            {pages.map(number => <Button type="button" variant={number === currentPage ? "default" : "outline"} key={number} aria-label={`第 ${number} 页`} aria-current={number === currentPage ? 'page' : undefined} onClick={() => { setPage(number); setConfirming(null); }}>{number}</Button>)}
-            <Button type="button" disabled={currentPage === totalPages} onClick={() => { setPage(currentPage + 1); setConfirming(null); }}>下一页</Button>
-            <span>第 {currentPage} / {totalPages} 页</span>
+          </table></div> : <div className="files-empty">{data.files.length === 0 ? <>{t("还没有上传文件，先去")}<Link to="/upload">{t("上传文件")}</Link>{t("吧。")}</> : <>{t("没有找到匹配的文件。")}<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>{t("清除搜索")}</Button></>}</div>}
+          {totalPages > 1 && <nav className="files-pagination" aria-label={t("文件列表分页")}>
+            <Button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setConfirming(null); }}>{t("上一页")}</Button>
+            {pages.map(number => <Button type="button" variant={number === currentPage ? "default" : "outline"} key={number} aria-label={t('files.page', { number })} aria-current={number === currentPage ? 'page' : undefined} onClick={() => { setPage(number); setConfirming(null); }}>{number}</Button>)}
+            <Button type="button" disabled={currentPage === totalPages} onClick={() => { setPage(currentPage + 1); setConfirming(null); }}>{t("下一页")}</Button>
+            <span>{t('files.pages', { current: currentPage, total: totalPages })}</span>
           </nav>}
         </section>}
       </div>

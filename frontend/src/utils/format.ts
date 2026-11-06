@@ -1,3 +1,5 @@
+import i18n from '@/i18n';
+
 /** 字节数格式化为带单位的可读字符串，如 1.5 MB */
 export const formatSize = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -16,16 +18,16 @@ export const formatElapsed = (milliseconds: number) => {
   const seconds = (tenths % 600) / 10;
   const minutes = Math.floor(tenths / 600) % 60;
   const hours = Math.floor(tenths / 36000);
-  return `${hours ? `${hours}时` : ''}${hours || minutes ? `${minutes}分` : ''}${seconds.toFixed(1)}秒`;
+  return `${hours ? i18n.t('duration.hours', { hours }) : ''}${hours || minutes ? i18n.t('duration.minutes', { minutes }) : ''}${i18n.t('duration.seconds', { seconds: seconds.toFixed(1) })}`;
 };
 
 /** 剩余时间（ETA）格式化：剩余字节 + 当前速度 → "12秒" / "3分5秒" / "1时12分" */
 export const formatETA = (remainingBytes: number, bytesPerSec: number) => {
   if (bytesPerSec <= 0) return '--';
   const secs = Math.ceil(remainingBytes / bytesPerSec);
-  if (secs < 60) return `${secs}秒`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}分${secs % 60}秒`;
+  if (secs < 60) return i18n.t('duration.seconds', { seconds: secs });
+  if (secs < 3600) return i18n.t('duration.minutes', { minutes: Math.floor(secs / 60) }) + i18n.t('duration.seconds', { seconds: secs % 60 });
   const hrs = Math.floor(secs / 3600);
   const mins = Math.floor((secs % 3600) / 60);
-  return `${hrs}时${mins}分`;
+  return (i18n.t('duration.hours', { hours: hrs }) + i18n.t('duration.minutes', { minutes: mins })).trimEnd();
 };

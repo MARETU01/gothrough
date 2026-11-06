@@ -8,12 +8,15 @@ import {
   TriangleAlertIcon,
 } from "lucide-react"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { useTranslation } from 'react-i18next'
 
 const Toaster = ({ ...props }: ToasterProps) => {
-
+  const { t } = useTranslation()
   return (
     <Sonner
       theme="light"
+      containerAriaLabel={t('notifications.label')}
+      toastOptions={{ closeButtonAriaLabel: t('关闭') }}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

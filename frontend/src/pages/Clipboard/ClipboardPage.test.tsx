@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ClipboardPage from './ClipboardPage';
 import { CLIPBOARD_MAX_BYTES, createClipboard, createClipboardImage, fetchClipboardImage, getClipboardImageSettings, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry } from '@/services/clipboard';
 import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 vi.mock('@/services/clipboard', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/clipboard')>(),
@@ -78,6 +79,21 @@ it('publishes literal multiline text, refreshes history, and copies it', async (
   history = [record('来自另一台设备', 'remote')];
   fireEvent.click(screen.getByRole('button', { name: '刷新' }));
   await screen.findByText('来自另一台设备');
+});
+
+it('preserves the draft and retranslates an existing notice when switching languages', async () => {
+  render(<><LanguageSwitcher /><ClipboardPage /></>);
+  await screen.findByText('还没有共享内容，发布第一段文本吧。');
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '已发布的中文内容' } });
+  fireEvent.click(screen.getByRole('button', { name: '发布' }));
+  await screen.findByText('文本已发布。');
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '未发布的草稿' } });
+  fireEvent.change(screen.getByRole('combobox', { name: '界面语言' }), { target: { value: 'en' } });
+  expect((screen.getByLabelText('Type or paste text') as HTMLTextAreaElement).value).toBe('未发布的草稿');
+  expect(screen.getByText('Text published.')).toBeTruthy();
+  expect(screen.getByText('已发布的中文内容')).toBeTruthy();
+  expect(createClipboard).toHaveBeenCalledTimes(1);
+  expect(document.title).toBe('Shared clipboard - GoThrough');
 });
 
 it('previews and publishes a selected image without changing the text draft, releasing the preview', async () => {

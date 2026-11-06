@@ -18,7 +18,7 @@ import (
 func (h *UploadHandler) ListUploads(c *gin.Context) {
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "获取文件列表失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 		return
 	}
 
@@ -41,23 +41,23 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 
 	root, err := os.OpenRoot(config.UploadFolder)
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "读取文件失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "FILE_READ_FAILED", "读取文件失败，请稍后重试")
 		return
 	}
 	defer root.Close()
 	file, err := root.Open(rel)
 	if err != nil {
-		respondError(c, err, http.StatusNotFound, "文件不存在或无法访问")
+		respondError(c, err, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 		return
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "读取文件失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "FILE_READ_FAILED", "读取文件失败，请稍后重试")
 		return
 	}
 	if !info.Mode().IsRegular() {
-		respondError(c, nil, http.StatusNotFound, "文件不存在或无法访问")
+		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 		return
 	}
 
@@ -77,10 +77,10 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 
 	if err := h.uploadService.DeleteFile(rel); err != nil {
 		if os.IsNotExist(err) {
-			respondError(c, err, http.StatusNotFound, "文件不存在")
+			respondError(c, err, http.StatusNotFound, "FILE_NOT_FOUND", "文件不存在")
 			return
 		}
-		respondError(c, err, http.StatusInternalServerError, "删除文件失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "FILE_DELETE_FAILED", "删除文件失败，请稍后重试")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 func (h *UploadHandler) DiskInfo(c *gin.Context) {
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "获取磁盘信息失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "DISK_INFO_FAILED", "获取磁盘信息失败，请稍后重试")
 		return
 	}
 
@@ -110,7 +110,7 @@ func uploadRelativePath(c *gin.Context) string {
 	filename := strings.TrimPrefix(c.Param("filename"), "/")
 	rel := utils.SafeUploadRelpath(filename, config.UploadFolder)
 	if rel == "" {
-		respondError(c, nil, http.StatusNotFound, "文件不存在或无法访问")
+		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 	}
 	return rel
 }

@@ -1,11 +1,12 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { message } from '@/i18n/messages';
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   cancelUpload,
   completeUpload,
   initUpload,
   uploadChunk,
 } from "@/services/upload";
-import { apiErrorMessage, getErrorBody, isCanceledError } from "@/services/errors";
+import { apiErrorDescriptor, getErrorBody, isCanceledError } from "@/services/errors";
 import type {
   UploadController,
   UploadItem,
@@ -157,9 +158,9 @@ export const useUploadQueue = () => {
       const files = await collectDroppedFiles(data);
       if (!mountedRef.current) return;
       handleSelection(files);
-      if (!files.length) setStatus({ text: "没有可上传的文件（空文件夹不会上传）", type: "error" });
+      if (!files.length) setStatus({ text: message("upload.emptyFolder"), type: "error" });
     } catch (err) {
-      if (mountedRef.current) setStatus({ text: `读取文件夹失败：${errorMessage(err)}`, type: "error" });
+      if (mountedRef.current) setStatus({ text: message('upload.readFolderFailed', { error: errorMessage(err) }), type: "error" });
     } finally {
       if (mountedRef.current) setReadingDrops(count => count - 1);
     }
@@ -343,13 +344,13 @@ export const useUploadQueue = () => {
             error?: string;
             missing_chunks?: number[];
           }>(err);
-          const message = body?.missing_chunks
-            ? `缺少 ${body.missing_chunks.length} 个分块`
-            : apiErrorMessage(err);
-          item.error = message;
+          const failure = body?.missing_chunks
+            ? message('upload.missingChunks', { count: body.missing_chunks.length })
+            : apiErrorDescriptor(err);
+          item.error = failure;
           if (mountedRef.current)
             setStatus({
-              text: `上传失败: ${item.file.name} - ${message}`,
+              text: message('upload.failed', { name: item.file.name, error: failure }),
               type: "error",
             });
         }
@@ -403,7 +404,7 @@ export const useUploadQueue = () => {
           setCanceling(false);
         }
         if (mountedRef.current && run.cancelled)
-          setStatus({ text: "上传已取消", type: "success" });
+          setStatus({ text: message('upload.canceled'), type: "success" });
       }
     },
     [uploadFileChunked, setGlobalPaused, refreshFileList],
@@ -444,7 +445,7 @@ export const useUploadQueue = () => {
       }
     });
     setGlobalPaused(false);
-    setStatus({ text: "已取消队列，正在结束当前请求", type: "success" });
+    setStatus({ text: message('upload.canceling'), type: "success" });
     refreshFileList();
   };
   const resetAll = () => {

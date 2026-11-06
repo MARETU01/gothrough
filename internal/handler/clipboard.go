@@ -57,9 +57,9 @@ func (h *ClipboardHandler) Create(c *gin.Context) {
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "请求体过大"})
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "REQUEST_TOO_LARGE", "error": "请求体过大"})
 		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的文本请求"})
+			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TEXT_REQUEST", "error": "无效的文本请求"})
 		}
 		return
 	}
@@ -69,11 +69,11 @@ func (h *ClipboardHandler) Create(c *gin.Context) {
 		if len(req.Text) > service.ClipboardMaxBytes {
 			status = http.StatusRequestEntityTooLarge
 		}
-		respondError(c, err, status, service.ErrClipboardText.Error())
+		respondError(c, err, status, "INVALID_TEXT", service.ErrClipboardText.Error())
 		return
 	}
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "CLIPBOARD_SAVE_FAILED", "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板文本已发布", "event", "clipboard.created", "entry_id", entry.ID, "size_bytes", len(entry.Text))
@@ -84,11 +84,11 @@ func (h *ClipboardHandler) Delete(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	err := h.service.Delete(c.Param("id"))
 	if errors.Is(err, service.ErrClipboardNotFound) {
-		respondError(c, err, http.StatusNotFound, service.ErrClipboardNotFound.Error())
+		respondError(c, err, http.StatusNotFound, "CLIPBOARD_NOT_FOUND", service.ErrClipboardNotFound.Error())
 		return
 	}
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "CLIPBOARD_SAVE_FAILED", "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板记录已删除", "event", "clipboard.deleted", "entry_id", c.Param("id"))
@@ -98,7 +98,7 @@ func (h *ClipboardHandler) Delete(c *gin.Context) {
 func (h *ClipboardHandler) Clear(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	if err := h.service.Clear(); err != nil {
-		respondError(c, err, http.StatusInternalServerError, "剪贴板存储失败，请稍后重试")
+		respondError(c, err, http.StatusInternalServerError, "CLIPBOARD_SAVE_FAILED", "剪贴板存储失败，请稍后重试")
 		return
 	}
 	logging.FromContext(c.Request.Context()).Info("剪贴板记录已清空", "event", "clipboard.cleared")
