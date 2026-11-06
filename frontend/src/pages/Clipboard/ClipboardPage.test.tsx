@@ -1,8 +1,9 @@
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ClipboardPage from './ClipboardPage';
 import { CLIPBOARD_MAX_BYTES, createClipboard, deleteClipboard, clearClipboard, listClipboard, type ClipboardEntry } from '@/services/clipboard';
+import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
 
 vi.mock('@/services/clipboard', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/clipboard')>(),
@@ -15,9 +16,11 @@ const record = (text = '第一行\n<script>alert(1)</script>', id = 'entry-1'): 
 let history: ClipboardEntry[];
 const writeText = vi.fn();
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
 
 beforeEach(() => {
   history = [];
+  window.getSelection()?.removeAllRanges();
   vi.mocked(clearClipboard).mockImplementation(async () => {
     history = [];
     return { status: 'deleted' };
@@ -37,9 +40,12 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.resetAllMocks();
   if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
   else Reflect.deleteProperty(navigator, 'clipboard');
+  if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility);
+  else Reflect.deleteProperty(document, 'visibilityState');
 });
 
 it('publishes literal multiline text, refreshes history, and copies it', async () => {
@@ -162,4 +168,143 @@ it.each(['denied', 'unavailable'])('selects a manual copy field when clipboard a
   expect(document.activeElement).toBe(field);
   fireEvent.click(screen.getByRole('button', { name: '关闭' }));
   await waitFor(() => expect(screen.queryByLabelText(/无法自动复制/)).toBeNull());
+});
+
+const advancePoll = (milliseconds = CLIPBOARD_REFRESH_INTERVAL_MS) =>
+  act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
+
+async function openPollingPage() {
+  vi.useFakeTimers();
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(createElement(ClipboardPage)); });
+  return view;
+}
+
+function setVisibility(value: 'hidden' | 'visible') {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+  fireEvent(document, new Event('visibilitychange'));
+}
+
+it('automatically loads additions and deletions without changing a draft, then stops on unmount', async () => {
+  history = [record('旧内容')];
+  const view = await openPollingPage();
+  expect(listClipboard).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '未发布草稿' } });
+  history = [record('另一台设备的新内容', 'new')];
+  await advancePoll();
+  expect(screen.getByText('另一台设备的新内容')).toBeTruthy();
+  expect(screen.queryByText('旧内容')).toBeNull();
+  expect((screen.getByLabelText('输入或粘贴文本') as HTMLTextAreaElement).value).toBe('未发布草稿');
+  expect(screen.queryByRole('button', { name: '加载中…' })).toBeNull();
+  history = [];
+  await advancePoll();
+  expect(screen.getByText('还没有共享内容，发布第一段文本吧。')).toBeTruthy();
+  const calls = vi.mocked(listClipboard).mock.calls.length;
+  view.unmount();
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 3);
+  expect(listClipboard).toHaveBeenCalledTimes(calls);
+});
+
+it('waits for a slow background request before scheduling another poll', async () => {
+  await openPollingPage();
+  let finish!: (value: { entries: ClipboardEntry[] }) => void;
+  vi.mocked(listClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 4);
+  expect(listClipboard).toHaveBeenCalledTimes(2);
+  await act(async () => { finish({ entries: [record('慢请求结果')] }); });
+  expect(screen.getByText('慢请求结果')).toBeTruthy();
+  await advancePoll();
+  expect(listClipboard).toHaveBeenCalledTimes(3);
+});
+
+it('pauses polling during publication and resumes after its list refresh', async () => {
+  await openPollingPage();
+  let finish!: (entry: ClipboardEntry) => void;
+  vi.mocked(createClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '发布中' } });
+  fireEvent.click(screen.getByRole('button', { name: '发布文本' }));
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 3);
+  expect(listClipboard).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    const entry = record('发布中');
+    history = [entry];
+    finish(entry);
+  });
+  expect(listClipboard).toHaveBeenCalledTimes(2);
+  await advancePoll();
+  expect(listClipboard).toHaveBeenCalledTimes(3);
+});
+
+it.each(['single', 'all', 'copy'])('pauses background updates during %s confirmation or manual copy', async kind => {
+  history = [record('保留当前记录')];
+  writeText.mockRejectedValueOnce(new Error('denied'));
+  await openPollingPage();
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: kind === 'single' ? '删除记录 1' : kind === 'all' ? '全部删除' : '复制记录 1' }));
+  });
+  history = [];
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 3);
+  expect(listClipboard).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('article', { name: '记录 1' })).toBeTruthy();
+  if (kind === 'copy') {
+    const input = screen.getByLabelText(/无法自动复制/) as HTMLTextAreaElement;
+    expect(input.selectionEnd - input.selectionStart).toBe(input.value.length);
+  }
+  fireEvent.click(screen.getByRole('button', { name: kind === 'copy' ? '关闭' : '取消' }));
+  await advancePoll();
+  expect(listClipboard).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('article')).toBeNull();
+});
+
+it('cancels an in-flight background response before entering deletion confirmation', async () => {
+  history = [record()];
+  await openPollingPage();
+  let finish!: (value: { entries: ClipboardEntry[] }) => void;
+  vi.mocked(listClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  const signal = vi.mocked(listClipboard).mock.calls[1][0];
+  fireEvent.click(screen.getByRole('button', { name: '全部删除' }));
+  expect(signal?.aborted).toBe(true);
+  await act(async () => { finish({ entries: [] }); });
+  expect(screen.getByRole('button', { name: '确认全部删除' })).toBeTruthy();
+  expect(screen.getByRole('article', { name: '记录 1' })).toBeTruthy();
+});
+
+it('pauses hidden pages and loads immediately when visible, ignoring the cancelled response', async () => {
+  await openPollingPage();
+  let finish!: (value: { entries: ClipboardEntry[] }) => void;
+  vi.mocked(listClipboard).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  const signal = vi.mocked(listClipboard).mock.calls[1][0];
+  act(() => { setVisibility('hidden'); });
+  expect(signal?.aborted).toBe(true);
+  await advancePoll(CLIPBOARD_REFRESH_INTERVAL_MS * 4);
+  expect(listClipboard).toHaveBeenCalledTimes(2);
+  history = [record('切回后立即获取')];
+  await act(async () => { setVisibility('visible'); });
+  expect(listClipboard).toHaveBeenCalledTimes(3);
+  expect(screen.getByText('切回后立即获取')).toBeTruthy();
+  await act(async () => { finish({ entries: [] }); });
+  expect(screen.getByText('切回后立即获取')).toBeTruthy();
+  await advancePoll();
+  expect(listClipboard).toHaveBeenCalledTimes(4);
+});
+
+it('retains data and operation errors after a failed poll and retries automatically', async () => {
+  history = [record('当前内容')];
+  await openPollingPage();
+  vi.mocked(createClipboard).mockRejectedValueOnce(new Error('发布失败'));
+  fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '草稿' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布文本' })); });
+  vi.mocked(listClipboard).mockRejectedValueOnce(new Error('offline'));
+  await advancePoll();
+  expect(screen.getByText('当前内容')).toBeTruthy();
+  expect(screen.getByRole('alert').textContent).toContain('发布失败');
+  expect(screen.getByText(/自动更新暂不可用/)).toBeTruthy();
+  history = [record('恢复连接后的内容', 'new')];
+  await advancePoll();
+  expect(screen.getByText('恢复连接后的内容')).toBeTruthy();
+  expect(screen.queryByText(/自动更新暂不可用/)).toBeNull();
+  expect(screen.getByRole('alert').textContent).toContain('发布失败');
 });

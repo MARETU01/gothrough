@@ -6,31 +6,60 @@ import { apiErrorMessage } from '@/services/errors';
 export function useRemoteData<T>(load: (signal?: AbortSignal) => Promise<T>, initialData: T) {
   const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [backgroundError, setBackgroundError] = useState('');
   const mounted = useRef(false);
-  const request = useRef<AbortController | null>(null);
+  const request = useRef<{ controller: AbortController; background: boolean } | null>(null);
+
+  const setError = useCallback((message: string) => {
+    setActionError(message);
+    setLoadError('');
+  }, []);
 
   const cancel = useCallback(() => {
-    request.current?.abort();
+    request.current?.controller.abort();
+    request.current = null;
     if (mounted.current) setLoading(false);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const cancelBackground = useCallback(() => {
+    if (request.current?.background) {
+      request.current.controller.abort();
+      request.current = null;
+    }
+  }, []);
+
+  const refresh = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
     if (!mounted.current) return;
-    request.current?.abort();
+    // Polling never interrupts an initial load, manual refresh, or another poll.
+    if (background && request.current) return;
+    request.current?.controller.abort();
     const controller = new AbortController();
-    request.current = controller;
-    setLoading(true);
-    setError('');
+    request.current = { controller, background };
+    if (!background) {
+      setLoading(true);
+      setError('');
+      setLoadError('');
+      setBackgroundError('');
+    }
     try {
       const result = await load(controller.signal);
-      if (mounted.current && !controller.signal.aborted) setData(result);
+      if (mounted.current && !controller.signal.aborted) {
+        setData(result);
+        setLoadError('');
+        setBackgroundError('');
+      }
     } catch (err) {
-      if (mounted.current && !controller.signal.aborted) setError(apiErrorMessage(err));
+      if (mounted.current && !controller.signal.aborted) {
+        if (background) setBackgroundError(apiErrorMessage(err));
+        else setLoadError(apiErrorMessage(err));
+      }
     } finally {
-      if (mounted.current && !controller.signal.aborted) setLoading(false);
+      if (request.current?.controller === controller) request.current = null;
+      if (!background && mounted.current && !controller.signal.aborted) setLoading(false);
     }
-  }, [load]);
+  }, [load, setError]);
 
   useEffect(() => {
     mounted.current = true;
@@ -39,9 +68,10 @@ export function useRemoteData<T>(load: (signal?: AbortSignal) => Promise<T>, ini
     void refresh();
     return () => {
       mounted.current = false;
-      request.current?.abort();
+      request.current?.controller.abort();
+      request.current = null;
     };
   }, [refresh]);
 
-  return { data, setData, loading, error, setError, refresh, cancel, mounted };
+  return { data, setData, loading, error: actionError || loadError, setError, backgroundError, refresh, cancel, cancelBackground, mounted };
 }

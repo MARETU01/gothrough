@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Clipboard, Copy, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusMessage } from '@/components/StatusMessage';
@@ -9,6 +9,8 @@ import {
 import { apiErrorMessage } from '@/services/errors';
 import { useRemoteData } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { CLIPBOARD_REFRESH_INTERVAL_MS } from '@/config/clipboard';
 import './ClipboardPage.css';
 
 const loadEntries = async (signal?: AbortSignal) => (await listClipboard(signal)).entries;
@@ -16,16 +18,27 @@ const loadEntries = async (signal?: AbortSignal) => (await listClipboard(signal)
 export default function ClipboardPage() {
   const [text, setText] = useState('');
   usePageTitle('共享剪贴板 - GoThrough');
-  const { data: entries, setData: setEntries, loading, error, setError, refresh: reload, cancel, mounted } =
+  const { data: entries, setData: setEntries, loading, error, setError, backgroundError, refresh: reload, cancel, cancelBackground, mounted } =
     useRemoteData<ClipboardEntry[]>(loadEntries, []);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [manualCopy, setManualCopy] = useState<ClipboardEntry | null>(null);
+  const [copying, setCopying] = useState(false);
+  const copyInProgress = useRef(false);
   const operation = useRef(false);
   const byteLength = new Blob([text]).size;
   const tooLarge = byteLength > CLIPBOARD_MAX_BYTES;
+  const autoPaused = busy || confirming !== null || confirmingAll || copying || manualCopy !== null;
+  const autoRefresh = useCallback(async () => {
+    if (operation.current || copyInProgress.current || window.getSelection()?.isCollapsed === false) return;
+    await reload({ background: true });
+  }, [reload]);
+  useAutoRefresh(autoRefresh, CLIPBOARD_REFRESH_INTERVAL_MS, !loading && !autoPaused, cancelBackground);
+  const selectManualCopy = useCallback((node: HTMLTextAreaElement | null) => {
+    if (node) { node.focus(); node.select(); }
+  }, []);
 
   const refresh = () => {
     setConfirmingAll(false);
@@ -62,7 +75,7 @@ export default function ClipboardPage() {
     return runMutation(() => createClipboard(text), entry => {
       setEntries(previous => [entry, ...previous].slice(0, CLIPBOARD_MAX_ENTRIES));
       setText('');
-    }, '文本已发布，其他设备可刷新查看。');
+    }, '文本已发布。');
   };
 
   const removeEntry = (id: string) =>
@@ -82,6 +95,10 @@ export default function ClipboardPage() {
     }, '全部记录已删除。');
 
   const copy = async (entry: ClipboardEntry) => {
+    if (copyInProgress.current) return;
+    copyInProgress.current = true;
+    cancelBackground();
+    setCopying(true);
     setNotice('');
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
@@ -92,6 +109,9 @@ export default function ClipboardPage() {
       }
     } catch {
       if (mounted.current) setManualCopy(entry);
+    } finally {
+      copyInProgress.current = false;
+      if (mounted.current) setCopying(false);
     }
   };
 
@@ -125,23 +145,28 @@ export default function ClipboardPage() {
         {manualCopy && <section className="clipboard-manual" aria-label="手动复制">
           <label htmlFor="clipboard-manual-text">无法自动复制，请复制下方已选中的文本（Ctrl+C / ⌘C，或长按复制）。</label>
           <textarea id="clipboard-manual-text" readOnly rows={4} value={manualCopy.text}
-            ref={node => { if (node) { node.focus(); node.select(); } }} />
+            ref={selectManualCopy} />
           <Button variant="outline" onClick={() => setManualCopy(null)}>关闭</Button>
         </section>}
 
         <section aria-labelledby="clipboard-history-title" aria-busy={loading}>
           <div className="clipboard-history-header">
-            <div><h2 id="clipboard-history-title">最近内容</h2><p>最多保留 100 条，超出后自动淘汰最旧记录。</p></div>
+            <div>
+              <h2 id="clipboard-history-title">最近内容</h2>
+              <p>最多保留 100 条，超出后自动淘汰最旧记录。</p>
+              <p>{autoPaused ? '操作期间暂停自动更新' : `每 ${CLIPBOARD_REFRESH_INTERVAL_MS / 1000} 秒自动更新`}</p>
+            </div>
             <div className="clipboard-entry-actions">
               <Button variant="outline" disabled={loading || busy} onClick={() => void refresh()}>
                 <RefreshCw aria-hidden="true" />{loading ? '加载中…' : '刷新'}
               </Button>
               <Button variant="destructive" disabled={loading || busy || !entries.length}
-                onClick={() => { setConfirming(null); setConfirmingAll(true); }}>
+                onClick={() => { cancelBackground(); setConfirming(null); setConfirmingAll(true); }}>
                 <Trash2 aria-hidden="true" />全部删除
               </Button>
             </div>
           </div>
+          {backgroundError && <p className="clipboard-sync-note" role="status">自动更新暂不可用，已保留当前内容，将稍后重试。</p>}
           {confirmingAll && <div className="clipboard-clear-confirm" role="group" aria-label="全部删除确认">
             <p>确定删除所有设备共享的全部记录？删除后无法恢复。</p>
             <div className="clipboard-entry-actions">
@@ -157,11 +182,11 @@ export default function ClipboardPage() {
                 <footer>
                   <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString()}</time>
                   <div className="clipboard-entry-actions">
-                    <Button variant="outline" onClick={() => void copy(entry)} aria-label={`复制记录 ${index + 1}`}><Copy aria-hidden="true" />复制</Button>
+                    <Button variant="outline" disabled={copying} onClick={() => void copy(entry)} aria-label={`复制记录 ${index + 1}`}><Copy aria-hidden="true" />复制</Button>
                     {confirming === entry.id ? <>
                       <Button variant="destructive" disabled={busy} onClick={() => void removeEntry(entry.id)} aria-label={`确认删除记录 ${index + 1}`}>确认删除</Button>
                       <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>取消</Button>
-                    </> : <Button variant="outline" disabled={busy} onClick={() => setConfirming(entry.id)} aria-label={`删除记录 ${index + 1}`}><Trash2 aria-hidden="true" />删除</Button>}
+                    </> : <Button variant="outline" disabled={busy} onClick={() => { cancelBackground(); setConfirming(entry.id); }} aria-label={`删除记录 ${index + 1}`}><Trash2 aria-hidden="true" />删除</Button>}
                   </div>
                 </footer>
               </article>

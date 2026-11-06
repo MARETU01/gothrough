@@ -15,6 +15,7 @@
 .clipboard-manual textarea { margin: 12px 0; }
 .clipboard-history-header { margin: 30px 0 18px; }
 .clipboard-history-header h2 { font-size: 20px; color: #00695c; margin: 0 0 8px; }
+.clipboard-sync-note { margin-bottom: 16px; color: #546e6a; font-size: 13px; }
 .clipboard-list { display: grid; gap: 16px; list-style: none; padding: 0; margin: 0; }
 .clipboard-entry { border: 1px solid #d1e8e4; border-radius: 10px; overflow: hidden; background: white; }
 .clipboard-entry pre { margin: 0; padding: 20px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 15px; line-height: 1.7; }

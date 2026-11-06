@@ -43,7 +43,7 @@ export default function HomePage() {
           <MonitorSmartphone aria-hidden="true" />
           <div>
             <h2>换一台设备，继续分享</h2>
-            <p>在另一台可访问此服务的设备上打开相同地址，即可下载文件或查看共享文本。剪贴板的新内容可通过「刷新」获取。</p>
+            <p>在另一台可访问此服务的设备上打开相同地址，即可下载文件或查看共享文本。剪贴板页面会自动获取最新内容，也可手动刷新。</p>
           </div>
         </aside>
       </div>
