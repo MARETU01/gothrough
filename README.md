@@ -9,7 +9,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A file transfer and shared clipboard tool built with Go + Gin and React + TypeScript. Deploy it as a single executable with the frontend included.
+A file transfer and shared clipboard tool built with Go + Gin and React + TypeScript, supporting both LAN and public internet deployments. Deploy it as a single executable with the frontend included.
 
 ## Features
 
@@ -21,11 +21,13 @@ A file transfer and shared clipboard tool built with Go + Gin and React + TypeSc
 
 ## Use Cases
 
-- Transfer files and folders between personal devices on a local network.
+- Transfer files and folders between devices over a local network or the internet.
 - Share text, links, and screenshots between a phone and a computer.
-- Run a temporary file sharing service on a home server or within a trusted network.
+- Run a file sharing service on a home or cloud server for trusted visitors.
 
 The service uses shared access with an optional site-wide password. Unlocked visitors share all content; use it where those visitors are trusted.
+
+For public deployments, enable an [access password](doc/configuration.md#access-password) and use HTTPS. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for network requirements.
 
 ## Quick Start
 
@@ -66,7 +68,12 @@ Open `http://localhost:8080`. The frontend is included in the executable; Node.j
 
 ### Access from Other Devices
 
-Connect to the same local network and open `http://<server-LAN-IP>:8080`, for example `http://192.168.1.100:8080`, replacing the example IP with the address of the computer running GoThrough. Allow the service port through that computer's firewall. `localhost` only works on the computer running the service.
+Devices can access the same service over a LAN or the internet:
+
+- **LAN**: Connect to the same network and open `http://<server-LAN-IP>:8080`, for example `http://192.168.1.100:8080`. Replace the example IP with the server's address and allow the port through its firewall.
+- **Internet**: Deploy on a server with a public endpoint and use its public address or a configured domain, such as `https://files.example.com` (requires your own domain and HTTPS configuration). Configure security groups and firewalls on cloud servers. Home networks require router port forwarding, or a tunnel if no public endpoint is available.
+
+The default listener, `0.0.0.0:8080`, accepts connections on all IPv4 interfaces; public reachability depends on network and port configuration. `localhost` only works on the computer running the service. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for details.
 
 ## Shared Clipboard
 

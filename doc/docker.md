@@ -24,6 +24,8 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 
 `GOTHROUGH_HTTP_PORT` controls only the Compose port mapping; it does not configure the backend's listening port. If you change the container's listening port in the configuration file, also change the right-hand side of the port mapping in `compose.yaml`.
 
+The container supports LAN and internet access. The default port mapping binds all host interfaces; public reachability also depends on security groups, firewalls, and router mappings. Configure an access password and HTTPS for public deployments; see [LAN and internet access](configuration.md#lan-and-internet-access). If a reverse proxy runs on the host, you can change the mapping to `127.0.0.1:8080:8080` and expose the proxy as the public endpoint; keep the listener inside the container on `0.0.0.0`.
+
 ## Persistent Data
 
 Container layout:
