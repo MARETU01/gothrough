@@ -10,7 +10,7 @@ import (
 )
 
 // 注册所有路由
-func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, logSettings config.LoggingSettings) *gin.Engine {
+func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, logSettings config.LoggingSettings, authSettings ...config.AuthSettings) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(logging.HTTP(slog.Default(), logSettings), logging.Recovery())
@@ -18,6 +18,16 @@ func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, 
 	r.MaxMultipartMemory = config.MaxMultipartMemory
 
 	api := r.Group("/api")
+	settings := config.AuthSettings{}
+	if len(authSettings) > 0 {
+		settings = authSettings[0]
+	}
+	auth := newAccessAuth(settings.Password)
+	api.Use(auth.sameOrigin)
+	api.GET("/auth/status", auth.status)
+	api.POST("/auth/login", auth.login)
+	api.POST("/auth/logout", auth.logout)
+	api.Use(auth.requireSession)
 	{
 		api.POST("/upload/init", h.UploadInit)
 		api.POST("/upload/chunk", h.UploadChunk)

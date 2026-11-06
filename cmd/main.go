@@ -82,7 +82,7 @@ func serve(ctx context.Context, settings *config.Settings) error {
 	defer func() { stopCleanup(); <-cleanupDone }()
 	uploadHandler := handler.NewUploadHandler(uploadService)
 	clipboardHandler := handler.NewClipboardHandler(clipboardService)
-	r := router.SetupRouter(uploadHandler, clipboardHandler, settings.Logging)
+	r := router.SetupRouter(uploadHandler, clipboardHandler, settings.Logging, settings.Auth)
 
 	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,

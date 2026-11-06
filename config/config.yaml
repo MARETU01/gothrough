@@ -1,4 +1,7 @@
 # Environment variables override these values; see doc/configuration.md.
+auth:
+  # Empty disables access control. Prefer GOTHROUGH_ACCESS_PASSWORD for secrets.
+  password: ""
 logging:
   level: "info"
   format: "text" # text or json

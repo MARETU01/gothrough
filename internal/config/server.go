@@ -16,11 +16,16 @@ import (
 )
 
 type Settings struct {
+	Auth      AuthSettings      `yaml:"auth"`
 	Clipboard ClipboardSettings `yaml:"clipboard"`
 	Server    ServerSettings    `yaml:"server"`
 	Storage   StorageSettings   `yaml:"storage"`
 	Logging   LoggingSettings   `yaml:"logging"`
 	Source    string            `yaml:"-"`
+}
+
+type AuthSettings struct {
+	Password string `yaml:"password"`
 }
 
 type StorageSettings struct {
@@ -99,6 +104,12 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	}
 	if value, ok := lookup("GOTHROUGH_HOST"); ok {
 		cfg.Server.Host = value
+	}
+	if value, ok := lookup("GOTHROUGH_ACCESS_PASSWORD"); ok {
+		cfg.Auth.Password = value
+	}
+	if cfg.Auth.Password != "" && (len(cfg.Auth.Password) < 8 || len(cfg.Auth.Password) > 256 || strings.TrimSpace(cfg.Auth.Password) == "") {
+		return nil, fmt.Errorf("访问口令必须为 8 到 256 字节，或留空以关闭验证")
 	}
 	if value, ok := lookup("GOTHROUGH_PORT"); ok {
 		port, err := strconv.Atoi(value)

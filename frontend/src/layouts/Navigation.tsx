@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { useContext } from 'react';
+import { AccessContext } from '@/contexts/AccessContext';
 import { NavLink } from 'react-router-dom';
 import './Navigation.css';
 import { useSharedUploadQueue } from '@/contexts/UploadQueueContext';
@@ -7,6 +9,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 // 顶部导航组件
 export const Navigation: React.FC = () => {
   const { t } = useTranslation();
+  const access = useContext(AccessContext);
   const { running, globalPaused, canceling } = useSharedUploadQueue();
   return (
     <nav className="navigation" aria-label={t("主导航")}>
@@ -17,6 +20,7 @@ export const Navigation: React.FC = () => {
         <NavLink to="/files" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t("文件列表")}</NavLink>
         <NavLink to="/clipboard" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t("剪贴板")}</NavLink>
         <LanguageSwitcher />
+        {access.enabled && <button className="access-logout" type="button" onClick={() => void access.logout()}>{t('auth.lock')}</button>}
       </div>
     </nav>
   );

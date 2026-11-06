@@ -6,6 +6,23 @@ English | [简体中文](configuration.zh-CN.md)
 
 Run all commands on this page from the project root. Runtime configuration is stored in `config/config.yaml`.
 
+## Access Password
+
+Access protection is off by default. Set `GOTHROUGH_ACCESS_PASSWORD` or add:
+
+```yaml
+auth:
+  password: "replace-with-your-own-long-password"
+```
+
+A nonempty password must contain 8–256 bytes. An empty value disables protection. Environment variables override YAML. Never commit real passwords. Compose forwards the host's `GOTHROUGH_ACCESS_PASSWORD` (also configurable in an uncommitted `.env`); if unset, YAML applies.
+
+When enabled, every file, upload, disk information and clipboard API requires a session, including direct downloads and image links. A random session is stored in an HttpOnly, SameSite=Strict cookie and expires after 12 hours. Signing out revokes that session immediately. Restarting the service, including after a password change, revokes all sessions. Passwords are never stored in browser storage or links. A shared login rate limit permits a burst of 10 attempts and refills one attempt every 3 seconds.
+
+Use HTTPS: HTTP does not encrypt passwords or sessions. Direct TLS sets Secure on session cookies. Reverse proxies must preserve the original Host and add Secure to the session cookie at the HTTPS edge. The development proxy preserves Host.
+
+All unlocked visitors share the same permissions and content. Valid sessions survive page refreshes, but require unlocking again after a service restart.
+
 ## Configuration File
 
 The external `config/config.yaml` file:

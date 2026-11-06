@@ -25,7 +25,7 @@ A file transfer and shared clipboard tool built with Go + Gin and React + TypeSc
 - Share text, links, and screenshots between a phone and a computer.
 - Run a temporary file sharing service on a home server or within a trusted network.
 
-The service uses shared access without user authentication; use it where everyone with access is trusted.
+The service uses shared access with an optional site-wide password. Unlocked visitors share all content; use it where those visitors are trusted.
 
 ## Quick Start
 
@@ -78,7 +78,7 @@ One-click copying requires HTTPS or localhost and browser clipboard permission. 
 
 ## Limitations
 
-- There is no user authentication or per-user file isolation. Anyone who can reach the service can view, upload, and delete shared content.
+- An optional site-wide password protects access, without separate accounts or per-user file isolation. Unlocked visitors can view, upload, and delete shared content. See [access password](doc/configuration.md#access-password).
 - Uploads cannot resume after a browser refresh or server restart. Startup clears temporary uploads.
 - Temporary uploads and published files must share a filesystem with hard-link support. In Docker, mount all of `/data` as a single volume.
 - Empty folders are not preserved, and folder downloads as archives are not supported. Conflicting file paths are renamed without overwriting existing files.

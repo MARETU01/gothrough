@@ -2,6 +2,8 @@ services:
   gothrough:
     build: .
     image: gothrough:local
+    environment:
+      - GOTHROUGH_ACCESS_PASSWORD
     ports:
       # Override the host port; the application still listens on 8080 in the container.
       - "${GOTHROUGH_HTTP_PORT:-8080}:8080"

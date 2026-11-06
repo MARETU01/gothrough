@@ -16,7 +16,8 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': {
           target: env.GOTHROUGH_DEV_API_TARGET || 'http://127.0.0.1:8080',
-          changeOrigin: true,
+          // Preserve the browser-facing Host for the API's same-origin checks.
+          changeOrigin: false,
         },
       },
     },
