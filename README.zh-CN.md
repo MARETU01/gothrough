@@ -3,7 +3,6 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/MARETU01/gothrough/ci.yml?branch=main&logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/actions/workflows/ci.yml)
 [![GitHub tag](https://img.shields.io/github/v/tag/MARETU01/gothrough?logo=github&style=flat-square)](https://github.com/MARETU01/gothrough/tags)
 [![Go version](https://img.shields.io/github/go-mod/go-version/MARETU01/gothrough?logo=go&style=flat-square)](https://github.com/MARETU01/gothrough/blob/main/go.mod)
-[![Go Report Card](https://goreportcard.com/badge/github.com/MARETU01/gothrough?style=flat-square)](https://goreportcard.com/report/github.com/MARETU01/gothrough)
 [![Docker Image Size](https://img.shields.io/docker/image-size/maretu01/gothrough?sort=semver&arch=amd64&logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
 [![Docker Pulls](https://img.shields.io/docker/pulls/maretu01/gothrough?logo=docker&style=flat-square)](https://hub.docker.com/r/maretu01/gothrough)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
@@ -30,7 +29,12 @@
 
 ## 快速开始
 
-以下命令在项目根目录执行。
+先获取源码并进入项目目录，再选择下面一种方式启动：
+
+```sh
+git clone https://github.com/MARETU01/gothrough.git
+cd gothrough
+```
 
 ### Docker Compose
 
@@ -59,6 +63,10 @@ make build
 ```
 
 访问 `http://localhost:8080`。前端已包含在程序中，部署机器无需 Node.js。运行配置位于 `release/config/config.yaml`，监听地址、TLS 和数据目录见[配置说明](doc/configuration.zh-CN.md)。
+
+### 其他设备访问
+
+手机或其他电脑连接同一局域网后，访问 `http://<服务所在电脑的局域网IP>:8080`，例如 `http://192.168.1.100:8080`，请将示例 IP 替换为实际地址。服务所在电脑的防火墙需允许该端口访问。`localhost` 仅用于服务所在电脑本机访问。
 
 ## 共享剪贴板
 

@@ -29,7 +29,12 @@ The service uses shared access without user authentication; use it where everyon
 
 ## Quick Start
 
-Run these commands from the project root.
+Clone the repository and enter the project directory, then choose one of the startup methods below:
+
+```sh
+git clone https://github.com/MARETU01/gothrough.git
+cd gothrough
+```
 
 ### Docker Compose
 
@@ -58,6 +63,10 @@ make build
 ```
 
 Open `http://localhost:8080`. The frontend is included in the executable; Node.js is not needed on the deployment machine. Runtime configuration is in `release/config/config.yaml`. See [configuration](doc/configuration.md) for the listening address, TLS, and data directory.
+
+### Access from Other Devices
+
+Connect to the same local network and open `http://<server-LAN-IP>:8080`, for example `http://192.168.1.100:8080`, replacing the example IP with the address of the computer running GoThrough. Allow the service port through that computer's firewall. `localhost` only works on the computer running the service.
 
 ## Shared Clipboard
 
