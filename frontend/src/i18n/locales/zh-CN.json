@@ -1,4 +1,12 @@
 {
+  "browser.path": "目录路径",
+  "browser.root": "全部文件",
+  "browser.up": "返回上一级",
+  "browser.open": "打开文件夹 {{name}}",
+  "browser.count": "{{folders}} 个文件夹，{{files}} 个文件",
+  "browser.searchHint": "正在搜索全部文件，结果显示完整路径。清除搜索可返回当前目录。",
+  "folders.download": "下载文件夹 {{name}}",
+  "folders.zip": "下载 ZIP",
   "language.loadFailed": "语言加载失败，请刷新页面后重试。",
   "upload.confirmationPending": "暂时无法确认上传结果。重试会确认原会话，不会重复上传；若服务已重启或结果已过期，请先检查文件列表。",
   "auth.draftPreserved": "编辑草稿已保留，重新解锁后可继续编辑。",

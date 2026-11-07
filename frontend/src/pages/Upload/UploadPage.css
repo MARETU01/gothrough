@@ -39,7 +39,9 @@
   margin: 10px 0 18px;
   display: flex;
   justify-content: center;
-  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .upload-page .upload-area {
@@ -180,12 +182,6 @@
   border-radius: 8px;
 }
 
-.upload-page .button-container {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
 /* 暂停 / 恢复 / 取消 保留功能色（橙 / 绿 / 红），与薄荷主色区分状态 */
 .upload-page .pause-btn {
   background: #ff9800;
@@ -201,7 +197,7 @@
   font-size: 13px;
   color: #555;
   border-top: 1px solid rgba(128, 203, 196, 0.3);
-  margin-top: 16px;
+  margin: 0 0 16px;
 }
 
 .upload-page .stats-bar span {
@@ -215,10 +211,6 @@
 
   .upload-page h1 {
     font-size: 24px;
-  }
-
-  .upload-page .button-container {
-    flex-direction: column;
   }
 
   .upload-page .stats-bar {

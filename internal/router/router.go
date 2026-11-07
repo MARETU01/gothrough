@@ -42,6 +42,7 @@ func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, 
 		api.POST("/upload/complete", h.UploadComplete)
 		api.POST("/upload/cancel", h.UploadCancel)
 		api.GET("/files", h.ListUploads)
+		api.GET("/folder-download", downloads, handler.DownloadLimits(2, handler.DownloadIdleTimeout), h.DownloadFolder)
 		api.GET("/files/*filename", downloads, h.DownloadUpload)
 		api.PUT("/files/*filename", h.EditText)
 		api.DELETE("/files/*filename", h.DeleteFile)

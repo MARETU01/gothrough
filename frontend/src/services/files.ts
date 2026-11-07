@@ -35,6 +35,7 @@ export const getDiskInfo = (signal?: AbortSignal) => api.get<DiskInfo, DiskInfo>
 
 export const deleteFile = (name: string) => api.delete<{ status: string }, { status: string }>('/files/' + encodeURIComponent(name));
 export const downloadFileUrl = (name: string) => '/api/files/' + encodeURIComponent(name);
+export const downloadFolderUrl = (name: string) => '/api/folder-download?path=' + encodeURIComponent(name);
 
 export interface FilePreviewInfo {
   kind: 'text' | 'image' | 'pdf' | 'audio' | 'video';

@@ -115,7 +115,9 @@ func TestClipboardImageLimitsAndAdmission(t *testing.T) {
 		t.Fatalf("quota: %v", err)
 	}
 	// A small JPEG can expand beyond the byte limit when normalized to PNG.
-	if _,err:=s.CreateImage(bytes.NewReader(imageFixture(t,"jpeg",650))); !errors.Is(err,ErrClipboardImageSize) { t.Fatalf("normalized size: %v",err) }
+	if _, err := s.CreateImage(bytes.NewReader(imageFixture(t, "jpeg", 650))); !errors.Is(err, ErrClipboardImageSize) {
+		t.Fatalf("normalized size: %v", err)
+	}
 	if len(s.List()) != 1 {
 		t.Fatal("quota failure committed an entry")
 	}

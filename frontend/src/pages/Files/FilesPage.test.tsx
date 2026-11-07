@@ -33,10 +33,82 @@ afterEach(() => {
   if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility);
   else Reflect.deleteProperty(document, 'visibilityState');
 });
-const openPage = () => render(createElement(RouterProvider, { router: createMemoryRouter([{ path: '*', element: createElement(FilesPage) }]) }));
+const openPage = (initialEntries = ['/files']) => {
+  const router = createMemoryRouter([{ path: '*', element: createElement(FilesPage) }], { initialEntries });
+  return { ...render(createElement(RouterProvider, { router })), router };
+};
 
 const advancePoll = (milliseconds = FILES_REFRESH_INTERVAL_MS) =>
   act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
+
+it('offers encoded ZIP downloads for folders and nested folders without duplicates', async () => {
+  const data = makeData();
+  data.files = ['照片/旅行/a.txt', '照片/旅行/b.txt', 'root.txt'].map(name => ({
+    name, size: 1, size_display: '1 B', mtime: '2026-10-23T12:00:00Z',
+  }));
+  vi.mocked(listFiles).mockResolvedValue(data);
+  openPage();
+  const folder = await screen.findByRole('link', { name: '下载文件夹 照片' });
+  expect(folder.getAttribute('href')).toBe('/api/folder-download?path=' + encodeURIComponent('照片'));
+  expect(screen.queryByText('a.txt')).toBeNull();
+  expect(screen.queryByRole('link', { name: '下载文件夹 照片/旅行' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '打开文件夹 照片' }));
+  expect(screen.getAllByRole('link', { name: '下载文件夹 照片/旅行' })).toHaveLength(1);
+  expect(screen.getByRole('link', { name: '下载文件夹 照片/旅行' }).getAttribute('href')).toBe('/api/folder-download?path=' + encodeURIComponent('照片/旅行'));
+  fireEvent.click(screen.getByRole('button', { name: '打开文件夹 照片/旅行' }));
+  expect(screen.getByText('a.txt')).toBeTruthy();
+  expect(screen.getByText('b.txt')).toBeTruthy();
+  expect(screen.queryByText('root.txt')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '返回上一级' }));
+  expect(screen.getByRole('button', { name: '打开文件夹 照片/旅行' })).toBeTruthy();
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'root' } });
+  expect(screen.getByText('root.txt')).toBeTruthy();
+  expect(screen.queryByRole('link', { name: '下载文件夹 照片' })).toBeNull();
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'a.txt' } });
+  expect(screen.getByText('照片/旅行/a.txt')).toBeTruthy();
+  expect(screen.getByRole('link', { name: '下载 照片/旅行/a.txt' }).getAttribute('href')).toBe('/api/files/' + encodeURIComponent('照片/旅行/a.txt'));
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+  expect(screen.getByRole('button', { name: '打开文件夹 照片/旅行' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '全部文件' }));
+  expect(screen.getByText('root.txt')).toBeTruthy();
+});
+
+it('paginates the current directory, keeps folders first, and restores paths through browser history', async () => {
+  const data = makeData();
+  data.files = [...data.files.map(file => ({ ...file, name: 'doc/' + file.name })), { ...data.files[0], name: 'root.txt' }];
+  vi.mocked(listFiles).mockResolvedValue(data);
+  const view = openPage();
+  await screen.findByRole('button', { name: '打开文件夹 doc' });
+  expect(screen.getAllByRole('row')[1].textContent).toContain('doc');
+  expect(screen.queryByRole('button', { name: '下一页' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '打开文件夹 doc' }));
+  expect(view.router.state.location.search).toBe('?dir=doc');
+  expect(screen.getByText('文件 01.txt')).toBeTruthy();
+  expect(screen.queryByText('root.txt')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+  expect(screen.getByText('文件 21.txt')).toBeTruthy();
+  await act(async () => { await view.router.navigate(-1); });
+  expect(screen.getByText('root.txt')).toBeTruthy();
+  await act(async () => { await view.router.navigate(1); });
+  expect(screen.getByRole('button', { name: 'doc' }).getAttribute('aria-current')).toBe('page');
+  expect(screen.queryByText('root.txt')).toBeNull();
+});
+
+it('opens a linked folder and returns to its surviving parent when its last file is deleted', async () => {
+  const data = makeData();
+  const keep = { ...data.files[0], name: 'doc/keep.txt' };
+  data.files = [keep, { ...data.files[0], name: 'doc/sub/last.txt' }];
+  vi.mocked(listFiles).mockResolvedValueOnce(data).mockResolvedValue({ ...data, files: [keep] });
+  openPage(['/files?dir=doc%2Fsub']);
+  await screen.findByText('last.txt');
+  expect(screen.queryByText('keep.txt')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '删除 doc/sub/last.txt' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认删除 doc/sub/last.txt' }));
+  await screen.findByText('keep.txt');
+  expect(deleteFile).toHaveBeenCalledWith('doc/sub/last.txt');
+  expect(screen.getByRole('button', { name: 'doc' }).getAttribute('aria-current')).toBe('page');
+  expect(screen.queryByText('last.txt')).toBeNull();
+});
 
 async function openPollingPage() {
   vi.useFakeTimers();
@@ -167,7 +239,7 @@ it.each(['confirmation', 'preview'])('cancels stale polling and pauses during %s
   await act(async () => { finish({ ...makeData(), files: [] }); });
   await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
   expect(listFiles).toHaveBeenCalledTimes(2);
-  expect(screen.getByText('文件 01.txt', { selector: 'td' })).toBeTruthy();
+  expect(screen.getByRole('cell', { name: '文件 01.txt' })).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: kind === 'preview' ? '关闭' : '取消' }));
   await advancePoll();
   expect(listFiles).toHaveBeenCalledTimes(3);

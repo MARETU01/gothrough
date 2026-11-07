@@ -51,6 +51,46 @@ const UploadPage: React.FC = () => {
 
         <div className="nav-links">
           <Button asChild variant="outline"><Link to="/files"><Files aria-hidden="true" />{t("查看已上传文件")}</Link></Button>
+          {items.length > 0 &&
+            (running ? (
+              <>
+                {canceling ? (
+                  <span role="status">{t("正在取消，请稍候…")}</span>
+                ) : globalPaused ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={resumeAll}
+                  >
+                    <Play aria-hidden="true" />{t("全部恢复")}</Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={pauseAll}
+                  >
+                    <Pause aria-hidden="true" />{t("全部暂停")}</Button>
+                )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={canceling}
+                  onClick={cancelAll}
+                >
+                  <X aria-hidden="true" />{t("取消全部")}</Button>
+              </>
+            ) : pendingCount > 0 || errorCount > 0 ? (
+              <Button
+                type="button"
+                variant="default"
+                onClick={startAllUploads}
+                disabled={readingFolders}
+              >
+                <Upload aria-hidden="true" />{t("开始上传")}</Button>
+            ) : successCount > 0 ? (
+              <Button type="button" variant="default" onClick={resetAll}>
+                <Check aria-hidden="true" />{t("继续上传更多文件")}</Button>
+            ) : null)}
         </div>
 
         <div
@@ -99,6 +139,15 @@ const UploadPage: React.FC = () => {
           />
         </div>
 
+        {items.length > 0 && (
+          <div className="stats-bar">
+            {queueElapsedMs !== null && <div title={t("本轮队列耗时，不含暂停时间")}>{t("总耗时:")}<span>{formatElapsed(queueElapsedMs)}</span>{t("（不含暂停）")}</div>}
+            <div>{t("总速度:")}<span>{formatSpeed(totalSpeed)}</span>
+            </div>
+            <div>{t("已完成:")}<span>{successCount}</span> / <span>{items.length}</span>{" "}{t("个文件")}</div>
+          </div>
+        )}
+
         <div className="file-list">
           {items.length === 0 ? (
             <div className="empty-hint">{t("拖放文件或文件夹，或点击\"选择文件\"按钮；空文件夹不会上传")}</div>
@@ -121,57 +170,6 @@ const UploadPage: React.FC = () => {
             <StatusMessage tone={status.type}>{translateMessage(status.text)}</StatusMessage>
           )}
         </div>
-        <div className="button-container">
-          {items.length > 0 &&
-            (running ? (
-              <>
-                {canceling ? (
-                  <span role="status">{t("正在取消，请稍候…")}</span>
-                ) : globalPaused ? (
-                  <Button
-                    type="button"
-                    variant="default" size="lg"
-                    onClick={resumeAll}
-                  >
-                    <Play aria-hidden="true" />{t("全部恢复")}</Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline" size="lg"
-                    onClick={pauseAll}
-                  >
-                    <Pause aria-hidden="true" />{t("全部暂停")}</Button>
-                )}
-                <Button
-                  type="button"
-                  variant="destructive" size="lg"
-                  disabled={canceling}
-                  onClick={cancelAll}
-                >
-                  <X aria-hidden="true" />{t("取消全部")}</Button>
-              </>
-            ) : pendingCount > 0 || errorCount > 0 ? (
-              <Button
-                type="button"
-                variant="default" size="lg"
-                onClick={startAllUploads}
-                disabled={readingFolders}
-              >
-                <Upload aria-hidden="true" />{t("开始上传")}</Button>
-            ) : successCount > 0 ? (
-              <Button type="button" variant="default" size="lg" onClick={resetAll}>
-                <Check aria-hidden="true" />{t("继续上传更多文件")}</Button>
-            ) : null)}
-        </div>
-
-        {items.length > 0 && (
-          <div className="stats-bar">
-            {queueElapsedMs !== null && <div title={t("本轮队列耗时，不含暂停时间")}>{t("总耗时:")}<span>{formatElapsed(queueElapsedMs)}</span>{t("（不含暂停）")}</div>}
-            <div>{t("总速度:")}<span>{formatSpeed(totalSpeed)}</span>
-            </div>
-            <div>{t("已完成:")}<span>{successCount}</span> / <span>{items.length}</span>{" "}{t("个文件")}</div>
-          </div>
-        )}
       </div>
     </main>
   );

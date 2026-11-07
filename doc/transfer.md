@@ -17,10 +17,17 @@ All backend endpoints use the `/api` prefix.
 | POST | `/api/upload/cancel` | Cancel an upload |
 | GET | `/api/files` | List files |
 | GET | `/api/files/*filename` | Download a file, with Range request support |
+| GET | `/api/folder-download?path=relative-folder` | Stream a folder as ZIP |
 | DELETE | `/api/files/*filename` | Delete a file |
 | GET | `/api/disk-info` | Get disk information |
 
 Encode filenames when using them as URL path parameters.
+
+The file browser shows direct children of the current directory, with folders first and pagination within that directory. Open folders to browse their contents; breadcrumbs and Up one level navigate to parents. The URL's `dir` parameter preserves the location through reloads and browser history. Search covers all files and shows full paths; clearing search restores the current directory. When a directory's last file disappears, the browser falls back to its nearest surviving parent.
+
+Folders are derived from uploaded file paths. Choose Download ZIP on a folder row to download the whole folder, regardless of file pagination or search results. URL-encode the `path` query parameter. It must name a folder inside the upload directory; downloading the upload root is not supported. ZIP entries retain the selected folder name and internal hierarchy, skipping symlinks and special files. Archives stream directly without temporary ZIP files. At most two folder archives run at once, also sharing the download concurrency limit; excess requests return `429`. Folder downloads use the existing access authentication.
+
+Dynamic archives do not support Range/resume or snapshots. Avoid editing or deleting source files during download. Read failures or client disconnects abort the download rather than complete a partial ZIP; retry the download. Uploads do not preserve empty directories, but existing empty subdirectories on disk are included in archives.
 
 File list `mtime` values use RFC3339 timestamps with timezone offsets. The UI displays them in the viewer's local timezone and selected language, and sorts by the actual instant.
 

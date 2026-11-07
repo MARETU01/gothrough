@@ -14,6 +14,21 @@
 .files-meter > div { height: 100%; background: linear-gradient(to right, #00796b, #4db6ac); transition: width .3s; }
 .files-meter.warning > div { background: linear-gradient(to right, #ff9800, #ef5350); }
 .files-warning { margin-top: 8px; font-size: 12px; color: #a34700; }
+.files-location { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.files-breadcrumbs, .files-breadcrumbs > span { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.files-breadcrumbs { flex-wrap: wrap; flex: 1; }
+.files-breadcrumbs button { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #00796b; font: inherit; font-size: 14px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.files-breadcrumbs button[aria-current='page'] { font-weight: 600; background: #e0f2f1; }
+.files-breadcrumbs button:hover { background: #e0f2f1; }
+.files-breadcrumbs svg { width: 14px; height: 14px; flex-shrink: 0; color: #78938d; }
+.files-folder-link, .files-file-label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.files-folder-link { padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; text-align: left; cursor: pointer; }
+.files-folder-link:hover span { text-decoration: underline; }
+.files-folder-link svg, .files-file-label svg { width: 19px; height: 19px; flex-shrink: 0; }
+.files-file-label svg { color: #78938d; }
+.files-folder-link span, .files-file-label span { min-width: 0; overflow-wrap: anywhere; }
+.files-breadcrumbs button:focus-visible, .files-folder-link:focus-visible { outline: 2px solid #00796b; outline-offset: 3px; }
+.files-breadcrumbs button:disabled, .files-folder-link:disabled { opacity: .5; cursor: default; }
 .files-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
 .files-toolbar input { padding: 10px 14px; border: 1px solid #a7d8d2; border-radius: 50px; background: rgba(255,255,255,.9); color: #345650; font-size: 14px; min-width: 0; }
 .files-toolbar input { flex: 1; min-width: 180px; }

@@ -65,6 +65,9 @@ func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if value := recover(); value != nil {
+				if value == http.ErrAbortHandler {
+					panic(value)
+				}
 				FromContext(c.Request.Context()).Error("HTTP 请求发生 panic", "event", "http.panic", "panic_type", fmt.Sprintf("%T", value), "stack", string(debug.Stack()))
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}

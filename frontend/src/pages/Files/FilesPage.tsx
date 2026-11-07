@@ -1,8 +1,8 @@
 import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { deleteFile, downloadFileUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData } from '@/services/files';
+import { Link, useSearchParams } from 'react-router-dom';
+import { deleteFile, downloadFileUrl, downloadFolderUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { StatusMessage } from '@/components/StatusMessage';
 import { FilePreview } from '@/components/FilePreview';
-import { Download, Upload } from 'lucide-react';
+import { ArrowUp, ChevronRight, Download, File, Folder, Upload } from 'lucide-react';
 import { DeleteAction } from '@/components/DeleteButton';
 import { RefreshButton } from '@/components/RefreshButton';
 import { Timestamp } from '@/components/Timestamp';
@@ -21,8 +21,12 @@ import { useEditorDraft } from '@/contexts/EditorDraftContext';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
+type BrowserEntry = UploadedFile & { folder: boolean; label: string };
+
 export default function FilesPage() {
   const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage;
+  const [searchParams, setSearchParams] = useSearchParams();
   const SORT_OPTIONS = [
     ['mtime_desc', t("最近修改 ↓")], ['mtime_asc', t("最近修改 ↑")],
     ['size_desc', t("文件大小 ↓")], ['size_asc', t("文件大小 ↑")],
@@ -74,17 +78,64 @@ export default function FilesPage() {
     void refreshAll();
   }
 
+  const folders = useMemo(() => {
+    const paths = new Set<string>();
+    for (const file of data?.files ?? []) {
+      const parts = file.name.split('/');
+      for (let index = 1; index < parts.length; index++) paths.add(parts.slice(0, index).join('/'));
+    }
+    return paths;
+  }, [data]);
+
+  // If the last file in a directory disappears, show the nearest surviving
+  // parent. The URL retains the requested path while the initial list loads.
+  const requestedDirectory = searchParams.get('dir') ?? '';
+  const directory = useMemo(() => {
+    let current = requestedDirectory;
+    while (current && !folders.has(current)) current = current.split('/').slice(0, -1).join('/');
+    return current;
+  }, [requestedDirectory, folders]);
+  const searching = query.trim().length > 0;
+  const breadcrumbs = directory ? directory.split('/') : [];
+
+  function openDirectory(name: string) {
+    if (deleteInProgress.current) return;
+    setQuery('');
+    setPage(1);
+    setConfirming(null);
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (name) next.set('dir', name);
+      else next.delete('dir');
+      return next;
+    });
+  }
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
-    const files = (data?.files ?? []).filter(file => file.name.toLocaleLowerCase().includes(keyword));
+    const prefix = directory ? directory + '/' : '';
+    const files: BrowserEntry[] = (data?.files ?? [])
+      .filter(file => keyword ? file.name.toLocaleLowerCase().includes(keyword)
+        : file.name.startsWith(prefix) && !file.name.slice(prefix.length).includes('/'))
+      .map(file => ({ ...file, folder: false, label: keyword ? file.name : file.name.slice(prefix.length) }));
+    if (!keyword) {
+      for (const name of folders) {
+        if (name.startsWith(prefix) && !name.slice(prefix.length).includes('/')) {
+          files.push({ name, label: name.slice(prefix.length), folder: true, size: 0, size_display: '—', mtime: '' });
+        }
+      }
+    }
     const [field, direction] = sort.split('_');
     return files.sort((a, b) => {
+      if (a.folder !== b.folder) return a.folder ? -1 : 1;
+      if (a.folder && field !== 'name') return a.label.localeCompare(b.label, language, { numeric: true });
       const comparison = field === 'size' ? a.size - b.size
-        : field === 'name' ? a.name.localeCompare(b.name, i18n.resolvedLanguage, { numeric: true })
+        : field === 'name' ? a.label.localeCompare(b.label, language, { numeric: true })
         : timestampValue(a.mtime) - timestampValue(b.mtime);
       return (direction === 'asc' ? comparison : -comparison) || a.name.localeCompare(b.name);
     });
-  }, [data, query, sort, i18n.resolvedLanguage]);
+  }, [data, folders, directory, query, sort, language]);
+  const folderCount = filtered.filter(entry => entry.folder).length;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageFiles = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -139,13 +190,24 @@ export default function FilesPage() {
             {disk.disk_pct_warning && <p className="files-warning">{t("磁盘使用率已超过 85%，请及时清理文件。")}</p>}
           </div>
         </section>}
+        <div className="files-location">
+          <nav className="files-breadcrumbs" aria-label={t('browser.path')}>
+            <button type="button" disabled={deleting !== null} aria-current={!directory ? 'page' : undefined} onClick={() => openDirectory('')}>{t('browser.root')}</button>
+            {breadcrumbs.map((part, index) => <span key={index}>
+              <ChevronRight aria-hidden="true" />
+              <button type="button" disabled={deleting !== null} aria-current={index === breadcrumbs.length - 1 ? 'page' : undefined} onClick={() => openDirectory(breadcrumbs.slice(0, index + 1).join('/'))}>{part}</button>
+            </span>)}
+          </nav>
+          {directory && <Button type="button" variant="outline" disabled={deleting !== null} onClick={() => openDirectory(breadcrumbs.slice(0, -1).join('/'))}><ArrowUp aria-hidden="true" />{t('browser.up')}</Button>}
+        </div>
         <div className="files-toolbar">
           <input type="search" aria-label={t("搜索文件名")} placeholder={t("搜索文件名…")} value={query} onChange={event => { setQuery(event.target.value); setPage(1); setConfirming(null); }} />
           <Select aria-label={t("文件排序")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
             {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select>
-          <span className="files-count">{t('files.count', { count: filtered.length })}{query.trim() && data ? t('files.total', { count: data.files.length }) : ''}</span>
+          <span className="files-count">{folderCount > 0 ? t('browser.count', { folders: folderCount, files: filtered.length - folderCount }) : t('files.count', { count: filtered.length })}{searching && data ? t('files.total', { count: data.files.length }) : ''}</span>
         </div>
+        {searching && <p className="files-sync-note">{t('browser.searchHint')}</p>}
         {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={deleting !== null} onClick={manualRefresh} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
         {(backgroundError || diskBackgroundError) && <p className="files-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
@@ -153,8 +215,8 @@ export default function FilesPage() {
           {filtered.length > 0 ? <div className="files-table-scroll"><table>
             <thead><tr><th scope="col">{t("文件名")}</th><th scope="col">{t("大小")}</th><th scope="col">{t("修改时间")}</th><th scope="col">{t("操作")}</th></tr></thead>
             <tbody>{pageFiles.map(file => <tr key={file.name}>
-              <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time"><Timestamp value={file.mtime} /></td>
-              <td><div className="files-row-actions"><div className="files-action-controls">
+              <td className="files-name">{file.folder ? <button type="button" className="files-folder-link" disabled={deleting !== null} aria-label={t('browser.open', { name: file.name })} onClick={() => openDirectory(file.name)}><Folder aria-hidden="true" /><span>{file.label}</span></button> : <span className="files-file-label"><File aria-hidden="true" /><span>{file.label}</span></span>}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.folder ? '—' : <Timestamp value={file.mtime} />}</td>
+              <td>{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadFolderUrl(file.name)} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
                 <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} onClick={() => { stopBackground(); setPreviewing(file.name); }}>{t('preview.button')}</Button>
                 <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
                 <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { stopBackground(); setConfirming(file.name); }} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
@@ -164,7 +226,7 @@ export default function FilesPage() {
                 <Button asChild variant="destructive"><span>{t('确认删除')}</span></Button>
                 <Button asChild variant="ghost"><span>{t('取消')}</span></Button>
               </div>
-              </div></td>
+              </div>}</td>
             </tr>)}</tbody>
           </table></div> : <div className="files-empty">{data.files.length === 0 ? <>{t("还没有上传文件，先去")}<Link to="/upload">{t("上传文件")}</Link>{t("吧。")}</> : <>{t("没有找到匹配的文件。")}<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>{t("清除搜索")}</Button></>}</div>}
           {totalPages > 1 && <nav className="files-pagination" aria-label={t("文件列表分页")}>

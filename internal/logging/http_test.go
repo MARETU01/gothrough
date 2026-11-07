@@ -25,6 +25,18 @@ func testRouter(t *testing.T, settings config.LoggingSettings, out *bytes.Buffer
 	return r
 }
 
+func TestRecoveryPreservesHTTPStreamAbort(t *testing.T) {
+	var out bytes.Buffer
+	r := testRouter(t, config.DefaultLoggingSettings(), &out)
+	r.GET("/abort", func(c *gin.Context) { panic(http.ErrAbortHandler) })
+	defer func() {
+		if value := recover(); value != http.ErrAbortHandler {
+			t.Fatalf("abort was swallowed: %v", value)
+		}
+	}()
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/abort", nil))
+}
+
 func TestRequestIDsAndPrivateData(t *testing.T) {
 	var out bytes.Buffer
 	settings := config.DefaultLoggingSettings()

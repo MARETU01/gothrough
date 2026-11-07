@@ -88,7 +88,7 @@ One-click copying requires HTTPS or localhost and browser clipboard permission. 
 - An optional site-wide password protects access, without separate accounts or per-user file isolation. Unlocked visitors can view, upload, and delete shared content. See [access password](doc/configuration.md#access-password).
 - Uploads cannot resume after a browser refresh or server restart. Startup clears temporary uploads.
 - Temporary uploads and published files must share a filesystem with hard-link support. In Docker, mount all of `/data` as a single volume.
-- Empty folders are not preserved, and folder downloads as archives are not supported. Conflicting file paths are renamed without overwriting existing files.
+- Empty folders are not preserved on upload. Download folders and their subfolders as ZIP archives from the file list. Conflicting file paths are renamed without overwriting existing files.
 
 ## Documentation
 

@@ -1,4 +1,12 @@
 {
+  "browser.path": "Folder path",
+  "browser.root": "All files",
+  "browser.up": "Up one level",
+  "browser.open": "Open folder {{name}}",
+  "browser.count": "{{folders}} folders, {{files}} files",
+  "browser.searchHint": "Searching all files, with full paths shown. Clear search to return to the current folder.",
+  "folders.download": "Download folder {{name}}",
+  "folders.zip": "Download ZIP",
   "language.loadFailed": "Could not load the language. Reload the page and try again.",
   "upload.confirmationPending": "The upload result could not be confirmed. Retry checks the same session without uploading again. If the server restarted or the result expired, check the file list first.",
   "auth.draftPreserved": "Your editing draft is preserved. Unlock again to continue editing.",
