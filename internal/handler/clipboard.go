@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/MARETU01/gothrough/internal/logging"
@@ -28,28 +26,9 @@ func (h *ClipboardHandler) List(c *gin.Context) {
 
 func (h *ClipboardHandler) Create(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.ClipboardMaxBytes*6+1024)
-	decoder := json.NewDecoder(c.Request.Body)
-	decoder.DisallowUnknownFields()
 	var req model.ClipboardRequest
-	err := decoder.Decode(&req)
-	if err == nil {
-		var extra any
-		if nextErr := decoder.Decode(&extra); !errors.Is(nextErr, io.EOF) {
-			if nextErr != nil {
-				err = nextErr
-			} else {
-				err = errors.New("只允许一个 JSON 对象")
-			}
-		}
-	}
-	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "REQUEST_TOO_LARGE", "error": "请求体过大"})
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_TEXT_REQUEST", "error": "无效的文本请求"})
-		}
+	if err := bindLimitedJSON(c, &req, service.ClipboardMaxBytes*6+1024, jsonStrict); err != nil {
+		invalidJSON(c, err, "INVALID_TEXT_REQUEST", "无效的文本请求")
 		return
 	}
 	entry, err := h.service.Create(req.Text)

@@ -90,23 +90,11 @@ func (s *ClipboardService) CreateImage(input io.Reader) (model.ClipboardEntry, e
 	if total > int64(s.imageSettings.MaxTotalSizeMB)*1024*1024 {
 		return model.ClipboardEntry{}, ErrClipboardImageQuota
 	}
-	f, err := os.CreateTemp(s.imageDir, ".image-*.tmp")
-	if err != nil {
-		return model.ClipboardEntry{}, err
-	}
-	defer s.removeImage(filepath.Base(f.Name()))
-	defer f.Close()
-	if _, err := f.Write(encoded.Bytes()); err != nil {
-		return model.ClipboardEntry{}, err
-	}
-	if err := f.Sync(); err != nil {
-		return model.ClipboardEntry{}, err
-	}
-	if err := f.Close(); err != nil {
-		return model.ClipboardEntry{}, err
-	}
 	name := entry.ID + ".png"
-	if err := os.Rename(f.Name(), filepath.Join(s.imageDir, name)); err != nil {
+	if err := writeClipboardFile(filepath.Join(s.imageDir, name), ".image-*.tmp", func(writer io.Writer) error {
+		_, err := writer.Write(encoded.Bytes())
+		return err
+	}); err != nil {
 		return model.ClipboardEntry{}, err
 	}
 	if err := s.commit(next); err != nil {

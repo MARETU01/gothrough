@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,24 +199,7 @@ func (s *ClipboardService) commit(next []model.ClipboardEntry) error {
 }
 
 func (s *ClipboardService) save(entries []model.ClipboardEntry) error {
-	f, err := os.CreateTemp(filepath.Dir(s.path), ".history-*.tmp")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := os.Remove(f.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
-			slog.Warn("清理剪贴板临时文件失败", "event", "clipboard.cleanup_failed", "error", err)
-		}
-	}()
-	defer f.Close()
-	if err := json.NewEncoder(f).Encode(entries); err != nil {
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), s.path)
+	return writeClipboardFile(s.path, ".history-*.tmp", func(writer io.Writer) error {
+		return json.NewEncoder(writer).Encode(entries)
+	})
 }

@@ -30,15 +30,9 @@ func NewUploadHandler(us *service.UploadService) *UploadHandler {
 
 // 初始化分块上传
 func (h *UploadHandler) UploadInit(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
 	var req model.InitRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			respondError(c, err, 413, "REQUEST_TOO_LARGE", "请求体过大")
-			return
-		}
-		respondError(c, err, 400, "INVALID_UPLOAD", "无效的上传请求")
+	if err := bindLimitedJSON(c, &req, 64*1024, jsonCompatible); err != nil {
+		invalidJSON(c, err, "INVALID_UPLOAD", "无效的上传请求")
 		return
 	}
 	if req.Filename == "" || req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize {
@@ -131,20 +125,16 @@ func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io
 func (h *UploadHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	withUploadSession(c, sessionID)
-	if result, ok := h.uploadService.GetCompletion(sessionID); ok {
-		completedResponse(c, result)
-		return
-	}
-
-	session, err := h.uploadService.GetSession(sessionID)
+	state, err := h.uploadService.LookupUpload(sessionID)
 	if err != nil {
-		if result, ok := h.uploadService.GetCompletion(sessionID); ok {
-			completedResponse(c, result)
-			return
-		}
 		uploadError(c, err)
 		return
 	}
+	if state.Completion != nil {
+		completedResponse(c, *state.Completion)
+		return
+	}
+	session := state.Session
 
 	progress := 100.0
 	if session.TotalChunks > 0 {
@@ -172,20 +162,16 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 		return
 	}
 	withUploadSession(c, sessionID)
-	if result, ok := h.uploadService.GetCompletion(sessionID); ok {
-		completedResponse(c, result)
-		return
-	}
-
-	session, err := h.uploadService.GetSession(sessionID)
+	state, err := h.uploadService.LookupUpload(sessionID)
 	if err != nil {
-		if result, ok := h.uploadService.GetCompletion(sessionID); ok {
-			completedResponse(c, result)
-			return
-		}
 		uploadError(c, err)
 		return
 	}
+	if state.Completion != nil {
+		completedResponse(c, *state.Completion)
+		return
+	}
+	session := state.Session
 
 	finalFilename, actualSize, err := h.uploadService.CompleteSession(sessionID)
 	if err != nil {
@@ -253,15 +239,9 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 }
 
 func sessionIDFromRequest(c *gin.Context) (string, bool) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024)
 	var req model.SessionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			respondError(c, err, 413, "REQUEST_TOO_LARGE", "请求体过大")
-			return "", false
-		}
-		respondError(c, err, 400, "MISSING_SESSION", "缺少 session_id")
+	if err := bindLimitedJSON(c, &req, 1024, jsonCompatible); err != nil {
+		invalidJSON(c, err, "MISSING_SESSION", "缺少 session_id")
 		return "", false
 	}
 	parsed, err := uuid.Parse(req.SessionID)
@@ -285,7 +265,6 @@ func withUploadSession(c *gin.Context, id string) {
 }
 
 func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
-	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.Is(err, service.ErrSession):
 		return http.StatusNotFound, "INVALID_SESSION", service.ErrSession.Error()
@@ -305,7 +284,7 @@ func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
 		return http.StatusInternalServerError, "HARDLINK_UNSUPPORTED", utils.ErrHardlinkUnsupported.Error()
 	case errors.Is(err, service.ErrBusy):
 		return busyErrorDetails(c)
-	case errors.As(err, &tooLarge):
+	case requestTooLarge(err):
 		return http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "请求体过大"
 	}
 	return http.StatusInternalServerError, "UPLOAD_FAILED", "上传失败，请稍后重试"

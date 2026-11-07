@@ -325,11 +325,9 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	entry.result = &model.UploadCompletion{SessionID: id, OriginalFilename: entry.info.OriginalFilename,
 		SavedFilename: entry.info.FinalFilename, Size: stat.Size(), CreatedAt: entry.info.CreatedAt}
 	s.rememberCompletion(*entry.result)
-	entry.closed = true
-	if err := entry.file.Close(); err != nil {
+	if err := s.closeSessionLocked(entry); err != nil {
 		slog.Warn("关闭已发布的上传文件失败", "event", "upload.close_failed", "session_id", id, "error", err)
 	}
-	s.remove(entry)
 	return entry.info.FinalFilename, stat.Size(), nil
 }
 
@@ -345,6 +343,15 @@ func (s *UploadService) remove(entry *transferSession) {
 	}
 }
 
+// The caller must hold entry.lifecycle exclusively. Keep admission/lifecycle
+// locking with the caller: expiration must continue using TryLock.
+func (s *UploadService) closeSessionLocked(entry *transferSession) error {
+	entry.closed = true
+	err := entry.file.Close()
+	s.remove(entry)
+	return err
+}
+
 func (s *UploadService) CancelSession(id string) error {
 	entry, err := s.lookup(id)
 	if err != nil {
@@ -355,10 +362,7 @@ func (s *UploadService) CancelSession(id string) error {
 	if entry.closed {
 		return ErrSession
 	}
-	entry.closed = true
-	err = entry.file.Close()
-	s.remove(entry)
-	return err
+	return s.closeSessionLocked(entry)
 }
 
 // ExpireIdle is deliberately non-blocking for active streams; their lifecycle
@@ -383,11 +387,9 @@ func (s *UploadService) ExpireIdle(age time.Duration) {
 		stale := time.Since(entry.touched) > age
 		entry.mu.Unlock()
 		if stale && !entry.closed {
-			entry.closed = true
-			if err := entry.file.Close(); err != nil {
+			if err := s.closeSessionLocked(entry); err != nil {
 				slog.Warn("关闭过期上传文件失败", "event", "upload.close_failed", "session_id", entry.info.SessionID, "error", err)
 			}
-			s.remove(entry)
 			slog.Info("过期上传会话已清理", "event", "upload.expired", "session_id", entry.info.SessionID, "size_bytes", entry.info.TotalSize)
 		}
 		entry.lifecycle.Unlock()

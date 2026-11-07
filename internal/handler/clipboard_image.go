@@ -29,8 +29,7 @@ func (h *ClipboardHandler) CreateImage(c *gin.Context) {
 	}
 	part, err := r.NextPart()
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if requestTooLarge(err) {
 			clipboardImageFailure(c, err)
 		} else {
 			respondError(c, err, http.StatusBadRequest, "INVALID_IMAGE_SELECTION", "请选择一张有效图片")
@@ -90,9 +89,8 @@ func (h *ClipboardHandler) Image(c *gin.Context) {
 }
 
 func clipboardImageFailure(c *gin.Context, err error) {
-	var tooLarge *http.MaxBytesError
 	switch {
-	case errors.Is(err, service.ErrClipboardImageSize), errors.As(err, &tooLarge):
+	case errors.Is(err, service.ErrClipboardImageSize), requestTooLarge(err):
 		respondError(c, err, http.StatusRequestEntityTooLarge, "IMAGE_TOO_LARGE", service.ErrClipboardImageSize.Error())
 	case errors.Is(err, service.ErrClipboardImageQuota):
 		respondError(c, err, http.StatusConflict, "IMAGE_QUOTA", service.ErrClipboardImageQuota.Error())

@@ -1,4 +1,5 @@
 import api, { responseApi } from './http';
+import { conditionalGet } from './conditional';
 
 export const CLIPBOARD_MAX_BYTES = 64 * 1024;
 export const CLIPBOARD_MAX_ENTRIES = 100;
@@ -41,15 +42,8 @@ export type ClipboardListResult =
   | { notModified: true; etag?: string };
 
 export const listClipboard = async (signal?: AbortSignal, etag?: string): Promise<ClipboardListResult> => {
-  const response = await responseApi.get<ClipboardListResponse>('/clipboard', {
-    signal,
-    headers: etag ? { 'If-None-Match': etag } : undefined,
-    validateStatus: status => (status >= 200 && status < 300) || (status === 304 && !!etag),
-  });
-  const nextEtag = response.headers.etag as string | undefined;
-  return response.status === 304
-    ? { notModified: true, etag: nextEtag ?? etag }
-    : { entries: response.data.entries, etag: nextEtag };
+  const result = await conditionalGet<ClipboardListResponse>('/clipboard', signal, etag);
+  return result.notModified ? result : { entries: result.data.entries, etag: result.etag };
 };
 
 export const createClipboard = (text: string) =>

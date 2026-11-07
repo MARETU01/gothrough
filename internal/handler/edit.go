@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"net/http"
 	"os"
 
 	"github.com/MARETU01/gothrough/internal/logging"
@@ -16,14 +15,12 @@ func (h *UploadHandler) EditText(c *gin.Context) {
 	if rel == "" {
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.MaxTextBytes*6+4096)
 	var req struct {
 		Text    *string `json:"text"`
 		Version string  `json:"version"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.Text == nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+	if err := bindLimitedJSON(c, &req, service.MaxTextBytes*6+4096, jsonCompatible); err != nil || req.Text == nil {
+		if requestTooLarge(err) {
 			respondError(c, err, 413, "TEXT_TOO_LARGE", "文本最大支持 1 MiB")
 			return
 		}
