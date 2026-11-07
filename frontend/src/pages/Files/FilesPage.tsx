@@ -115,12 +115,12 @@ export default function FilesPage() {
             <tbody>{pageFiles.map(file => <tr key={file.name}>
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time"><Timestamp value={file.mtime} /></td>
               <td><div className="files-row-actions"><div className="files-action-controls">
-                <Button type="button" variant="outline" size="sm" aria-label={t('preview.open', { name: file.name })} onClick={() => setPreviewing(file.name)}>{t('preview.button')}</Button>
-                <Button asChild variant="outline" size="sm"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
+                <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} onClick={() => setPreviewing(file.name)}>{t('preview.button')}</Button>
+                <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
                 <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => setConfirming(file.name)} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
               </div><div className="files-actions-sizing" aria-hidden="true">
-                <Button asChild variant="outline" size="sm"><span>{t('preview.button')}</span></Button>
-                <Button asChild variant="outline" size="sm"><span><Download aria-hidden="true" />{t('下载')}</span></Button>
+                <Button asChild variant="outline"><span>{t('preview.button')}</span></Button>
+                <Button asChild variant="outline"><span><Download aria-hidden="true" />{t('下载')}</span></Button>
                 <Button asChild variant="destructive"><span>{t('确认删除')}</span></Button>
                 <Button asChild variant="ghost"><span>{t('取消')}</span></Button>
               </div>

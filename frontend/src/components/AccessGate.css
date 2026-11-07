@@ -1,20 +1,30 @@
-.access-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; background: radial-gradient(ellipse at 50% 40%, #eaf5f1 0%, #f8faf9 58%, #f8faf9 100%); color: #1c3430; }
-.access-header { width: 100%; max-width: 1200px; padding: 28px 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.access-brand { color: #00695c; font-size: 22px; font-weight: 750; text-decoration: none; letter-spacing: -.6px; }
-.access-brand span { display: block; font-size: 11px; font-weight: 400; color: #6a7f78; letter-spacing: 1px; margin-top: 2px; }
-.access-card { width: min(440px, calc(100% - 32px)); margin: auto 0; padding: 42px 40px 28px; background: #fff; border: 1px solid #e1ebe6; border-radius: 20px; box-shadow: 0 18px 65px #214e3e0a, 0 2px 5px #214e3e03; }
-.access-icon { width: 60px; height: 60px; display: grid; place-items: center; color: #00796b; background: #eef7f3; border: 1px solid #dceee5; border-radius: 18px; margin-bottom: 24px; }
-.access-eyebrow { color: #00796b; font-size: 11px; font-weight: 650; letter-spacing: 2px; }
-.access-card h1 { font-size: 28px; letter-spacing: -.7px; font-weight: 650; margin: 8px 0 12px; }
-.access-description { font-size: 14px; color: #74817c; line-height: 1.8; margin: 0 0 28px; }
-.access-card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 9px; }
-.access-card input { width: 100%; padding: 13px 14px; font: inherit; font-size: 14px; border: 1px solid #d9e3de; border-radius: 9px; background: #fafcfb; outline-offset: 3px; }
-.access-card input:focus-visible { outline: 2px solid #00796b; }
-.access-card input::placeholder { color: #9ca9a3; }
-.access-card .access-submit { width: 100%; height: 46px; margin-top: 18px; justify-content: space-between; padding: 0 16px; border-radius: 9px; }
-.access-note { display: flex; align-items: flex-start; gap: 8px; color: #8a9891; font-size: 11px; border-top: 1px solid #eff2f0; padding-top: 20px; margin-top: 26px; line-height: 1.7; }
+.access-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; gap: 32px; color: #345650; }
+.access-header { width: 100%; background: rgba(255,255,255,.9); border-bottom: 1px solid rgba(128,203,196,.2); box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+.access-header-content { width: 100%; max-width: 1200px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.access-brand { color: #00695c; font-size: 22px; font-weight: 700; text-decoration: none; }
+.access-brand span { display: block; font-size: 12px; font-weight: 400; color: #546e6a; margin-top: 2px; }
+.access-card { width: min(480px, calc(100% - 32px)); margin: auto 0; }
+.access-icon { width: 56px; height: 56px; display: grid; place-items: center; color: #00796b; background: #e0f2f1; border: 1px solid #c0e5df; border-radius: 13px; margin-bottom: 24px; }
+.access-eyebrow { display: inline-block; color: #00796b; font-size: 12px; font-weight: 600; }
+.access-card h1 { color: #00796b; font-size: 30px; margin: 10px 0 12px; }
+.access-description { font-size: 14px; color: #546e6a; line-height: 1.8; margin: 0 0 24px; }
+.access-card label { display: block; font-size: 14px; font-weight: 600; color: #00695c; margin-bottom: 10px; }
+.access-card input { width: 100%; height: 40px; padding: 0 16px; font: inherit; font-size: 14px; color: #345650; border: 1px solid #a7d8d2; border-radius: 50px; background: rgba(255,255,255,.9); }
+.access-card input:focus-visible { outline: 3px solid #00796b; outline-offset: 3px; }
+.access-card input[aria-invalid='true'] { border-color: #c43b35; }
+.access-card input:disabled { opacity: .5; }
+.access-card input::placeholder { color: #78938d; }
+.access-card .access-submit { width: 100%; margin-top: 18px; }
+.access-note { display: flex; align-items: flex-start; gap: 8px; color: #546e6a; font-size: 12px; border-top: 1px solid #dcece9; padding-top: 20px; margin-top: 24px; line-height: 1.7; }
 .access-note svg { flex-shrink: 0; margin-top: 1px; }
-.access-error { color: #b33a32; font-size: 13px; margin: 10px 0 0; }
-.access-session-error { padding: 12px; background: #fff0ed; color: #b33a32; text-align: center; }
-.access-footer { padding: 32px 16px; font-size: 12px; color: #8b9c93; text-align: center; }
-@media (max-width: 480px) { .access-header { padding: 22px 20px; } .access-card { padding: 30px 26px 24px; } .access-card h1 { font-size: 25px; } }
+.access-feedback { margin-top: 14px; }
+.access-feedback .app-message { margin-bottom: 0; }
+.access-session-error { width: min(1100px, calc(100% - 32px)); margin: 16px auto 0; }
+.access-footer { padding: 0 16px 24px; font-size: 13px; color: #546e6a; text-align: center; }
+@media (max-width: 600px) {
+  .access-page { gap: 24px; }
+  .access-header-content { padding: 16px; flex-wrap: wrap; }
+  .access-header .language-switcher { margin: 0 0 0 auto; }
+  .access-card { padding: 24px; }
+  .access-card h1 { font-size: 24px; }
+}

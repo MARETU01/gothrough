@@ -27,7 +27,7 @@
 .files-page th:last-child { text-align: right; }
 .files-row-actions { display: grid; justify-content: end; white-space: nowrap; }
 /* Reserve the full confirmation row while keeping visible buttons together at the right edge. */
-.files-action-controls, .files-actions-sizing { grid-area: 1 / 1; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.files-action-controls, .files-actions-sizing { grid-area: 1 / 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .files-actions-sizing { visibility: hidden; pointer-events: none; }
 .files-page a:not([data-slot='button']) { color: #00796b; font-weight: 600; }
 .files-empty { padding: 36px 16px; text-align: center; color: #546e6a; border: 1px dashed #a7d8d2; border-radius: 10px; }

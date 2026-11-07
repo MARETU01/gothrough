@@ -5,6 +5,8 @@ import { responseApi } from '@/services/http';
 import { AccessContext } from '@/contexts/AccessContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { Button } from './ui/button';
+import { StatusMessage } from './StatusMessage';
+import { RefreshButton } from './RefreshButton';
 import './AccessGate.css';
 
 type AccessState = { enabled: boolean; authenticated: boolean };
@@ -63,14 +65,14 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   if (access?.authenticated) {
     return <AccessContext.Provider value={{ enabled: access.enabled, logout }}>
-      {error && <div className="access-session-error" role="alert">{t(error)}</div>}
+      {error && <div className="access-session-error"><StatusMessage tone="error">{t(error)}</StatusMessage></div>}
       {children}
     </AccessContext.Provider>;
   }
 
   return <main className="access-page">
-    <header className="access-header"><a href="/" className="access-brand">GoThrough<span>{t('auth.sharedSpace')}</span></a><LanguageSwitcher /></header>
-    <section className="access-card" aria-labelledby="access-title">
+    <header className="access-header"><div className="access-header-content"><a href="/" className="access-brand">GoThrough<span>{t('auth.sharedSpace')}</span></a><LanguageSwitcher /></div></header>
+    <section className="content-container access-card" aria-labelledby="access-title">
       <div className="access-icon"><LockKeyhole size={26} aria-hidden="true" /></div>
       <span className="access-eyebrow">{t('auth.privateSpace')}</span>
       <h1 id="access-title">{t('auth.title')}</h1>
@@ -78,9 +80,9 @@ export function AccessGate({ children }: { children: ReactNode }) {
       {access ? <form onSubmit={event => void login(event)}>
         <label htmlFor="access-password">{t('auth.password')}</label>
         <input id="access-password" type="password" autoComplete="current-password" autoFocus maxLength={256} placeholder={t('auth.placeholder')} value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} aria-describedby={error ? 'access-error' : undefined} aria-invalid={error === 'auth.invalid'} />
-        {error && <p className="access-error" id="access-error" role="alert">{t(error)}</p>}
+        {error && <div className="access-feedback" id="access-error"><StatusMessage tone="error">{t(error)}</StatusMessage></div>}
         <Button className="access-submit" type="submit" disabled={busy || !password}>{t(busy ? 'auth.verifying' : 'auth.unlock')}<ArrowRight aria-hidden="true" /></Button>
-      </form> : <div aria-live="polite">{error ? <><p className="access-error" role="alert">{t(error)}</p><Button onClick={() => void check()}>{t('auth.retry')}</Button></> : <p>{t('auth.checking')}</p>}</div>}
+      </form> : <div aria-live="polite">{error ? <StatusMessage tone="error" action={<RefreshButton onClick={() => void check()} label={t('auth.retry')} />}>{t(error)}</StatusMessage> : <StatusMessage tone="loading">{t('auth.checking')}</StatusMessage>}</div>}
       <div className="access-note"><ShieldCheck size={16} aria-hidden="true" /><span>{t('auth.sessionNote')}</span></div>
     </section>
     <footer className="access-footer">{t('auth.footer')}</footer>
