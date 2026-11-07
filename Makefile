@@ -16,7 +16,7 @@ OUTPUT ?= $(OUT_DIR)/gothrough$(EXE)
 DEPS_STAMP := frontend/node_modules/.gothrough-deps-installed
 DEPS_INPUTS := frontend/package.json frontend/package-lock.json $(wildcard frontend/.npmrc .npmrc)
 
-.PHONY: build install test help
+.PHONY: build install test clean help
 
 # A single dependency chain preserves ordering even with make -j.
 build: internal/webassets/dist/index.html
@@ -54,8 +54,15 @@ test: internal/webassets/dist/index.html
 	$(GO) test -tags embedweb ./...
 	$(GO) vet -tags embedweb ./...
 
+# Keep runtime configuration, data, and installed dependencies.
+# Run separately from build/test so parallel make cannot remove active outputs.
+clean:
+	rm -f -- "$(OUTPUT)"
+	rm -rf -- frontend/dist internal/webassets/dist
+
 help:
 	@echo make build          - Reuse unchanged dependencies and build the embedded executable
 	@echo make install        - Download Go modules and install frontend dependencies as needed
 	@echo make test           - Build frontend, run frontend tests, then backend tests and vet with and without embedded assets
+	@echo make clean          - Remove build outputs and keep runtime config, data, and dependencies
 	@echo make OUTPUT=release/custom.exe - Customize the output file

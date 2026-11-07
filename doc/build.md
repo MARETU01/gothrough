@@ -37,9 +37,12 @@ Frontend builds also generate gzip copies of JS/CSS files of at least 1 KiB when
 | `make` / `make build` | Build the executable with embedded frontend assets |
 | `make install` | Download Go modules and install frontend dependencies as needed |
 | `make test` | Build the frontend, run frontend tests, and run Go tests and vet with and without embedded assets |
+| `make clean` | Remove the current `OUTPUT`, `frontend/dist/`, and `internal/webassets/dist/`; keep configuration, data, and dependencies |
 | `make OUTPUT=release/custom.exe` | Set a custom output file path |
 | `make OUT_DIR=out` | Change the default output directory |
 | `make help` | Show command help |
+
+Run `make clean` separately from builds and tests. To clean a custom output, pass the same `OUTPUT` or `OUT_DIR` used when building.
 
 Override tool commands with `GO` and `NPM`. Cross-compilation uses standard Go environment variables; the output extension follows the target platform:
 

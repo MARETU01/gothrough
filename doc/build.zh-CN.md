@@ -37,9 +37,12 @@ make build
 | `make` / `make build` | 构建包含前端的可执行文件 |
 | `make install` | 下载 Go 模块并按需安装前端依赖 |
 | `make test` | 构建前端、运行前端测试，以及普通和嵌入版 Go 测试与 vet |
+| `make clean` | 删除当前 `OUTPUT`、`frontend/dist/` 和 `internal/webassets/dist/`，保留配置、数据和依赖 |
 | `make OUTPUT=release/custom.exe` | 自定义输出文件路径 |
 | `make OUT_DIR=out` | 修改默认输出目录 |
 | `make help` | 查看命令说明 |
+
+`make clean` 应单独运行，不要与构建或测试并行执行。清理自定义输出时，传入构建时使用的相同 `OUTPUT` 或 `OUT_DIR`。
 
 通过 `GO`、`NPM` 可指定工具命令。交叉编译使用标准 Go 环境变量，输出扩展名随目标平台选择：
 
