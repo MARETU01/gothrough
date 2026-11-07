@@ -22,6 +22,12 @@ func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, 
 	if len(authSettings) > 0 {
 		settings = authSettings[0]
 	}
+	// Gin trusts every proxy by default. Only explicit, validated proxy addresses
+	// may supply forwarding headers for the login source limiter.
+	if err := r.SetTrustedProxies(settings.TrustedProxies); err != nil {
+		_ = r.SetTrustedProxies(nil)
+		slog.Error("可信代理配置无效，已禁用转发头", "error", err)
+	}
 	auth := newAccessAuth(settings.Password)
 	api.Use(auth.sameOrigin)
 	api.GET("/auth/status", auth.status)

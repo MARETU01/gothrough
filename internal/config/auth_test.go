@@ -20,3 +20,18 @@ func TestAccessPasswordSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestTrustedProxySettings(t *testing.T) {
+	root := t.TempDir()
+	for _, value := range []string{`["127.0.0.1", "::1", "10.0.0.0/8"]`, `["invalid"]`, `["10.0.0.1/99"]`} {
+		path := putConfig(t, root, "auth:\n  trusted_proxies: "+value+"\n")
+		cfg, err := loadSettings(path, root, root, envMap(nil))
+		if value == `["127.0.0.1", "::1", "10.0.0.0/8"]` {
+			if err != nil || len(cfg.Auth.TrustedProxies) != 3 {
+				t.Fatalf("valid proxies rejected: %v", err)
+			}
+		} else if err == nil {
+			t.Fatalf("invalid proxies accepted: %s", value)
+		}
+	}
+}

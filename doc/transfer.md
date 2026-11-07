@@ -88,6 +88,7 @@ Folder uploads use `relative_path` to preserve the top-level folder and subdirec
 | --- | --- |
 | Default transport settings | 8 MiB chunks; frontend sends 3 chunks per file concurrently and processes 2 files at a time |
 | File size | Up to 1 TiB |
+| Upload JSON | Initialization bodies up to 64 KiB; original filenames up to 4096 UTF-8 bytes. Completion/cancellation bodies up to 1 KiB and session IDs must be canonical UUIDs |
 | Server capacity | Up to 16 concurrent chunk requests and 1024 active sessions; exceeding limits returns 429 |
 | Relative paths | Up to 32 components and 4096 bytes; each sanitized component is limited to 200 UTF-8 bytes, including extensions and conflict suffixes |
 | Path validation | Absolute paths, traversal, and symlinks are rejected; invalid paths return 400 and parent path conflicts return 409 |
@@ -95,6 +96,7 @@ Folder uploads use `relative_path` to preserve the top-level folder and subdirec
 | Disk checks | Initialization checks free space without reserving capacity; concurrent uploads may still exhaust it |
 | Storage errors | Space or quota exhaustion returns 507, permission errors return 403, and read-only filesystems return 503 |
 | Session expiration | Sessions idle for over 24 hours are cleaned up every 5 minutes, except those with active writes |
+| Empty upload directories | Failed initialization, cancellation, expiration, and file deletion remove empty ancestors created by this service; pre-existing directories and other active uploads are preserved |
 | Restarts and resuming | Sessions stay in memory; restarting clears temporary uploads and does not support resuming them |
 | Downloads | Range requests are supported |
 | File list cache | File listings, counts, and totals are cached for 2 seconds and invalidated on upload completion or deletion; external changes appear after expiration, while disk free space is queried live |

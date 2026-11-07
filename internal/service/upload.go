@@ -83,6 +83,7 @@ func (s *UploadService) DeleteFile(filename string) error {
 	if err := root.Remove(rel); err != nil {
 		return err
 	}
+	s.cleanupParents(rel)
 	s.invalidateFiles()
 	return nil
 }

@@ -32,7 +32,9 @@ auth:
 
 A nonempty password must contain 8–256 bytes. An empty value disables protection. Environment variables override YAML. Never commit real passwords. Compose forwards the host's `GOTHROUGH_ACCESS_PASSWORD` (also configurable in an uncommitted `.env`); if unset, YAML applies.
 
-When enabled, every file, upload, disk information and clipboard API requires a session, including direct downloads and image links. A random session is stored in an HttpOnly, SameSite=Strict cookie and expires after 12 hours. Signing out revokes that session immediately. Restarting the service, including after a password change, revokes all sessions. Passwords are never stored in browser storage or links. A shared login rate limit permits a burst of 10 attempts and refills one attempt every 3 seconds.
+When enabled, every file, upload, disk information and clipboard API requires a session, including direct downloads and image links. A random session is stored in an HttpOnly, SameSite=Strict cookie and expires after 12 hours. Signing out revokes that session immediately. Restarting the service, including after a password change, revokes all sessions. Passwords are never stored in browser storage or links. Login limits apply separately to each source IP: a burst of 10 attempts, refilling one attempt every 3 seconds. Limiter storage is bounded to 4096 sources; idle records expire after 2 minutes when capacity is needed. At most 32 login requests are parsed simultaneously.
+
+Forwarding headers are ignored by default. Behind a reverse proxy, set `auth.trusted_proxies` to the proxy's actual IP addresses or CIDRs, for example `trusted_proxies: ["127.0.0.1", "::1"]` for a local proxy. Only trusted proxies may supply `X-Forwarded-For` or `X-Real-IP` for source limits. Without this configuration, users behind a proxy share its IP budget. The proxy must overwrite or correctly append client IP headers.
 
 Use HTTPS: HTTP does not encrypt passwords or sessions. Direct TLS sets Secure on session cookies. Reverse proxies must preserve the original Host and add Secure to the session cookie at the HTTPS edge. The development proxy preserves Host.
 

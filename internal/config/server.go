@@ -25,7 +25,8 @@ type Settings struct {
 }
 
 type AuthSettings struct {
-	Password string `yaml:"password"`
+	Password       string   `yaml:"password"`
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 type StorageSettings struct {
@@ -110,6 +111,13 @@ func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) 
 	}
 	if cfg.Auth.Password != "" && (len(cfg.Auth.Password) < 8 || len(cfg.Auth.Password) > 256 || strings.TrimSpace(cfg.Auth.Password) == "") {
 		return nil, fmt.Errorf("访问口令必须为 8 到 256 字节，或留空以关闭验证")
+	}
+	for _, proxy := range cfg.Auth.TrustedProxies {
+		if net.ParseIP(proxy) == nil {
+			if _, _, err := net.ParseCIDR(proxy); err != nil {
+				return nil, fmt.Errorf("auth.trusted_proxies 必须包含有效的 IP 或 CIDR: %s", proxy)
+			}
+		}
 	}
 	if value, ok := lookup("GOTHROUGH_PORT"); ok {
 		port, err := strconv.Atoi(value)

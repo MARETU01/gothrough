@@ -42,23 +42,27 @@ type transferSession struct {
 }
 
 type UploadService struct {
-	mu        sync.RWMutex
-	sessions  map[string]*transferSession
-	names     map[string]bool
-	uploadDir string
-	tempDir   string
-	slots     chan struct{}
-	diskUsage func(string) (utils.DiskUsage, error)
-	listingMu sync.Mutex
-	listing   *fileListing
+	mu          sync.RWMutex
+	sessions    map[string]*transferSession
+	names       map[string]bool
+	createdDirs map[string]os.FileInfo // guarded by mu; only directories created by this service
+	uploadDir   string
+	tempDir     string
+	slots       chan struct{}
+	diskUsage   func(string) (utils.DiskUsage, error)
+	listingMu   sync.Mutex
+	listing     *fileListing
 }
 
 func NewUploadService() *UploadService {
-	return &UploadService{sessions: make(map[string]*transferSession), names: make(map[string]bool),
+	return &UploadService{sessions: make(map[string]*transferSession), names: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
 		uploadDir: config.UploadFolder, tempDir: config.TempFolder, slots: make(chan struct{}, config.MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
 }
 
 func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession, error) {
+	if len(req.Filename) > 4096 {
+		return nil, ErrPath
+	}
 	if req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize || req.Filename == "" {
 		return nil, ErrChunk
 	}
@@ -78,6 +82,12 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 	// cannot reserve a file as another session's parent directory.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	committed := false
+	defer func() {
+		if !committed {
+			s.cleanupParents(safeName)
+		}
+	}()
 	if len(s.sessions) >= config.MaxUploadSessions {
 		return nil, ErrBusy
 	}
@@ -110,7 +120,12 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 	if uint64(req.TotalSize) > usage.Free {
 		return nil, utils.ErrStorageFull
 	}
-	if err := utils.CheckStorage(s.tempDir, filepath.Dir(filepath.Join(s.uploadDir, name))); err != nil {
+	root, err := os.OpenRoot(s.uploadDir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	if err := utils.CheckStorageInRoot(s.tempDir, root, filepath.Dir(filepath.FromSlash(name))); err != nil {
 		return nil, err
 	}
 
@@ -137,6 +152,7 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 	}}
 	s.names[nameKey(name)] = true
 	s.sessions[id] = entry
+	committed = true
 	return snapshot(entry), nil
 }
 
@@ -266,22 +282,34 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	// Hard-link publication is atomic and never overwrites an existing file. Both
 	// directories must be on the same filesystem (the default configuration is).
 	source := filepath.Join(entry.info.ChunksDir, "payload")
-	if err := s.prepareParent(entry.info.FinalFilename); err != nil {
-		return "", 0, err
-	}
-	for {
-		err = os.Link(source, filepath.Join(s.uploadDir, entry.info.FinalFilename))
-		if !errors.Is(err, os.ErrExist) {
-			break
-		}
+	err = func() error {
 		s.mu.Lock()
-		delete(s.names, nameKey(entry.info.FinalFilename))
-		entry.mu.Lock()
-		entry.info.FinalFilename = conflictName(entry.info.FinalFilename)
-		s.names[nameKey(entry.info.FinalFilename)] = true
-		entry.mu.Unlock()
-		s.mu.Unlock()
-	}
+		defer s.mu.Unlock()
+		if err := s.prepareParent(entry.info.FinalFilename); err != nil {
+			return err
+		}
+		root, err := os.OpenRoot(s.uploadDir)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		parent, err := root.Open(filepath.Dir(filepath.FromSlash(entry.info.FinalFilename)))
+		if err != nil {
+			return err
+		}
+		defer parent.Close()
+		for {
+			err := utils.LinkInto(source, parent, filepath.Base(filepath.FromSlash(entry.info.FinalFilename)))
+			if !errors.Is(err, os.ErrExist) {
+				return err
+			}
+			delete(s.names, nameKey(entry.info.FinalFilename))
+			entry.mu.Lock()
+			entry.info.FinalFilename = conflictName(entry.info.FinalFilename)
+			s.names[nameKey(entry.info.FinalFilename)] = true
+			entry.mu.Unlock()
+		}
+	}()
 	if err != nil {
 		return "", 0, utils.StorageError("发布上传文件失败", err)
 	}
@@ -298,6 +326,7 @@ func (s *UploadService) remove(entry *transferSession) {
 	s.mu.Lock()
 	delete(s.sessions, entry.info.SessionID)
 	delete(s.names, nameKey(entry.info.FinalFilename))
+	s.cleanupParents(entry.info.FinalFilename)
 	s.mu.Unlock()
 	if err := os.RemoveAll(entry.info.ChunksDir); err != nil {
 		// The published file is already durable; stale temporary files are removed at startup.

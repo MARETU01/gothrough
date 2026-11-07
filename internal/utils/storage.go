@@ -31,6 +31,16 @@ func StorageError(operation string, err error) error {
 // CheckStorage verifies writes in both locations and the hard-link operation
 // used to publish uploads. Probe files never overwrite existing data.
 func CheckStorage(tempDir, uploadDir string) (err error) {
+	root, err := os.OpenRoot(uploadDir)
+	if err != nil {
+		return StorageError("打开上传目录失败", err)
+	}
+	defer root.Close()
+	return CheckStorageInRoot(tempDir, root, ".")
+}
+
+// CheckStorageInRoot keeps nested upload parents confined during the probe too.
+func CheckStorageInRoot(tempDir string, root *os.Root, parent string) (err error) {
 	probe, err := os.CreateTemp(tempDir, ".gothrough-check-*")
 	if err != nil {
 		return StorageError("检查临时目录写入能力失败", err)
@@ -41,12 +51,17 @@ func CheckStorage(tempDir, uploadDir string) (err error) {
 	if err := probe.Close(); err != nil {
 		return StorageError("关闭存储检查文件失败", err)
 	}
-	target := filepath.Join(uploadDir, filepath.Base(probe.Name())+".link")
-	if err := os.Link(probe.Name(), target); err != nil {
+	directory, err := root.Open(parent)
+	if err != nil {
+		return StorageError("打开上传父目录失败", err)
+	}
+	defer directory.Close()
+	name := filepath.Base(probe.Name()) + ".link"
+	if err := LinkInto(probe.Name(), directory, name); err != nil {
 		return StorageError("检查上传目录写入及硬链接能力失败", err)
 	}
 	defer func() {
-		err = errors.Join(err, StorageError("清理上传目录检查文件失败", os.Remove(target)))
+		err = errors.Join(err, StorageError("清理上传目录检查文件失败", root.Remove(filepath.Join(parent, name))))
 	}()
 	return nil
 }

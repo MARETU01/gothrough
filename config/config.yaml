@@ -2,6 +2,8 @@
 auth:
   # Empty disables access control. Prefer GOTHROUGH_ACCESS_PASSWORD for secrets.
   password: ""
+  # Only these reverse proxies may supply client IP headers for login limits.
+  trusted_proxies: []
 logging:
   level: "info"
   format: "text" # text or json

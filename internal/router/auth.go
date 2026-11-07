@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sync"
 	"time"
@@ -15,6 +16,13 @@ import (
 
 const accessCookie = "gothrough_session"
 const sessionLifetime = 12 * time.Hour
+const maxLoginSources = 4096
+const loginSourceLifetime = 2 * time.Minute
+
+type loginBucket struct {
+	tokens   float64
+	refilled time.Time
+}
 
 // Sessions are private to this process. Restarting or changing the password
 // revokes them all; logout revokes the individual token immediately.
@@ -23,12 +31,52 @@ type accessAuth struct {
 	password [32]byte
 	mu       sync.Mutex
 	sessions map[string]time.Time
-	tokens   float64
-	refilled time.Time
+	sources  map[string]loginBucket
+	logins   chan struct{}
 }
 
 func newAccessAuth(password string) *accessAuth {
-	return &accessAuth{enabled: password != "", password: sha256.Sum256([]byte(password)), sessions: make(map[string]time.Time), tokens: 10, refilled: time.Now()}
+	return &accessAuth{enabled: password != "", password: sha256.Sum256([]byte(password)), sessions: make(map[string]time.Time), sources: make(map[string]loginBucket), logins: make(chan struct{}, 32)}
+}
+
+// Caller supplies a peer IP, or a client IP obtained through explicitly trusted
+// proxies. Bounded storage and expiration prevent the limiter becoming a leak.
+func (a *accessAuth) allowLogin(source string, now time.Time) bool {
+	if address, err := netip.ParseAddr(source); err == nil {
+		source = address.Unmap().String()
+	} else {
+		source = "unknown"
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	bucket, exists := a.sources[source]
+	if !exists {
+		if len(a.sources) >= maxLoginSources {
+			oldestKey := ""
+			var oldest time.Time
+			for key, candidate := range a.sources {
+				if now.Sub(candidate.refilled) >= loginSourceLifetime {
+					delete(a.sources, key)
+					continue
+				}
+				if oldestKey == "" || candidate.refilled.Before(oldest) {
+					oldestKey, oldest = key, candidate.refilled
+				}
+			}
+			if len(a.sources) >= maxLoginSources {
+				delete(a.sources, oldestKey)
+			}
+		}
+		bucket = loginBucket{tokens: 10, refilled: now}
+	}
+	bucket.tokens = min(10, bucket.tokens+max(0, now.Sub(bucket.refilled).Seconds())/3)
+	bucket.refilled = now
+	allowed := bucket.tokens >= 1
+	if allowed {
+		bucket.tokens--
+	}
+	a.sources[source] = bucket
+	return allowed
 }
 
 func (a *accessAuth) authenticated(c *gin.Context) bool {
@@ -85,17 +133,17 @@ func (a *accessAuth) login(c *gin.Context) {
 		a.status(c)
 		return
 	}
-	// One shared bucket bounds guessing and memory without trusting proxy/IP headers.
-	a.mu.Lock()
 	now := time.Now()
-	a.tokens = min(10, a.tokens+now.Sub(a.refilled).Seconds()/3)
-	a.refilled = now
-	allowed := a.tokens >= 1
-	if allowed {
-		a.tokens--
+	if !a.allowLogin(c.ClientIP(), now) {
+		c.Header("Retry-After", "3")
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": "AUTH_RATE_LIMITED", "error": "尝试过于频繁，请稍后再试"})
+		return
 	}
-	a.mu.Unlock()
-	if !allowed {
+	// Bound simultaneous parsing independently from each source's rate budget.
+	select {
+	case a.logins <- struct{}{}:
+		defer func() { <-a.logins }()
+	default:
 		c.Header("Retry-After", "3")
 		c.JSON(http.StatusTooManyRequests, gin.H{"code": "AUTH_RATE_LIMITED", "error": "尝试过于频繁，请稍后再试"})
 		return

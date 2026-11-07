@@ -30,8 +30,18 @@ func NewUploadHandler(us *service.UploadService) *UploadHandler {
 
 // 初始化分块上传
 func (h *UploadHandler) UploadInit(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
 	var req model.InitRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Filename == "" || req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			respondError(c, err, 413, "REQUEST_TOO_LARGE", "请求体过大")
+			return
+		}
+		respondError(c, err, 400, "INVALID_UPLOAD", "无效的上传请求")
+		return
+	}
+	if req.Filename == "" || req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_UPLOAD", "error": "缺少 filename 或 total_size"})
 		return
 	}
@@ -225,8 +235,19 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 }
 
 func sessionIDFromRequest(c *gin.Context) (string, bool) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024)
 	var req model.SessionRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.SessionID == "" {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			respondError(c, err, 413, "REQUEST_TOO_LARGE", "请求体过大")
+			return "", false
+		}
+		respondError(c, err, 400, "MISSING_SESSION", "缺少 session_id")
+		return "", false
+	}
+	parsed, err := uuid.Parse(req.SessionID)
+	if err != nil || parsed.String() != req.SessionID {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "MISSING_SESSION", "error": "缺少 session_id"})
 		return "", false
 	}

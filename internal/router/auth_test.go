@@ -110,7 +110,7 @@ func TestAccessDisabledAndRateLimit(t *testing.T) {
 		if w := authRequest(r, "POST", "/login", `{"password":"`+strings.Repeat("a", 3000)+`"}`, nil, "", false); w.Code != 400 {
 			t.Fatal("oversized login accepted")
 		}
-		a.tokens = 0
+		a.sources["192.0.2.1"] = loginBucket{tokens: 0, refilled: time.Now()}
 		if w := authRequest(r, "POST", "/login", `{"password":"test-password"}`, nil, "", false); w.Code != 429 || w.Header().Get("Retry-After") == "" {
 			t.Fatal("missing rate limit")
 		}
