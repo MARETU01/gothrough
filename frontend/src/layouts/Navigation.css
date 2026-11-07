@@ -1,8 +1,5 @@
-/* ==================== 顶部导航样式 ==================== */
-/* 随组件就近放置：Navigation 组件定义在 router/Routes.tsx */
-
 .navigation {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(128, 203, 196, 0.2);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -11,61 +8,31 @@
   z-index: 100;
 }
 
-.nav-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: center;
-  padding: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
+.nav-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+.nav-panel, .nav-links, .nav-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; min-width: 0; }
+.nav-tools { margin-left: auto; justify-content: flex-end; }
+.nav-mobile-header, .nav-item-icon { display: none; }
+.language-switcher { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: auto; color: #00796b; }
+.nav-link { padding: 0.75rem 1.5rem; margin: 0 0.5rem; text-decoration: none; color: #00796b; font-weight: 500; border-radius: 25px; transition: background .2s, border-color .2s, box-shadow .2s; background: transparent; border: 1px solid transparent; }
+.nav-link:hover { background: rgba(128, 203, 196, 0.1); border-color: rgba(128, 203, 196, 0.3); }
+.nav-link.active { background: #00796b; color: white; border-color: #00796b; box-shadow: 0 4px 12px rgba(0, 121, 107, 0.2); }
 
-.language-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-  color: #00796b;
-}
-
-.nav-link {
-  padding: 0.75rem 1.5rem;
-  margin: 0 0.5rem;
-  text-decoration: none;
-  color: #00796b;
-  font-weight: 500;
-  border-radius: 25px;
-  transition: all 0.3s ease;
-  background: transparent;
-  border: 1px solid transparent;
-}
-
-.nav-link:hover {
-  background: rgba(128, 203, 196, 0.1);
-  border-color: rgba(128, 203, 196, 0.3);
-}
-
-.nav-link.active {
-  background: #00796b;
-  color: white;
-  border-color: #00796b;
-  box-shadow: 0 4px 12px rgba(0, 121, 107, 0.2);
-}
-
-/* 响应式设计 */
 @media (max-width: 768px) {
-  .nav-container {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .nav-link {
-    margin: 0.25rem 0;
-    width: 80%;
-    text-align: center;
-  }
-
-  .language-switcher { margin: 0.5rem 0 0; }
+  .nav-container { padding: 8px 16px; }
+  .nav-mobile-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .nav-mobile-title { display: flex; flex: 1; min-width: 0; flex-direction: column; color: #546e6a; font-size: 12px; overflow-wrap: anywhere; }
+  .nav-brand { color: #00695c; font-size: 18px; font-weight: 700; }
+  .nav-toggle { min-height: 44px; color: #00796b; border-color: #a7d8d2; border-radius: 12px; }
+  .nav-mobile-status { order: 1; width: 100%; color: #00796b; font-size: 12px; }
+  .nav-panel { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: calc(100svh - 100px); overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px max(16px, env(safe-area-inset-bottom)); background: #f7fcfb; border-bottom: 1px solid #a7d8d2; box-shadow: 0 12px 20px rgba(0, 60, 50, .12); }
+  .nav-panel.is-open { display: block; }
+  .nav-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .nav-link { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 48px; margin: 0; padding: 12px; font-size: 14px; border-radius: 12px; overflow-wrap: anywhere; }
+  .nav-item-icon { display: block; flex-shrink: 0; width: 18px; height: 18px; }
+  .nav-upload-status { display: block; font-size: 11px; }
+  .nav-tools { margin-top: 12px; padding-top: 12px; border-top: 1px solid #dcece9; gap: 8px; }
+  .nav-tools .language-switcher { margin: 0 auto 0 0; gap: 6px; min-width: 0; }
+  .nav-tools .language-switcher > svg { flex-shrink: 0; }
+  .nav-tools .app-select-control { min-height: 44px; height: auto; font-size: 16px; }
+  .nav-tools > button { min-height: 44px; padding-inline: 12px; }
 }

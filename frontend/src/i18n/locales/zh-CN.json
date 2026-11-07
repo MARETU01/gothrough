@@ -1,4 +1,7 @@
 {
+  "nav.menu": "菜单",
+  "nav.open": "展开导航菜单",
+  "nav.close": "收起导航菜单",
   "browser.path": "目录路径",
   "browser.root": "全部文件",
   "browser.up": "返回上一级",

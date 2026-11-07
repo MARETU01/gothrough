@@ -1,4 +1,7 @@
 {
+  "nav.menu": "Menu",
+  "nav.open": "Open navigation menu",
+  "nav.close": "Close navigation menu",
   "browser.path": "Folder path",
   "browser.root": "All files",
   "browser.up": "Up one level",

@@ -19,10 +19,16 @@
 .home-sharing h2 { margin: 0 0 8px; font-size: 16px; color: #00695c; }
 .home-sharing p { font-size: 13px; line-height: 1.8; color: #546e6a; }
 @media (max-width: 768px) {
-  .home-page { padding: 24px 16px; }
-  .home-header { padding: 12px 0 30px; }
+  .home-page { padding: 20px 16px; }
+  .home-header { padding: 0 0 24px; }
+  .home-header h1 { margin-top: 12px; }
+  .home-intro { font-size: 18px; }
+  .home-description { margin-top: 10px; font-size: 14px; }
   .home-features { grid-template-columns: 1fr; gap: 16px; }
-  .home-feature { padding: 24px; }
-  .home-feature-icon { margin-bottom: 18px; }
-  .home-sharing { padding: 20px; margin-top: 20px; }
+  .home-feature { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 12px; padding: 18px; }
+  .home-feature-icon { width: 40px; height: 40px; margin: 0; border-radius: 10px; }
+  .home-feature h2 { margin: 0; font-size: 19px; }
+  .home-feature > p { grid-column: 1 / -1; line-height: 1.7; }
+  .home-feature-action { grid-column: 1 / -1; margin-top: 0; padding-top: 12px; }
+  .home-sharing { padding: 16px; margin-top: 20px; }
 }
