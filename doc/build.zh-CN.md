@@ -84,3 +84,30 @@ CGO_ENABLED=1 go test -race -tags embedweb ./...
 | Publish versioned Docker image | Ubuntu，仅版本标签且检查通过 | 发布 amd64/arm64 镜像 |
 
 Go 版本从 `go.mod` 读取，Node.js 使用 26.x，依赖按 lockfile 安装。Windows 无 C 工具链时，可在本地完成其他检查并查看 CI 的 Linux race 结果。镜像凭据、标签规则和发布步骤集中在 [Docker 部署](docker.zh-CN.md#github-自动构建与发布)。
+
+## GitHub Release
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) 在推送 `v*` 标签时运行。版本须符合 Docker 发布的格式，例如 `v0.0.4` 或 `v0.0.4-beta.1`，且标签对应的提交已包含在 `main` 历史中。先合并并推送工作流，再打标签；标签对应的提交必须包含该工作流。
+
+工作流先校验版本、检查前端 lint 和测试，执行普通及嵌入版 Go 测试与 vet，并构建一次前端。随后六个 Linux 任务并行通过 `CGO_ENABLED=0`、`embedweb` 标签交叉编译：
+
+| 目标平台 | 压缩包 |
+| --- | --- |
+| Windows amd64 / arm64 | `gothrough-<version>-windows-<arch>.zip` |
+| Linux amd64 / arm64 | `gothrough-<version>-linux-<arch>.tar.gz` |
+| macOS amd64 / arm64 | `gothrough-<version>-darwin-<arch>.tar.gz` |
+
+每个压缩包内有一个目录，包含可执行文件和受版本控制的 `config/config.yaml` 模板，不包含本地运行配置。交叉编译验证各平台代码可以编译；该工作流在 Linux 上运行测试，不会逐一在目标系统执行测试。
+
+全部构建成功后，工作流创建 GitHub Release **草稿**，自动生成更新说明，并上传六个压缩包和 `SHA256SUMS`。预发布标签会自动将草稿标记为预发布。仅最后的上传任务拥有 `contents: write` 权限，使用内置 `GITHUB_TOKEN`，无需另配 Release 密钥；仓库或组织策略须允许该权限。
+
+例如，同步 `main` 并确认 CI 通过后，推送一个尚未使用的标签：
+
+```sh
+git tag -a v0.0.4 -m "Release v0.0.4"
+git push origin v0.0.4
+```
+
+在 Actions 中检查 Release 工作流，再到 Releases 检查草稿说明和下载包，点击 **Publish release** 正式发布。重新运行工作流会替换已有草稿的附件，但会拒绝覆盖已发布的 Release。在包含所有下载包的目录中，可运行 `sha256sum --check SHA256SUMS` 验证文件。
+
+此工作流与 CI 中的 Docker 发布独立运行。Docker 镜像仍在标签推送、其自身检查通过后发布，即使 GitHub Release 仍是草稿；Release 草稿生成成功也不代表 Docker 发布成功。

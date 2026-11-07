@@ -84,3 +84,30 @@ The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs o
 | Publish versioned Docker image | Ubuntu, version tags after checks pass | Publish amd64/arm64 images |
 
 Go uses the version in `go.mod`; Node.js uses 26.x, and dependencies follow the lockfile. On Windows without a C toolchain, run the other checks locally and inspect Linux race results in CI. Image credentials, tag rules, and release steps are documented in [Docker deployment](docker.md#automated-builds-and-publishing-on-github).
+
+## GitHub Releases
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) runs when a `v*` tag is pushed. The version must follow the Docker version format, such as `v0.0.4` or `v0.0.4-beta.1`, and its commit must already be in `main`. Merge and push the workflow before tagging; the tagged commit must contain it.
+
+The workflow checks the version, lints and tests the frontend, runs Go tests and vet with and without embedded assets, and builds the frontend once. Six parallel Linux jobs then cross-compile with `CGO_ENABLED=0` and `embedweb`:
+
+| Target | Archive |
+| --- | --- |
+| Windows amd64 / arm64 | `gothrough-<version>-windows-<arch>.zip` |
+| Linux amd64 / arm64 | `gothrough-<version>-linux-<arch>.tar.gz` |
+| macOS amd64 / arm64 | `gothrough-<version>-darwin-<arch>.tar.gz` |
+
+Each archive contains a directory with the executable and the tracked `config/config.yaml` template. Local runtime configuration is never packaged. Cross-platform builds are compilation checks; this workflow runs tests on Linux, not on every target system.
+
+After all builds pass, the workflow creates a **draft** GitHub Release with generated notes, the six archives, and `SHA256SUMS`. Prerelease tags automatically mark the draft as a prerelease. Only the final job gets `contents: write`; it uses the built-in `GITHUB_TOKEN`, so no additional release secret is required. Repository or organization policy must allow this permission.
+
+For example, after syncing `main` and checking CI, publish an unused tag:
+
+```sh
+git tag -a v0.0.4 -m "Release v0.0.4"
+git push origin v0.0.4
+```
+
+Check the Release workflow in Actions, then open Releases, review the draft notes and downloads, and click **Publish release**. Rerunning the workflow replaces attachments on an existing draft; it refuses to overwrite a published release. Verify downloaded archives with `sha256sum --check SHA256SUMS` from the directory containing all archives.
+
+This workflow runs independently of CI's Docker publishing. Docker images are still published on tag pushes after their own checks, even while the GitHub Release is a draft; a Release draft does not imply Docker publishing has succeeded.

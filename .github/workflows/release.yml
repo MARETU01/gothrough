@@ -1,0 +1,194 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Validate tag, test, and build frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - name: Check out tagged version
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release version and main ancestry
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Match the version format accepted by the Docker publishing script.
+          pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+)(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! $VERSION =~ $pattern || ${#VERSION} -gt 128 ]]; then
+            echo "Invalid version: $VERSION; use v1.0.0 or v1.0.0-beta.1" >&2
+            exit 1
+          fi
+          if [[ $VERSION == *-* ]]; then
+            IFS='.' read -r -a identifiers <<< "${VERSION#*-}"
+            for identifier in "${identifiers[@]}"; do
+              if [[ $identifier =~ ^[0-9]+$ && ${#identifier} -gt 1 && $identifier == 0* ]]; then
+                echo "Numeric prerelease identifiers must not contain leading zeros" >&2
+                exit 1
+              fi
+            done
+          fi
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: make install
+      - name: Lint frontend
+        run: npm --prefix frontend run lint
+      - name: Build and test with CGO disabled
+        run: make -j2 build test
+      - name: Archive shared frontend assets
+        run: tar -czf web-assets.tar.gz -C internal/webassets/dist .
+      - name: Upload shared frontend assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-web-assets
+          path: web-assets.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          overwrite: true
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - name: Check out tagged version
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Download shared frontend assets
+        uses: actions/download-artifact@v8
+        with:
+          name: release-web-assets
+      - name: Restore embedded assets
+        run: |
+          mkdir -p internal/webassets/dist
+          tar -xzf web-assets.tar.gz -C internal/webassets/dist
+          test -f internal/webassets/dist/index.html
+      - name: Build and package executable
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          package="gothrough-${VERSION}-${GOOS}-${GOARCH}"
+          executable=gothrough
+          if [[ $GOOS == windows ]]; then
+            executable+=.exe
+          fi
+          mkdir -p "package/$package/config" artifacts
+          go build -tags embedweb -trimpath -ldflags="-s -w" \
+            -o "package/$package/$executable" ./cmd
+          cp config/config.yaml "package/$package/config/config.yaml"
+          if [[ $GOOS == windows ]]; then
+            (cd package && zip -qr "../artifacts/$package.zip" "$package")
+          else
+            chmod 755 "package/$package/$executable"
+            tar -czf "artifacts/$package.tar.gz" -C package "$package"
+          fi
+      - name: Upload release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-package-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          overwrite: true
+
+  release:
+    name: Create or update release draft
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download all release packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-package-*
+          merge-multiple: true
+          path: artifacts
+      - name: Generate SHA256 checksums
+        working-directory: artifacts
+        run: |
+          set -euo pipefail
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Create or update draft and upload packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if draft=$(gh release view "$VERSION" --json isDraft --jq .isDraft); then
+            if [[ $draft != true ]]; then
+              echo "Release $VERSION is already published; refusing to replace its assets" >&2
+              exit 1
+            fi
+          else
+            options=(--draft --verify-tag --title "$VERSION" --generate-notes)
+            if [[ $VERSION == *-* ]]; then
+              options+=(--prerelease)
+            fi
+            gh release create "$VERSION" "${options[@]}"
+          fi
+          gh release upload "$VERSION" artifacts/* --clobber
