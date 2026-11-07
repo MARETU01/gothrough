@@ -24,6 +24,8 @@ Encode filenames when using them as URL path parameters.
 
 File list `mtime` values use RFC3339 timestamps with timezone offsets. The UI displays them in the viewer's local timezone and selected language, and sorts by the actual instant.
 
+The file list waits 3 seconds after each request before automatically refreshing files and disk information, preserving search, sorting, and pagination. Updates pause during deletion confirmation, deletion requests, and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh immediately when visible again. Failed polls preserve content and operation errors and retry on the next cycle. Manual refresh remains available, and background reads do not show the foreground loading state.
+
 ### File preview
 
 The file list opens previews in a modal, full screen on phones. Close it or press Escape to return to the list. Images, UTF-8 text, PDFs, and browser-supported audio/video are supported, with a download fallback.

@@ -1,13 +1,14 @@
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FilesPage from './FilesPage';
-import { deleteFile, listFiles, type FileListResponse } from '@/services/files';
+import { deleteFile, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
+import { FILES_REFRESH_INTERVAL_MS } from '@/config/files';
 
 vi.mock('@/services/files', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/files')>(),
-  listFiles: vi.fn(), deleteFile: vi.fn(),
+  listFiles: vi.fn(), deleteFile: vi.fn(), getFilePreview: vi.fn(),
 }));
 
 const makeData = (): FileListResponse => ({
@@ -19,9 +20,29 @@ const makeData = (): FileListResponse => ({
   disk_used_display: '90 GB', disk_total_display: '100 GB', disk_pct: 90, disk_pct_warning: true,
 });
 
-beforeEach(() => { vi.mocked(listFiles).mockResolvedValue(makeData()); vi.mocked(deleteFile).mockResolvedValue({ status: 'deleted' }); });
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); });
+const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+beforeEach(() => {
+  window.getSelection()?.removeAllRanges();
+  vi.mocked(listFiles).mockResolvedValue(makeData());
+  vi.mocked(deleteFile).mockResolvedValue({ status: 'deleted' });
+  vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'preview', version: 'v1' });
+});
+afterEach(() => {
+  cleanup(); vi.clearAllMocks(); vi.useRealTimers();
+  if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility);
+  else Reflect.deleteProperty(document, 'visibilityState');
+});
 const openPage = () => render(createElement(MemoryRouter, null, createElement(FilesPage)));
+
+const advancePoll = (milliseconds = FILES_REFRESH_INTERVAL_MS) =>
+  act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
+
+async function openPollingPage() {
+  vi.useFakeTimers();
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = openPage(); });
+  return view;
+}
 
 it('keeps all files available after pagination, searching, and sorting', async () => {
   openPage();
@@ -104,4 +125,122 @@ it('sorts timezone-aware modification times by instant rather than their string 
   expect(screen.getAllByRole('row')[1].textContent).toContain('文件 02.txt');
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'mtime_asc' } });
   expect(screen.getAllByRole('row')[1].textContent).toContain('文件 01.txt');
+});
+
+it('updates files and storage silently, keeps search/sort/page, clamps deleted pages, and stops on unmount', async () => {
+  const view = await openPollingPage();
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: '文件' } });
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'name_asc' } });
+  fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+  const data = makeData();
+  const added = { ...data.files[20], name: '文件 22.txt' };
+  vi.mocked(listFiles).mockResolvedValue({ ...data, files: [...data.files, added], disk_pct: 42, disk_free_display: '58 GB' });
+  await advancePoll();
+  expect(screen.getByText('文件 22.txt')).toBeTruthy();
+  expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('文件');
+  expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('name_asc');
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('42');
+  expect(screen.getByText('58 GB')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: '加载中…' })).toBeNull();
+  vi.mocked(listFiles).mockResolvedValue({ ...data, files: data.files.slice(0, 20) });
+  await advancePoll();
+  expect(screen.queryByText('文件 22.txt')).toBeNull();
+  expect(screen.getByText('文件 01.txt')).toBeTruthy();
+  const calls = vi.mocked(listFiles).mock.calls.length;
+  view.unmount();
+  await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
+  expect(listFiles).toHaveBeenCalledTimes(calls);
+});
+
+it.each(['confirmation', 'preview'])('cancels stale polling and pauses during %s, then resumes', async kind => {
+  await openPollingPage();
+  let finish!: (value: FileListResponse) => void;
+  vi.mocked(listFiles).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  const signal = vi.mocked(listFiles).mock.calls[1][0];
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: kind === 'preview' ? '预览 文件 01.txt' : '删除 文件 01.txt' })); });
+  expect(signal?.aborted).toBe(true);
+  await act(async () => { finish({ ...makeData(), files: [] }); });
+  await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
+  expect(listFiles).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('文件 01.txt', { selector: 'td' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: kind === 'preview' ? '关闭' : '取消' }));
+  await advancePoll();
+  expect(listFiles).toHaveBeenCalledTimes(3);
+});
+
+it('waits for a slow poll to finish before scheduling another request', async () => {
+  await openPollingPage();
+  let finish!: (value: FileListResponse) => void;
+  vi.mocked(listFiles).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  await advancePoll(FILES_REFRESH_INTERVAL_MS * 4);
+  expect(listFiles).toHaveBeenCalledTimes(2);
+  await act(async () => { finish(makeData()); });
+  await advancePoll();
+  expect(listFiles).toHaveBeenCalledTimes(3);
+});
+
+it('pauses for the whole deletion request and resumes after the foreground resync', async () => {
+  await openPollingPage();
+  let finish!: (value: { status: string }) => void;
+  vi.mocked(deleteFile).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' }));
+  await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
+  expect(listFiles).toHaveBeenCalledTimes(1);
+  const data = makeData();
+  vi.mocked(listFiles).mockResolvedValue({ ...data, files: data.files.slice(1) });
+  await act(async () => { finish({ status: 'deleted' }); });
+  expect(listFiles).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText('文件 01.txt')).toBeNull();
+  await advancePoll();
+  expect(listFiles).toHaveBeenCalledTimes(3);
+});
+
+it('keeps content and deletion errors when a poll fails and recovers on the next poll', async () => {
+  await openPollingPage();
+  vi.mocked(deleteFile).mockRejectedValueOnce(new Error('delete failed'));
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  vi.mocked(listFiles).mockRejectedValueOnce(new Error('offline'));
+  await advancePoll();
+  expect(screen.getByText('文件 01.txt')).toBeTruthy();
+  expect(screen.getByRole('alert').textContent).toContain('delete failed');
+  expect(screen.getByText(/自动更新暂不可用/)).toBeTruthy();
+  await advancePoll();
+  expect(screen.queryByText(/自动更新暂不可用/)).toBeNull();
+  expect(screen.getByRole('alert').textContent).toContain('delete failed');
+});
+
+it('cancels requests while hidden and refreshes immediately when visible', async () => {
+  await openPollingPage();
+  let finish!: (value: FileListResponse) => void;
+  vi.mocked(listFiles).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  const signal = vi.mocked(listFiles).mock.calls[1][0];
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+  fireEvent(document, new Event('visibilitychange'));
+  expect(signal?.aborted).toBe(true);
+  await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
+  expect(listFiles).toHaveBeenCalledTimes(2);
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  await act(async () => { fireEvent(document, new Event('visibilitychange')); });
+  expect(listFiles).toHaveBeenCalledTimes(3);
+  await act(async () => { finish({ ...makeData(), files: [] }); });
+  expect(screen.getByText('文件 01.txt')).toBeTruthy();
+});
+
+it('does not replace selected text during a background update', async () => {
+  await openPollingPage();
+  const selection = window.getSelection()!;
+  const range = document.createRange();
+  range.selectNodeContents(screen.getByText('文件 01.txt'));
+  selection.addRange(range);
+  await advancePoll();
+  expect(listFiles).toHaveBeenCalledTimes(1);
+  selection.removeAllRanges();
+  await advancePoll();
+  expect(listFiles).toHaveBeenCalledTimes(2);
 });

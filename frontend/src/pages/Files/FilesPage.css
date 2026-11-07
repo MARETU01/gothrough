@@ -1,6 +1,8 @@
 .files-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; }
 .files-header h1 { margin: 0 0 10px; color: #00796b; font-size: 30px; }
 .files-header p { color: #546e6a; font-size: 14px; }
+.files-page .files-sync-note { color: #546e6a; font-size: 13px; margin: 8px 0 14px; }
+.files-header .files-sync-note { margin-bottom: 0; }
 .files-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .files-disk { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; background: rgba(128,203,196,.12); border: 1px solid rgba(128,203,196,.25); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
 .files-disk dl { display: flex; flex: 2; flex-wrap: wrap; gap: 24px; margin: 0; }

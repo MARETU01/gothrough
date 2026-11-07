@@ -1,4 +1,5 @@
 {
+  "files.interval": "每 {{seconds}} 秒自动更新文件列表",
   "文件上传 - GoThrough": "文件上传 - GoThrough",
   "edit.discardConfirm": "放弃修改",
   "edit.keepEditing": "继续编辑",

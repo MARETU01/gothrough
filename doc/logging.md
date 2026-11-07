@@ -25,7 +25,7 @@ logging:
 - `level`: `debug`, `info`, `warn`, or `error`. Only records at or above this level are emitted. `debug` also includes diagnostic events such as idle session scans.
 - `format`: `text` for direct reading, or `json` for one JSON record per line, suitable for log collection.
 - `access_log`: controls access logs for successful requests. When disabled, failed requests are still logged at WARN (4xx) or ERROR (5xx), subject to `level`. Business events such as completed uploads and clipboard publishing are independent of this setting.
-- `log_polling`: whether to log successful clipboard list and upload status requests. Disabled by default.
+- `log_polling`: whether to log successful file list, clipboard list, and upload status requests. Disabled by default; failed requests are still logged at the configured levels.
 - `log_chunks`: whether to log successful chunk requests. Disabled by default. Failed high-frequency requests are still logged.
 - `file.enabled`: also write to a rotating file. Disabled by default; console output is always retained.
 - `file.path`: relative paths are resolved from `storage.data_dir`; absolute paths are also supported. The file cannot be inside `temp_uploads`, where startup cleanup could delete it.

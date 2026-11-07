@@ -1,4 +1,5 @@
 {
+  "files.interval": "File list updates automatically every {{seconds}} seconds",
   "文件上传 - GoThrough": "Upload files - GoThrough",
   "edit.discardConfirm": "Discard changes",
   "edit.keepEditing": "Keep editing",

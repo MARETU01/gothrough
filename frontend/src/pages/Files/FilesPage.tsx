@@ -1,6 +1,6 @@
 import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteFile, downloadFileUrl, listFiles, type FileListResponse } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
@@ -15,6 +15,8 @@ import { DeleteAction } from '@/components/DeleteButton';
 import { RefreshButton } from '@/components/RefreshButton';
 import { Timestamp } from '@/components/Timestamp';
 import { timestampValue } from '@/utils/dateTime';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { FILES_REFRESH_INTERVAL_MS } from '@/config/files';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
@@ -27,7 +29,7 @@ export default function FilesPage() {
   ] as const;
 
   usePageTitle(t("已上传文件 - GoThrough"));
-  const { data, setData, loading, error, setError, refresh, cancel, mounted } =
+  const { data, setData, loading, error, setError, backgroundError, refresh, cancel, cancelBackground, mounted } =
     useRemoteData<FileListResponse | null>(listFiles, null);
   const [notice, setNotice] = useState<Message>('');
   const [query, setQuery] = useState('');
@@ -37,6 +39,17 @@ export default function FilesPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
   const deleteInProgress = useRef(false);
+  const autoPaused = confirming !== null || deleting !== null || previewing !== null;
+  const autoRefresh = useCallback(async () => {
+    if (deleteInProgress.current || window.getSelection()?.isCollapsed === false) return;
+    await refresh({ background: true });
+  }, [refresh]);
+  useAutoRefresh(autoRefresh, FILES_REFRESH_INTERVAL_MS, !loading && !autoPaused, cancelBackground);
+
+  function manualRefresh() {
+    setConfirming(null);
+    void refresh();
+  }
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
@@ -82,9 +95,9 @@ export default function FilesPage() {
     <main className="files-page content-page">
       <div className="files-container content-container">
         <header className="files-header">
-          <div><h1>{t("已上传文件")}</h1><p>{t("浏览和管理已上传的文件")}</p></div>
+          <div><h1>{t("已上传文件")}</h1><p>{t("浏览和管理已上传的文件")}</p><p className="files-sync-note">{autoPaused ? t("操作期间暂停自动更新") : t('files.interval', { seconds: FILES_REFRESH_INTERVAL_MS / 1000 })}</p></div>
           <div className="files-actions">
-            <RefreshButton loading={loading} disabled={deleting !== null} onClick={() => void refresh()} />
+            <RefreshButton loading={loading} disabled={deleting !== null} onClick={manualRefresh} />
             <Button asChild><Link to="/upload"><Upload aria-hidden="true" />{t("上传文件")}</Link></Button>
           </div>
         </header>
@@ -107,17 +120,18 @@ export default function FilesPage() {
           </Select>
           <span className="files-count">{t('files.count', { count: filtered.length })}{query.trim() && data ? t('files.total', { count: data.files.length }) : ''}</span>
         </div>
-        {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={deleting !== null} onClick={() => void refresh()} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
+        {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={deleting !== null} onClick={manualRefresh} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
+        {backgroundError && <p className="files-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
         {data && <section aria-label={t("文件列表")} aria-busy={loading}>
           {filtered.length > 0 ? <div className="files-table-scroll"><table>
             <thead><tr><th scope="col">{t("文件名")}</th><th scope="col">{t("大小")}</th><th scope="col">{t("修改时间")}</th><th scope="col">{t("操作")}</th></tr></thead>
             <tbody>{pageFiles.map(file => <tr key={file.name}>
               <td className="files-name">{file.name}</td><td className="files-size">{file.size_display}</td><td className="files-time"><Timestamp value={file.mtime} /></td>
               <td><div className="files-row-actions"><div className="files-action-controls">
-                <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} onClick={() => setPreviewing(file.name)}>{t('preview.button')}</Button>
+                <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} onClick={() => { cancelBackground(); setPreviewing(file.name); }}>{t('preview.button')}</Button>
                 <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
-                <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => setConfirming(file.name)} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
+                <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { cancelBackground(); setConfirming(file.name); }} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
               </div><div className="files-actions-sizing" aria-hidden="true">
                 <Button asChild variant="outline"><span>{t('preview.button')}</span></Button>
                 <Button asChild variant="outline"><span><Download aria-hidden="true" />{t('下载')}</span></Button>
