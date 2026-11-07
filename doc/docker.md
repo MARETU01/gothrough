@@ -148,7 +148,7 @@ Build stages run on the build machine's platform, and Go cross-compiles for the 
 
 The [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) workflow builds an amd64 image for pull requests and verifies uploads, downloads, and persistence across restarts, without publishing it. Ordinary pushes to main run regular CI only. Images are published to Docker Hub only after a version tag such as `v1.0.0` is pushed and all CI and container checks pass. The tagged commit must already be in main's history.
 
-Published images support `linux/amd64` and `linux/arm64`, with a version tag such as `v1.0.0` and a `sha-<full-commit-SHA>` tag. Stable releases also update `latest`; prereleases such as `v1.1.0-beta.1` do not. The image name defaults to `<Docker Hub username>/<GitHub repository name>`, converted to lowercase. Set the repository variable `DOCKERHUB_REPOSITORY` to override it with a full `namespace/image` name. Manually running the workflow validates the build without publishing.
+Published images support `linux/amd64` and `linux/arm64`, with a version tag such as `v1.0.0` and a `sha-<full-commit-SHA>` tag. Only the highest stable version among the repository's Git tags updates `latest`; older stable backfills and prereleases such as `v1.1.0-beta.1` do not. The image name defaults to `<Docker Hub username>/<GitHub repository name>`, converted to lowercase. Set the repository variable `DOCKERHUB_REPOSITORY` to override it with a full `namespace/image` name. Manually running the workflow validates the build without publishing.
 
 Before publishing for the first time:
 
@@ -178,4 +178,6 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```
 
-This publishes version and SHA image tags and updates `latest`. For a prerelease, use a version such as `v1.1.0-beta.1`, which does not change `latest`. Keep published tags unchanged and use a new version number for fixes. The workflow does not compare version numbers: publishing v2.0.0 and then v1.0.1 makes `latest` point to the later-published v1.0.1.
+This publishes version and SHA image tags. It updates `latest` only if the version is the highest valid stable Git tag, comparing major, minor, and patch numerically. For example, after tagging `v2.0.0`, backfilling `v1.0.1` leaves `latest` unchanged. Prereleases such as `v1.1.0-beta.1` never change `latest`. Docker publishing jobs share a concurrency group and queue rather than publishing simultaneously. Keep published tags unchanged and use a new version number for fixes.
+
+The comparison uses Git tags, not Docker Hub's publication history. If the highest tagged version fails to publish, older backfills still cannot update `latest`; fix and rerun the highest version's publishing job. These rules apply to tags whose commits contain this workflow and script; rerunning an older tag uses its original publishing logic.

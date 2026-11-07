@@ -27,12 +27,25 @@ if [[ ! $image =~ ^[a-z0-9][a-z0-9_-]*/[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*$ ]]; th
     exit 1
 fi
 commit="$(git rev-parse HEAD)"
+promote_latest=false
+if [[ $VERSION != *-* ]]; then
+    # Compare numeric versions, not tag dates or lexical order. Include VERSION
+    # so the first release also works; publishing jobs check out all remote tags.
+    known_versions="$(git tag --list)"
+    stable_pattern='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+    highest_version="$(printf '%s\n' "$known_versions" "$VERSION" \
+        | LC_ALL=C grep -E "$stable_pattern" | awk 'length($0) <= 128' \
+        | LC_ALL=C sort -V | tail -n 1)"
+    if [[ $VERSION == "$highest_version" ]]; then
+        promote_latest=true
+    fi
+fi
 {
     echo "commit=$commit"
     echo 'tags<<GOTHROUGH_IMAGE_TAGS'
     echo "$image:$VERSION"
     echo "$image:sha-$commit"
-    if [[ $VERSION != *-* ]]; then
+    if [[ $promote_latest == true ]]; then
         echo "$image:latest"
     fi
     echo 'GOTHROUGH_IMAGE_TAGS'

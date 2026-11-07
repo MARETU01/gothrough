@@ -148,7 +148,7 @@ docker buildx build --platform linux/arm64 -t gothrough:arm64 --load .
 
 工作流 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 PR 中构建 amd64 镜像并验证上传下载及重启持久化，但不发布。普通 main push 只运行常规 CI。只有推送 `v1.0.0` 等版本标签，且全部 CI 和容器检查通过后，才发布镜像到 Docker Hub；标签提交必须已包含在 main 历史中。
 
-发布支持 `linux/amd64` 和 `linux/arm64`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。正式版本同时更新 latest；预发布版本（例如 `v1.1.0-beta.1`）不更新 latest。镜像名默认为 `<Docker Hub 用户名>/<GitHub 仓库名>` 并转换为小写，也可通过 repository variable `DOCKERHUB_REPOSITORY` 指定完整的 `命名空间/镜像名`。手动运行工作流只验证，不发布。
+发布支持 `linux/amd64` 和 `linux/arm64`；生成版本名（例如 `v1.0.0`）和 `sha-<完整提交SHA>` 标签。只有仓库 Git 标签中版本号最高的正式版本会更新 `latest`；旧版本补发和预发布版本（例如 `v1.1.0-beta.1`）均不更新。镜像名默认为 `<Docker Hub 用户名>/<GitHub 仓库名>` 并转换为小写，也可通过 repository variable `DOCKERHUB_REPOSITORY` 指定完整的 `命名空间/镜像名`。手动运行工作流只验证，不发布。
 
 首次发布前完成以下设置：
 
@@ -178,4 +178,6 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```
 
-这会发布版本与 SHA 镜像，并更新 latest。发布预览版可改用 `v1.1.0-beta.1`，不会修改 latest。已发布标签保持不动，修复后使用新的版本号。工作流不会比较版本号大小，例如先发布 v2.0.0、再发布 v1.0.1，latest 会指向后发布的 v1.0.1。
+这会发布版本与 SHA 镜像。只有该版本是最高的有效正式 Git 标签时，才更新 `latest`，按主版本、次版本和修订版本的数值比较。例如打过 `v2.0.0` 标签后再补发 `v1.0.1`，`latest` 保持不变。预发布版本（例如 `v1.1.0-beta.1`）始终不更新 `latest`。Docker 发布任务使用同一并发组排队执行，避免不同版本同时发布。已发布标签保持不动，修复后使用新的版本号。
+
+比较依据是 Git 标签，而非 Docker Hub 发布历史。如果最高版本标签的发布失败，补发旧版本仍不会更新 `latest`，应修复并重跑最高版本的发布任务。这些规则适用于包含新版工作流和脚本的标签；重跑旧标签仍会使用其原有发布逻辑。

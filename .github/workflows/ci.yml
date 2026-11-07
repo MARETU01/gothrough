@@ -113,6 +113,12 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Serialize version publishes so an older build cannot finish last and
+    # replace latest after a newer version. Queue backfills instead of canceling.
+    concurrency:
+      group: docker-hub-publish
+      cancel-in-progress: false
+      queue: max
     steps:
       - name: Check out tagged version
         uses: actions/checkout@v7
