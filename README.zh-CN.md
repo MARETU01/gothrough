@@ -98,6 +98,7 @@ make build
 | [Docker 部署](doc/docker.zh-CN.md) | 镜像构建与发布、Compose、持久化及 HTTPS |
 | [日志说明](doc/logging.zh-CN.md) | 日志配置、请求关联与排错 |
 | [构建与检查](doc/build.zh-CN.md) | 开发环境、构建命令、测试及 CI |
+| [目录与分层](doc/architecture.zh-CN.md) | 目录职责、依赖方向和状态归属 |
 | [前端开发](frontend/README.zh-CN.md) | 本地开发、代码入口及国际化 |
 | [传输与接口](doc/transfer.zh-CN.md) | 上传与剪贴板接口、协议及资源限制 |
 

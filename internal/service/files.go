@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,6 +12,42 @@ import (
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/utils"
 )
+
+var ErrFileInaccessible = errors.New("文件不存在或无法访问")
+
+// RelativePath is the shared lexical path policy for reads, edits, and deletion.
+// The caller supplies a literal name that the HTTP router has already decoded.
+func (s *UploadService) RelativePath(filename string) string {
+	return utils.SafeUploadRelpath(filename, s.uploadDir)
+}
+
+// OpenFile confines the filesystem lookup to this service's upload directory.
+// The caller owns the returned handle; the root handle can be released here.
+func (s *UploadService) OpenFile(filename string) (*os.File, os.FileInfo, error) {
+	rel := s.RelativePath(filename)
+	if rel == "" {
+		return nil, nil, ErrFileInaccessible
+	}
+	root, err := os.OpenRoot(s.uploadDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer root.Close()
+	file, err := root.Open(rel)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", ErrFileInaccessible, err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, nil, err
+	}
+	if !info.Mode().IsRegular() {
+		file.Close()
+		return nil, nil, ErrFileInaccessible
+	}
+	return file, info, nil
+}
 
 func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 	entries := []model.FileInfo{}
@@ -63,7 +100,7 @@ func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 func (s *UploadService) DeleteFile(filename string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rel := utils.SafeUploadRelpath(filename, s.uploadDir)
+	rel := s.RelativePath(filename)
 	if rel == "" {
 		return fmt.Errorf("无效文件名")
 	}

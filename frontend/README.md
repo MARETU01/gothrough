@@ -31,9 +31,10 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | --- | --- |
 | `src/pages/`, `src/router.tsx` | Pages and routing |
 | `src/contexts/UploadQueueProvider.tsx` | Application-level queue that continues across in-app navigation |
-| `src/hooks/useUploadQueue.ts` | Upload scheduling, concurrency, and lifecycle |
+| `src/hooks/useUploadQueue.ts` | Queue scheduling, React snapshots, clocks, and page lifecycle |
+| `src/features/upload/engine.ts` | Single-file protocol, chunk concurrency, retries, and completion without React |
 | `src/hooks/useRemoteData.ts`, `useAutoRefresh.ts` | Loading, background refresh, stale responses, and request cancellation |
-| `src/services/` | API calls, error parsing, and cancellation detection |
+| `src/services/` | API calls and error presentation; transport cancellation lives in `src/utils/cancellation.ts` |
 | `src/config/` | Upload settings and clipboard refresh interval |
 | `src/i18n/` | Translation resources, language detection, and message descriptors |
 | `src/components/`, `src/styles/` | Shared components and styles |

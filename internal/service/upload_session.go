@@ -56,9 +56,9 @@ type UploadService struct {
 	listing     *fileListing
 }
 
-func NewUploadService() *UploadService {
+func NewUploadService(uploadDir, tempDir string) *UploadService {
 	return &UploadService{sessions: make(map[string]*transferSession), completed: make(map[string]completedSession), names: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
-		uploadDir: config.UploadFolder, tempDir: config.TempFolder, slots: make(chan struct{}, config.MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
+		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, config.MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
 }
 
 func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession, error) {

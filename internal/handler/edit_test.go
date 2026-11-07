@@ -9,13 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/MARETU01/gothrough/internal/config"
 )
 
 func TestTextEditHTTP(t *testing.T) {
 	_, h := setup(t)
-	path := filepath.Join(config.UploadFolder, "file.txt")
+	path := filepath.Join(h.uploadDir, "file.txt")
 	if err := os.WriteFile(path, []byte("\ufeffold\r\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -18,9 +18,7 @@ import (
 func testService(t testing.TB) *UploadService {
 	t.Helper()
 	root := t.TempDir()
-	s := NewUploadService()
-	s.uploadDir = filepath.Join(root, "uploads")
-	s.tempDir = filepath.Join(root, "temp")
+	s := NewUploadService(filepath.Join(root, "uploads"), filepath.Join(root, "temp"))
 	if err := os.MkdirAll(s.uploadDir, 0755); err != nil {
 		t.Fatal(err)
 	}

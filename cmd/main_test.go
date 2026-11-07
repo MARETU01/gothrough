@@ -58,18 +58,16 @@ func (w *lifecycleCapture) events(t *testing.T) []string {
 	return events
 }
 
-func preserveGlobals(t *testing.T) {
+func preserveLogger(t *testing.T) {
 	t.Helper()
 	oldLogger := slog.Default()
-	base, upload, temp, clipboard := config.BaseDir, config.UploadFolder, config.TempFolder, config.ClipboardFolder
 	t.Cleanup(func() {
 		slog.SetDefault(oldLogger)
-		config.BaseDir, config.UploadFolder, config.TempFolder, config.ClipboardFolder = base, upload, temp, clipboard
 	})
 }
 
 func TestServerShutdownLogsAndSessionCleanup(t *testing.T) {
-	preserveGlobals(t)
+	preserveLogger(t)
 	dir := t.TempDir()
 	settings := &config.Settings{Server: config.ServerSettings{Host: "127.0.0.1", Port: 0}, Storage: config.StorageSettings{DataDir: dir}, Logging: config.DefaultLoggingSettings()}
 	settings.Logging.Format, settings.Logging.File.Enabled = "json", true
@@ -146,7 +144,7 @@ func TestServerShutdownLogsAndSessionCleanup(t *testing.T) {
 }
 
 func TestBindFailureStopsBackgroundCleanup(t *testing.T) {
-	preserveGlobals(t)
+	preserveLogger(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

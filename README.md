@@ -98,6 +98,7 @@ One-click copying requires HTTPS or localhost and browser clipboard permission. 
 | [Docker Deployment](doc/docker.md) | Image builds and publishing, Compose, persistence, and HTTPS |
 | [Logging](doc/logging.md) | Log configuration, request correlation, and troubleshooting |
 | [Build and Checks](doc/build.md) | Development requirements, build commands, tests, and CI |
+| [Architecture](doc/architecture.md) | Directory responsibilities, dependencies, and state ownership |
 | [Frontend Development](frontend/README.md) | Local development, code entry points, and internationalization |
 | [Transfer and APIs](doc/transfer.md) | Upload and clipboard APIs, protocols, and resource limits |
 

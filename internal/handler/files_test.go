@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/model"
 )
 
@@ -136,7 +135,7 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 
 func TestStorageEndpointsAndMissingDelete(t *testing.T) {
 	_, h := setup(t)
-	if err := os.WriteFile(filepath.Join(config.UploadFolder, "sample.txt"), []byte("hello"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(h.uploadDir, "sample.txt"), []byte("hello"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"/api/files", "/api/disk-info"} {

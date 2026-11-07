@@ -21,22 +21,27 @@ import (
 	"github.com/MARETU01/gothrough/internal/service"
 )
 
-func setup(t testing.TB) (*service.UploadService, http.Handler) {
+type testRouter struct {
+	http.Handler
+	uploadDir string
+	tempDir   string
+}
+
+func setup(t testing.TB) (*service.UploadService, *testRouter) {
 	t.Helper()
-	oldUpload, oldTemp := config.UploadFolder, config.TempFolder
 	root := t.TempDir()
-	config.UploadFolder = filepath.Join(root, "uploads")
-	config.TempFolder = filepath.Join(root, "temp")
-	if err := os.MkdirAll(config.UploadFolder, 0755); err != nil {
+	uploadDir := filepath.Join(root, "uploads")
+	tempDir := filepath.Join(root, "temp")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	s := service.NewUploadService()
-	t.Cleanup(func() { s.Close(); config.UploadFolder, config.TempFolder = oldUpload, oldTemp })
+	s := service.NewUploadService(uploadDir, tempDir)
+	t.Cleanup(s.Close)
 	clipboard, err := service.NewClipboardService(filepath.Join(root, "clipboard"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard), config.DefaultLoggingSettings())
+	return s, &testRouter{Handler: router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard), config.DefaultLoggingSettings()), uploadDir: uploadDir, tempDir: tempDir}
 }
 
 func post(t *testing.T, h http.Handler, path, contentType string, body io.Reader) *httptest.ResponseRecorder {
@@ -97,7 +102,7 @@ func TestRawMultipartAndRangeDownload(t *testing.T) {
 	if complete.Code != 200 {
 		t.Fatalf("complete: %d %s", complete.Code, complete.Body.String())
 	}
-	got, err := os.ReadFile(filepath.Join(config.UploadFolder, info.FinalFilename))
+	got, err := os.ReadFile(filepath.Join(h.uploadDir, info.FinalFilename))
 	if err != nil || !bytes.Equal(got, payload) {
 		t.Fatalf("content mismatch: %v", err)
 	}
@@ -113,7 +118,7 @@ func TestRawMultipartAndRangeDownload(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 	}
-	if _, err := os.Stat(filepath.Join(config.UploadFolder, info.FinalFilename)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(h.uploadDir, info.FinalFilename)); !os.IsNotExist(err) {
 		t.Fatalf("deleted file still exists or cannot be checked: %v", err)
 	}
 }
@@ -130,7 +135,7 @@ func TestFileOperationsPreserveLiteralFilename(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, h := setup(t)
 			for name, content := range map[string]string{tc.name: "target", tc.other: "untouched"} {
-				if err := os.WriteFile(filepath.Join(config.UploadFolder, name), []byte(content), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(h.uploadDir, name), []byte(content), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -145,10 +150,10 @@ func TestFileOperationsPreserveLiteralFilename(t *testing.T) {
 			if res.Code != http.StatusOK {
 				t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 			}
-			if _, err := os.Stat(filepath.Join(config.UploadFolder, tc.name)); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(h.uploadDir, tc.name)); !os.IsNotExist(err) {
 				t.Fatalf("target was not deleted: %v", err)
 			}
-			if data, err := os.ReadFile(filepath.Join(config.UploadFolder, tc.other)); err != nil || string(data) != "untouched" {
+			if data, err := os.ReadFile(filepath.Join(h.uploadDir, tc.other)); err != nil || string(data) != "untouched" {
 				t.Fatalf("other file was changed: %q %v", data, err)
 			}
 		})
@@ -157,7 +162,7 @@ func TestFileOperationsPreserveLiteralFilename(t *testing.T) {
 
 func TestFileOperationsRejectEncodedTraversal(t *testing.T) {
 	_, h := setup(t)
-	outside := filepath.Join(filepath.Dir(config.UploadFolder), "outside.txt")
+	outside := filepath.Join(filepath.Dir(h.uploadDir), "outside.txt")
 	if err := os.WriteFile(outside, []byte("untouched"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +217,7 @@ func TestFolderUploadHTTP(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 	}
-	if _, err := os.Stat(filepath.Join(config.UploadFolder, path)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(h.uploadDir, path)); !os.IsNotExist(err) {
 		t.Fatalf("file not deleted: %v", err)
 	}
 	res = post(t, h, "/api/upload/init", "application/json", bytes.NewBufferString(`{"filename":"file.txt","relative_path":"../file.txt","total_size":0}`))
@@ -295,7 +300,7 @@ func BenchmarkHTTPUpload(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				if err := os.Remove(filepath.Join(config.UploadFolder, name)); err != nil {
+				if err := os.Remove(filepath.Join(h.uploadDir, name)); err != nil {
 					b.Fatal(err)
 				}
 			}

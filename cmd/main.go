@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MARETU01/gothrough/internal/app"
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
 	"github.com/MARETU01/gothrough/internal/logging"
@@ -55,15 +56,16 @@ func run() (runErr error) {
 }
 
 func serve(ctx context.Context, settings *config.Settings) error {
-	if err := config.Init(settings.Storage.DataDir); err != nil {
+	paths, err := app.PrepareStorage(settings.Storage.DataDir)
+	if err != nil {
 		return err
 	}
-	clipboardService, err := service.NewClipboardService(config.ClipboardFolder, settings.Clipboard.Image)
+	clipboardService, err := service.NewClipboardService(paths.ClipboardDir, settings.Clipboard.Image)
 	if err != nil {
 		return err
 	}
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
-	uploadService := service.NewUploadService()
+	uploadService := service.NewUploadService(paths.UploadDir, paths.TempDir)
 	defer uploadService.Close()
 	cleanupDone := make(chan struct{})
 	go func() {

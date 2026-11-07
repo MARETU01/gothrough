@@ -11,7 +11,7 @@ import (
 
 func (h *UploadHandler) EditText(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	rel := uploadRelativePath(c)
+	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return
 	}

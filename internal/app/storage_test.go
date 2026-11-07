@@ -1,4 +1,4 @@
-package config
+package app
 
 import (
 	"os"
@@ -6,14 +6,7 @@ import (
 	"testing"
 )
 
-func preserveStorageGlobals(t *testing.T) {
-	t.Helper()
-	base, upload, temp, clipboard := BaseDir, UploadFolder, TempFolder, ClipboardFolder
-	t.Cleanup(func() { BaseDir, UploadFolder, TempFolder, ClipboardFolder = base, upload, temp, clipboard })
-}
-
 func TestStorageInitAndCleanup(t *testing.T) {
-	preserveStorageGlobals(t)
 	dir := t.TempDir()
 	temp := filepath.Join(dir, "temp_uploads")
 	if err := os.MkdirAll(filepath.Join(temp, "old-session"), 0700); err != nil {
@@ -25,10 +18,11 @@ func TestStorageInitAndCleanup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(temp, "keep.txt"), []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Init(dir); err != nil {
+	paths, err := PrepareStorage(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if BaseDir != dir || TempFolder != temp || ClipboardFolder != filepath.Join(dir, "clipboard") {
+	if paths.BaseDir != dir || paths.TempDir != temp || paths.ClipboardDir != filepath.Join(dir, "clipboard") {
 		t.Fatal("incorrect data root")
 	}
 	if _, err := os.Stat(filepath.Join(temp, "old-session")); !os.IsNotExist(err) {
@@ -39,10 +33,8 @@ func TestStorageInitAndCleanup(t *testing.T) {
 	}
 }
 
-func TestStorageInitFailureDoesNotCleanOrReplaceGlobals(t *testing.T) {
-	preserveStorageGlobals(t)
+func TestStorageInitFailureDoesNotClean(t *testing.T) {
 	dir := t.TempDir()
-	BaseDir = "previous"
 	old := filepath.Join(dir, "temp_uploads", "old-session")
 	if err := os.MkdirAll(old, 0700); err != nil {
 		t.Fatal(err)
@@ -51,16 +43,13 @@ func TestStorageInitFailureDoesNotCleanOrReplaceGlobals(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "clipboard"), []byte("not a directory"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Init(dir); err == nil {
+	if _, err := PrepareStorage(dir); err == nil {
 		t.Fatal("expected directory error")
-	}
-	if BaseDir != "previous" {
-		t.Fatal("failed init changed globals")
 	}
 	if _, err := os.Stat(old); err != nil {
 		t.Fatal("failed validation cleaned sessions")
 	}
-	if err := Init(""); err == nil {
+	if _, err := PrepareStorage(""); err == nil {
 		t.Fatal("accepted empty data root")
 	}
 	if err := cleanupTempUploads(filepath.Join(dir, "missing")); err == nil {

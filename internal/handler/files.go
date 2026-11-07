@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -8,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/logging"
+	"github.com/MARETU01/gothrough/internal/service"
 	"github.com/MARETU01/gothrough/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -47,32 +48,21 @@ func (h *UploadHandler) ListUploads(c *gin.Context) {
 
 // 文件下载
 func (h *UploadHandler) DownloadUpload(c *gin.Context) {
-	rel := uploadRelativePath(c)
+	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return
 	}
 
-	root, err := os.OpenRoot(config.UploadFolder)
+	file, info, err := h.uploadService.OpenFile(rel)
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "FILE_READ_FAILED", "读取文件失败，请稍后重试")
-		return
-	}
-	defer root.Close()
-	file, err := root.Open(rel)
-	if err != nil {
-		respondError(c, err, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
+		if errors.Is(err, service.ErrFileInaccessible) {
+			respondError(c, err, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
+		} else {
+			respondError(c, err, http.StatusInternalServerError, "FILE_READ_FAILED", "读取文件失败，请稍后重试")
+		}
 		return
 	}
 	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "FILE_READ_FAILED", "读取文件失败，请稍后重试")
-		return
-	}
-	if !info.Mode().IsRegular() {
-		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
-		return
-	}
 	if c.Query("preview") != "" {
 		servePreview(c, file, info)
 		return
@@ -87,7 +77,7 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 
 // 文件删除
 func (h *UploadHandler) DeleteFile(c *gin.Context) {
-	rel := uploadRelativePath(c)
+	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return
 	}
@@ -124,9 +114,9 @@ func (h *UploadHandler) DiskInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func uploadRelativePath(c *gin.Context) string {
+func (h *UploadHandler) uploadRelativePath(c *gin.Context) string {
 	filename := strings.TrimPrefix(c.Param("filename"), "/")
-	rel := utils.SafeUploadRelpath(filename, config.UploadFolder)
+	rel := h.uploadService.RelativePath(filename)
 	if rel == "" {
 		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 	}

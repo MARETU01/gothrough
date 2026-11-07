@@ -1,11 +1,9 @@
-import axios, { isAxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import { errorMessage } from '@/utils/misc';
 import i18n from '@/i18n';
 import { message, type Message } from '@/i18n/messages';
 
-export function isCanceledError(error: unknown): boolean {
-  return isAxiosError(error) && (axios.isCancel(error) || error.code === 'ERR_CANCELED');
-}
+export { isCanceledError } from '@/utils/cancellation';
 
 export function getErrorBody<T>(error: unknown): T | null {
   return isAxiosError<T>(error) ? (error.response?.data ?? null) : null;

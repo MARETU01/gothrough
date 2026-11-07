@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/MARETU01/gothrough/internal/config"
 )
 
 func TestPreviewTypesAndLimits(t *testing.T) {
@@ -30,7 +28,7 @@ func TestPreviewTypesAndLimits(t *testing.T) {
 		{"empty.txt", "", "text", 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := os.WriteFile(filepath.Join(config.UploadFolder, tc.name), []byte(tc.body), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(h.uploadDir, tc.name), []byte(tc.body), 0600); err != nil {
 				t.Fatal(err)
 			}
 			res := httptest.NewRecorder()
@@ -54,7 +52,7 @@ func TestPreviewTypesAndLimits(t *testing.T) {
 
 func TestPreviewInlineRangeAndDownload(t *testing.T) {
 	_, h := setup(t)
-	if err := os.WriteFile(filepath.Join(config.UploadFolder, "sample.html"), []byte("<script>bad()</script>"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(h.uploadDir, "sample.html"), []byte("<script>bad()</script>"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, preview := range []bool{false, true} {

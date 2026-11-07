@@ -31,9 +31,10 @@ npm run lint
 | --- | --- |
 | `src/pages/`、`src/router.tsx` | 页面及路由 |
 | `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，支持站内切换页面后继续上传 |
-| `src/hooks/useUploadQueue.ts` | 上传调度、并发与生命周期 |
+| `src/hooks/useUploadQueue.ts` | 队列调度、React 快照、计时与页面生命周期 |
+| `src/features/upload/engine.ts` | 不使用 React 的单文件协议、分块并发、重试和完成确认 |
 | `src/hooks/useRemoteData.ts`、`useAutoRefresh.ts` | 数据加载、后台刷新、过期响应处理与请求取消 |
-| `src/services/` | API 调用、错误解析与取消判断 |
+| `src/services/` | API 调用与错误展示；传输取消判断位于 `src/utils/cancellation.ts` |
 | `src/config/` | 上传参数及剪贴板刷新间隔 |
 | `src/i18n/` | 翻译资源、语言检测与消息描述 |
 | `src/components/`、`src/styles/` | 公共组件与样式 |

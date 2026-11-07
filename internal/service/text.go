@@ -79,7 +79,7 @@ func (s *UploadService) SaveText(filename, version, text string) (string, error)
 	if err := ValidateText([]byte(text)); err != nil {
 		return "", err
 	}
-	rel := utils.SafeUploadRelpath(filename, s.uploadDir)
+	rel := s.RelativePath(filename)
 	if rel == "" {
 		return "", ErrPath
 	}
