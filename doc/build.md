@@ -26,7 +26,7 @@ make build
 ./release/gothrough
 ```
 
-Open `http://localhost:8080` by default. The build installs dependencies as needed, generates frontend assets, and compiles Go with `embedweb`. Deploy the executable, external configuration, and any required certificates; Node.js is not needed on the target machine. The application needs read/write access to its data directory. See [configuration](configuration.md) for ports, TLS, and data paths.
+Open `http://localhost:9815` by default. The build installs dependencies as needed, generates frontend assets, and compiles Go with `embedweb`. Deploy the executable, external configuration, and any required certificates; Node.js is not needed on the target machine. The application needs read/write access to its data directory. See [configuration](configuration.md) for ports, TLS, and data paths.
 
 The default configuration is copied to `config/config.yaml` under the output directory without overwriting an existing file. Configuration, certificates, and runtime data remain external.
 

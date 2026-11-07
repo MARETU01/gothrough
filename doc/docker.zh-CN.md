@@ -14,9 +14,9 @@ docker compose logs -f
 docker compose down
 ```
 
-启动后访问 `http://localhost:8080`。Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件和剪贴板历史。
+启动后访问 `http://localhost:9815`。Compose 挂载项目的 `config/config.yaml` 为只读配置，并创建统一的数据卷。`docker compose down` 默认保留数据卷；`docker compose down -v` 会删除卷及其中上传文件和剪贴板历史。
 
-默认映射宿主机 8080 到容器 8080。仅修改宿主机端口可执行：
+默认映射宿主机 9815 到容器 9815。仅修改宿主机端口可执行：
 
 ```sh
 GOTHROUGH_HTTP_PORT=9000 docker compose up -d
@@ -24,7 +24,7 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 
 `GOTHROUGH_HTTP_PORT` 只用于 Compose 端口映射，不是后端监听端口配置。若修改配置文件中的容器监听端口，也要相应修改 `compose.yaml` 的端口映射右侧。
 
-容器服务支持局域网和公网访问。默认端口映射绑定宿主机所有网卡；公网是否可达还取决于云安全组、防火墙和路由器映射。公网部署请配置访问口令和 HTTPS，详见[局域网与公网访问](configuration.zh-CN.md#局域网与公网访问)。若反向代理运行在宿主机上，可将端口映射改为 `127.0.0.1:8080:8080`，由代理提供公网入口；容器内仍监听 `0.0.0.0`。
+容器服务支持局域网和公网访问。默认端口映射绑定宿主机所有网卡；公网是否可达还取决于云安全组、防火墙和路由器映射。公网部署请配置访问口令和 HTTPS，详见[局域网与公网访问](configuration.zh-CN.md#局域网与公网访问)。若反向代理运行在宿主机上，可将端口映射改为 `127.0.0.1:9815:9815`，由代理提供公网入口；容器内仍监听 `0.0.0.0`。
 
 ## 持久化目录
 
@@ -54,7 +54,7 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 ```sh
 docker run -d --name gothrough \
   --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   --mount type=bind,source="$(pwd)/config/config.yaml",target=/app/config/config.yaml,readonly \
   gothrough:local
@@ -111,12 +111,12 @@ docker build -t gothrough:local .
 ```sh
 docker run -d --name gothrough \
   --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   gothrough:local
 ```
 
-访问 `http://localhost:8080`。容器以 UID/GID `10001:10001` 运行。程序退出时可获得最多 40 秒的停止宽限期，配合应用自身的 30 秒请求等待时间。
+访问 `http://localhost:9815`。容器以 UID/GID `10001:10001` 运行。程序退出时可获得最多 40 秒的停止宽限期，配合应用自身的 30 秒请求等待时间。
 
 使用 `docker run` 启动时，通过 `docker logs -f --tail=100 gothrough` 查看日志。Compose 的日志命令见上文；日志格式及轮转配置见[日志说明](logging.zh-CN.md)。
 
@@ -129,7 +129,7 @@ docker run -d --name gothrough \
 ```sh
 docker pull YOUR_USERNAME/gothrough:latest
 docker run -d --name gothrough --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   YOUR_USERNAME/gothrough:latest
 ```

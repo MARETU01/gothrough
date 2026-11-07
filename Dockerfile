@@ -35,7 +35,7 @@ ENV GOTHROUGH_DATA_DIR=/data
 COPY --from=backend /out/gothrough /app/gothrough
 COPY config/config.yaml /app/config/config.yaml
 USER 10001:10001
-EXPOSE 8080
+EXPOSE 9815
 VOLUME ["/data"]
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/app/gothrough"]

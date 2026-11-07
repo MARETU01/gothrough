@@ -10,10 +10,10 @@ runs:
         trap 'docker logs gothrough-ci || true; docker rm -f gothrough-ci || true; docker volume rm gothrough-ci-data || true' EXIT
         docker volume create gothrough-ci-data
         docker run --detach --name gothrough-ci --stop-timeout 40 \
-          --publish 127.0.0.1:18080:8080 \
+          --publish 127.0.0.1:18080:9815 \
           --volume gothrough-ci-data:/data \
           --env GOTHROUGH_HOST=0.0.0.0 \
-          --env GOTHROUGH_PORT=8080 \
+          --env GOTHROUGH_PORT=9815 \
           --env GOTHROUGH_TLS_ENABLED=false gothrough:ci
         curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 \
           http://127.0.0.1:18080/files > /dev/null

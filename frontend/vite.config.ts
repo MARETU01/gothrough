@@ -60,7 +60,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: env.GOTHROUGH_DEV_API_TARGET || 'http://127.0.0.1:8080',
+          target: env.GOTHROUGH_DEV_API_TARGET || 'http://127.0.0.1:9815',
           // Preserve the browser-facing Host for the API's same-origin checks.
           changeOrigin: false,
         },

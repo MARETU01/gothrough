@@ -8,18 +8,18 @@ Run all commands on this page from the project root. Runtime configuration is st
 
 ## LAN and Internet Access
 
-GoThrough supports both LAN and public internet deployments, without restricting clients to a local network. The defaults, `server.host: "0.0.0.0"` and `server.port: 8080`, listen on all IPv4 interfaces. `0.0.0.0` is a bind address; use the server's actual IP or domain when connecting.
+GoThrough supports both LAN and public internet deployments, without restricting clients to a local network. The defaults, `server.host: "0.0.0.0"` and `server.port: 9815`, listen on all IPv4 interfaces. `0.0.0.0` is a bind address; use the server's actual IP or domain when connecting.
 
 | Scenario | Access requirements |
 | --- | --- |
-| Same machine | Open `http://localhost:8080` |
+| Same machine | Open `http://localhost:9815` |
 | LAN | Use the server's LAN IP and allow the port through its firewall |
 | Public cloud server | Use its public IP or domain and allow the external port through cloud security groups and the system firewall |
 | Home network | Configure router port forwarding when a public endpoint is available; use a tunnel when carrier-grade NAT or other network restrictions prevent inbound connections |
 
 For public deployments, enable an [access password](#access-password) and provide HTTPS through the built-in TLS support or a reverse proxy. Reverse proxies must preserve the original Host and serve the frontend and `/api` under the same domain. If the proxy runs on the same host, the backend can bind to `127.0.0.1`, exposing only the proxy endpoint. Listener settings do not configure router mappings or automatically make the server publicly reachable.
 
-Docker maps host port 8080 to the container by default. Compose uses the project's root `config/config.yaml`; running a release executable normally uses `release/config/config.yaml`. Set the password in the configuration actually used, or through environment variables. See [Docker deployment](docker.md) for details.
+Docker maps host port 9815 to the container by default. Compose uses the project's root `config/config.yaml`; running a release executable normally uses `release/config/config.yaml`. Set the password in the configuration actually used, or through environment variables. See [Docker deployment](docker.md) for details.
 
 ## Access Password
 
@@ -49,7 +49,7 @@ storage:
   data_dir: ".."
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 9815
   tls:
     enabled: false
     cert_file: "certs/server.crt"
@@ -58,7 +58,7 @@ server:
 
 Relative certificate paths are resolved from the directory containing the configuration file. In this example, they refer to `config/certs/server.crt` and `config/certs/server.key`. Certificates and private keys are not embedded in the executable, and `config/certs/` is excluded from Git. Enabling TLS does not automatically change the port to 443; set `server.port` to the desired port, such as 8443. The server starts a single HTTP or HTTPS listener.
 
-Configuration files are selected in this order: the path passed to `-config` → `GOTHROUGH_CONFIG` → `config/config.yaml` beside the executable → `config/config.yaml` under the working directory. If no default configuration file exists, the server uses its built-in HTTP default of `0.0.0.0:8080`. It can also start using environment variables alone. A missing or malformed explicitly selected file causes startup to fail. Unknown YAML fields are rejected so that typos are not silently ignored.
+Configuration files are selected in this order: the path passed to `-config` → `GOTHROUGH_CONFIG` → `config/config.yaml` beside the executable → `config/config.yaml` under the working directory. If no default configuration file exists, the server uses its built-in HTTP default of `0.0.0.0:9815`. It can also start using environment variables alone. A missing or malformed explicitly selected file causes startup to fail. Unknown YAML fields are rejected so that typos are not silently ignored.
 
 Field precedence is **environment variables > YAML configuration > built-in defaults**. Set TLS through `server.tls.enabled` or `GOTHROUGH_TLS_ENABLED`. An empty environment variable still counts as an explicit override; an empty port or an invalid boolean causes an error.
 

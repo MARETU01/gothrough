@@ -62,7 +62,7 @@ func Load(path string) (*Settings, error) {
 }
 
 func loadSettings(path, exeDir, cwd string, lookup func(string) (string, bool)) (*Settings, error) {
-	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 8080}, Source: "内置默认值"}
+	cfg := &Settings{Server: ServerSettings{Host: "0.0.0.0", Port: 9815}, Source: "内置默认值"}
 	cfg.Storage.DataDir = exeDir
 	cfg.Logging = DefaultLoggingSettings()
 	cfg.Clipboard.Image = DefaultClipboardImageSettings()

@@ -46,7 +46,7 @@ cd gothrough
 docker compose up -d --build
 ```
 
-访问 `http://localhost:8080`。数据保存在 Docker 卷中，`docker compose down` 停止服务并保留数据；`docker compose down -v` 会删除数据卷。
+访问 `http://localhost:9815`。数据保存在 Docker 卷中，`docker compose down` 停止服务并保留数据；`docker compose down -v` 会删除数据卷。
 
 镜像拉取、端口修改、证书和卷权限见 [Docker 部署](doc/docker.zh-CN.md)。
 
@@ -64,16 +64,16 @@ make build
 ./release/gothrough.exe
 ```
 
-访问 `http://localhost:8080`。前端已包含在程序中，部署机器无需 Node.js。运行配置位于 `release/config/config.yaml`，监听地址、TLS 和数据目录见[配置说明](doc/configuration.zh-CN.md)。
+访问 `http://localhost:9815`。前端已包含在程序中，部署机器无需 Node.js。运行配置位于 `release/config/config.yaml`，监听地址、TLS 和数据目录见[配置说明](doc/configuration.zh-CN.md)。
 
 ### 其他设备访问
 
 支持通过局域网或公网访问同一个服务：
 
-- **局域网**：设备连接同一局域网后，访问 `http://<服务器的局域网IP>:8080`，例如 `http://192.168.1.100:8080`，将示例 IP 替换为实际地址，并放通服务器防火墙端口。
+- **局域网**：设备连接同一局域网后，访问 `http://<服务器的局域网IP>:9815`，例如 `http://192.168.1.100:9815`，将示例 IP 替换为实际地址，并放通服务器防火墙端口。
 - **公网**：部署到有公网入口的服务器，通过公网地址或绑定的域名访问，例如 `https://files.example.com`（需自行配置域名与 HTTPS）。云服务器需配置安全组和防火墙；家庭网络需配置路由器端口转发，无可用公网入口时可使用内网穿透。
 
-默认监听 `0.0.0.0:8080`，表示接受所有 IPv4 网卡上的连接；公网可达性取决于网络及端口配置。`localhost` 仅用于服务所在电脑本机访问。详细说明见[局域网与公网访问](doc/configuration.zh-CN.md#局域网与公网访问)。
+默认监听 `0.0.0.0:9815`，表示接受所有 IPv4 网卡上的连接；公网可达性取决于网络及端口配置。`localhost` 仅用于服务所在电脑本机访问。详细说明见[局域网与公网访问](doc/configuration.zh-CN.md#局域网与公网访问)。
 
 ## 共享剪贴板
 

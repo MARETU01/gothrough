@@ -5,19 +5,19 @@ auth:
   # Only these reverse proxies may supply client IP headers for login limits.
   trusted_proxies: []
 logging:
-  level: "info"
-  format: "text" # text or json
+  level: info
+  format: text # text or json
   access_log: true # Successful requests; failures still follow WARN/ERROR levels.
   log_polling: false
   log_chunks: false
   file:
     enabled: false
-    path: "logs/gothrough.log" # Relative to storage.data_dir.
+    path: logs/gothrough.log # Relative to storage.data_dir.
     max_size_mb: 10
     max_backups: 5
 storage:
   # Relative to this config file; ".." keeps data beside the config/ directory.
-  data_dir: ".."
+  data_dir: ..
 clipboard:
   image:
     enabled: true
@@ -25,10 +25,10 @@ clipboard:
     max_pixels: 20000000
     max_total_size_mb: 200
 server:
-  host: "0.0.0.0"
-  port: 8080
+  host: 0.0.0.0
+  port: 9815
   tls:
     enabled: false
     # Relative paths are resolved from this config file's directory.
-    cert_file: "certs/server.crt"
-    key_file: "certs/server.key"
+    cert_file: certs/server.crt
+    key_file: certs/server.key

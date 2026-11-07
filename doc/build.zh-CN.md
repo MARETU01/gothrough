@@ -26,7 +26,7 @@ make build
 ./release/gothrough
 ```
 
-默认访问 `http://localhost:8080`。构建按需安装依赖、生成前端资源，再以 `embedweb` 标签编译 Go。部署只需可执行文件、外部配置及所需证书，目标机器无需 Node.js。程序还需有数据目录的读写权限；端口、TLS 和数据目录规则见[配置说明](configuration.zh-CN.md)。
+默认访问 `http://localhost:9815`。构建按需安装依赖、生成前端资源，再以 `embedweb` 标签编译 Go。部署只需可执行文件、外部配置及所需证书，目标机器无需 Node.js。程序还需有数据目录的读写权限；端口、TLS 和数据目录规则见[配置说明](configuration.zh-CN.md)。
 
 默认配置复制到输出目录的 `config/config.yaml`，已有文件不会被覆盖。配置、证书和运行数据均不嵌入程序。
 

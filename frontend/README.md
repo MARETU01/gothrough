@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Vite proxies `/api` to `http://127.0.0.1:8080` by default; see the [development proxy configuration](../doc/configuration.md#frontend-development-proxy) to change it. The default release embeds the frontend in Go and needs no additional proxy. Separate frontend deployments require an `/api` reverse proxy and page route fallback.
+Vite proxies `/api` to `http://127.0.0.1:9815` by default; see the [development proxy configuration](../doc/configuration.md#frontend-development-proxy) to change it. The default release embeds the frontend in Go and needs no additional proxy. Separate frontend deployments require an `/api` reverse proxy and page route fallback.
 
 ```sh
 npm test

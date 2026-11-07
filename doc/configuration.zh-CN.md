@@ -8,18 +8,18 @@
 
 ## 局域网与公网访问
 
-GoThrough 支持局域网和公网部署，没有按客户端来源限制为局域网。默认 `server.host: "0.0.0.0"`、`server.port: 8080`，监听所有 IPv4 网卡；`0.0.0.0` 是监听地址，访问时应使用服务器实际 IP 或域名。
+GoThrough 支持局域网和公网部署，没有按客户端来源限制为局域网。默认 `server.host: "0.0.0.0"`、`server.port: 9815`，监听所有 IPv4 网卡；`0.0.0.0` 是监听地址，访问时应使用服务器实际 IP 或域名。
 
 | 场景 | 访问条件 |
 | --- | --- |
-| 本机 | 访问 `http://localhost:8080` |
+| 本机 | 访问 `http://localhost:9815` |
 | 局域网 | 使用服务器局域网 IP，并放通系统防火墙端口 |
 | 公网云服务器 | 使用公网 IP 或域名，并放通云安全组、系统防火墙及实际对外端口 |
 | 家庭网络 | 有可用公网入口时配置路由器端口转发；处于运营商 NAT 等无法直接入站的网络时，可使用内网穿透或隧道 |
 
 公网部署请开启[访问口令](#访问口令)，并通过程序自带 TLS 或反向代理提供 HTTPS。反向代理部署时保留原始 `Host`，将网页与 `/api` 放在同一域名下；若代理运行在同一宿主机，可将后端绑定到 `127.0.0.1`，仅对外开放代理入口。监听地址和端口配置本身不会建立路由器映射或自动开放公网访问。
 
-Docker 默认将宿主机 8080 端口映射到容器。Compose 使用项目根目录的 `config/config.yaml`；直接运行发布程序通常使用 `release/config/config.yaml`。请在实际使用的配置文件或环境变量中设置口令。具体规则见 [Docker 部署](docker.zh-CN.md)。
+Docker 默认将宿主机 9815 端口映射到容器。Compose 使用项目根目录的 `config/config.yaml`；直接运行发布程序通常使用 `release/config/config.yaml`。请在实际使用的配置文件或环境变量中设置口令。具体规则见 [Docker 部署](docker.zh-CN.md)。
 
 ## 访问口令
 
@@ -49,7 +49,7 @@ storage:
   data_dir: ".."
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 9815
   tls:
     enabled: false
     cert_file: "certs/server.crt"
@@ -58,7 +58,7 @@ server:
 
 相对证书路径以配置文件所在目录为基准，示例对应 `config/certs/server.crt` 与 `config/certs/server.key`。证书、私钥不嵌入程序，`config/certs/` 不纳入 Git。启用 TLS 后端口不会自动改为 443；需将 `server.port` 设置为期望端口（例如 8443）。服务只启动一个 HTTP 或 HTTPS 监听器。
 
-配置文件选择顺序：`-config 指定路径` → `GOTHROUGH_CONFIG` → 可执行文件旁的 `config/config.yaml` → 工作目录下的 `config/config.yaml`。没有默认配置文件时使用内置 HTTP `0.0.0.0:8080`，也支持纯环境变量启动；显式指定的文件缺失或格式错误则启动失败。未知 YAML 字段会报错，避免拼写错误被忽略。
+配置文件选择顺序：`-config 指定路径` → `GOTHROUGH_CONFIG` → 可执行文件旁的 `config/config.yaml` → 工作目录下的 `config/config.yaml`。没有默认配置文件时使用内置 HTTP `0.0.0.0:9815`，也支持纯环境变量启动；显式指定的文件缺失或格式错误则启动失败。未知 YAML 字段会报错，避免拼写错误被忽略。
 
 字段优先级：**环境变量 > YAML 配置 > 内置默认值**。TLS 开关通过 `server.tls.enabled` 或 `GOTHROUGH_TLS_ENABLED` 设置。环境变量中的空字符串也视为明确覆盖，空端口或无效布尔值会报错。
 

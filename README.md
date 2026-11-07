@@ -46,7 +46,7 @@ With Docker installed and running:
 docker compose up -d --build
 ```
 
-Open `http://localhost:8080`. Data is stored in a Docker volume. `docker compose down` stops the service and preserves data; `docker compose down -v` deletes the volume.
+Open `http://localhost:9815`. Data is stored in a Docker volume. `docker compose down` stops the service and preserves data; `docker compose down -v` deletes the volume.
 
 See [Docker deployment](doc/docker.md) for pulling images, changing ports, certificates, and volume permissions.
 
@@ -64,16 +64,16 @@ make build
 ./release/gothrough.exe
 ```
 
-Open `http://localhost:8080`. The frontend is included in the executable; Node.js is not needed on the deployment machine. Runtime configuration is in `release/config/config.yaml`. See [configuration](doc/configuration.md) for the listening address, TLS, and data directory.
+Open `http://localhost:9815`. The frontend is included in the executable; Node.js is not needed on the deployment machine. Runtime configuration is in `release/config/config.yaml`. See [configuration](doc/configuration.md) for the listening address, TLS, and data directory.
 
 ### Access from Other Devices
 
 Devices can access the same service over a LAN or the internet:
 
-- **LAN**: Connect to the same network and open `http://<server-LAN-IP>:8080`, for example `http://192.168.1.100:8080`. Replace the example IP with the server's address and allow the port through its firewall.
+- **LAN**: Connect to the same network and open `http://<server-LAN-IP>:9815`, for example `http://192.168.1.100:9815`. Replace the example IP with the server's address and allow the port through its firewall.
 - **Internet**: Deploy on a server with a public endpoint and use its public address or a configured domain, such as `https://files.example.com` (requires your own domain and HTTPS configuration). Configure security groups and firewalls on cloud servers. Home networks require router port forwarding, or a tunnel if no public endpoint is available.
 
-The default listener, `0.0.0.0:8080`, accepts connections on all IPv4 interfaces; public reachability depends on network and port configuration. `localhost` only works on the computer running the service. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for details.
+The default listener, `0.0.0.0:9815`, accepts connections on all IPv4 interfaces; public reachability depends on network and port configuration. `localhost` only works on the computer running the service. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for details.
 
 ## Shared Clipboard
 

@@ -14,9 +14,9 @@ docker compose logs -f
 docker compose down
 ```
 
-Open `http://localhost:8080` after startup. Compose mounts the project's `config/config.yaml` as read-only configuration and creates one shared data volume. `docker compose down` preserves the volume by default. **`docker compose down -v` deletes the volume, including uploaded files and clipboard history.**
+Open `http://localhost:9815` after startup. Compose mounts the project's `config/config.yaml` as read-only configuration and creates one shared data volume. `docker compose down` preserves the volume by default. **`docker compose down -v` deletes the volume, including uploaded files and clipboard history.**
 
-The default mapping connects host port 8080 to container port 8080. To change only the host port:
+The default mapping connects host port 9815 to container port 9815. To change only the host port:
 
 ```sh
 GOTHROUGH_HTTP_PORT=9000 docker compose up -d
@@ -24,7 +24,7 @@ GOTHROUGH_HTTP_PORT=9000 docker compose up -d
 
 `GOTHROUGH_HTTP_PORT` controls only the Compose port mapping; it does not configure the backend's listening port. If you change the container's listening port in the configuration file, also change the right-hand side of the port mapping in `compose.yaml`.
 
-The container supports LAN and internet access. The default port mapping binds all host interfaces; public reachability also depends on security groups, firewalls, and router mappings. Configure an access password and HTTPS for public deployments; see [LAN and internet access](configuration.md#lan-and-internet-access). If a reverse proxy runs on the host, you can change the mapping to `127.0.0.1:8080:8080` and expose the proxy as the public endpoint; keep the listener inside the container on `0.0.0.0`.
+The container supports LAN and internet access. The default port mapping binds all host interfaces; public reachability also depends on security groups, firewalls, and router mappings. Configure an access password and HTTPS for public deployments; see [LAN and internet access](configuration.md#lan-and-internet-access). If a reverse proxy runs on the host, you can change the mapping to `127.0.0.1:9815:9815` and expose the proxy as the public endpoint; keep the listener inside the container on `0.0.0.0`.
 
 ## Persistent Data
 
@@ -54,7 +54,7 @@ Mount a custom configuration file:
 ```sh
 docker run -d --name gothrough \
   --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   --mount type=bind,source="$(pwd)/config/config.yaml",target=/app/config/config.yaml,readonly \
   gothrough:local
@@ -111,12 +111,12 @@ The image includes the executable, frontend assets, and default configuration. R
 ```sh
 docker run -d --name gothrough \
   --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   gothrough:local
 ```
 
-Open `http://localhost:8080`. The container runs as UID/GID `10001:10001`. Docker allows up to 40 seconds for the container to stop, accommodating the application's own 30-second grace period for active requests.
+Open `http://localhost:9815`. The container runs as UID/GID `10001:10001`. Docker allows up to 40 seconds for the container to stop, accommodating the application's own 30-second grace period for active requests.
 
 For containers started with `docker run`, view logs with `docker logs -f --tail=100 gothrough`. See above for Compose log commands and the [logging guide](logging.md) for formats and rotation settings.
 
@@ -129,7 +129,7 @@ After the image has been published and you have pull access:
 ```sh
 docker pull YOUR_USERNAME/gothrough:latest
 docker run -d --name gothrough --stop-timeout 40 \
-  -p 8080:8080 \
+  -p 9815:9815 \
   --mount type=volume,source=gothrough-data,target=/data \
   YOUR_USERNAME/gothrough:latest
 ```

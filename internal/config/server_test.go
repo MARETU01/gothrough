@@ -40,7 +40,7 @@ func TestSettingsDefaultsAndDiscovery(t *testing.T) {
 	exeDir := filepath.Join(root, "bin")
 	cwd := filepath.Join(root, "work")
 	cfg, err := loadSettings("", exeDir, cwd, envMap(nil))
-	if err != nil || cfg.Server.Address() != "0.0.0.0:8080" || cfg.Server.TLS.Enabled {
+	if err != nil || cfg.Server.Address() != "0.0.0.0:9815" || cfg.Server.TLS.Enabled {
 		t.Fatalf("defaults: %v %v", cfg, err)
 	}
 	cwdPath := putConfig(t, cwd, "server:\n  port: 9001\n")
@@ -124,7 +124,7 @@ func TestInvalidSettings(t *testing.T) {
 		"port zero": {"GOTHROUGH_PORT": "0"}, "port high": {"GOTHROUGH_PORT": "65536"},
 		"port negative": {"GOTHROUGH_PORT": "-1"}, "bool invalid": {"GOTHROUGH_TLS_ENABLED": "yes"},
 		"bool empty": {"GOTHROUGH_TLS_ENABLED": ""}, "host URL": {"GOTHROUGH_HOST": "http://localhost"},
-		"host with port": {"GOTHROUGH_HOST": "localhost:8080"}, "host whitespace": {"GOTHROUGH_HOST": "local host"},
+		"host with port": {"GOTHROUGH_HOST": "localhost:9815"}, "host whitespace": {"GOTHROUGH_HOST": "local host"},
 		"TLS missing files": {"GOTHROUGH_TLS_ENABLED": "true"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestInvalidSettings(t *testing.T) {
 	}
 	for name, content := range map[string]string{
 		"unknown field": "server:\n  prot: 9000\n", "wrong type": "server:\n  port: nope\n",
-		"multiple documents": "server:\n  port: 8080\n---\nserver:\n  port: 9000\n", "empty": "",
+		"multiple documents": "server:\n  port: 9815\n---\nserver:\n  port: 9000\n", "empty": "",
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
