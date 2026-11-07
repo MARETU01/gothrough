@@ -16,7 +16,7 @@ OUTPUT ?= $(OUT_DIR)/gothrough$(EXE)
 DEPS_STAMP := frontend/node_modules/.gothrough-deps-installed
 DEPS_INPUTS := frontend/package.json frontend/package-lock.json $(wildcard frontend/.npmrc .npmrc)
 
-.PHONY: build install test clean help
+.PHONY: build install test test-race clean help
 
 # A single dependency chain preserves ordering even with make -j.
 build: internal/webassets/dist/index.html
@@ -36,7 +36,7 @@ $(DEPS_STAMP): $(DEPS_INPUTS)
 	touch "$@"
 
 # install is phony, so rebuild assets on every invocation and share the result
-# between build and test when both are requested in the same make invocation.
+# between build, test and test-race in the same make invocation.
 internal/webassets/dist/index.html: install
 	$(NPM) --prefix frontend run build
 	# Refresh only the generated copy, so obsolete hashed assets are not embedded.
@@ -48,11 +48,16 @@ internal/webassets/dist/index.html: install
 	cp -R frontend/dist/. internal/webassets/dist/
 
 test: internal/webassets/dist/index.html
+	$(NPM) --prefix frontend run lint
 	$(NPM) --prefix frontend test
 	$(GO) test ./...
 	$(GO) vet ./...
 	$(GO) test -tags embedweb ./...
 	$(GO) vet -tags embedweb ./...
+
+# Race detection requires a C compiler; keep it separate from routine checks.
+test-race: internal/webassets/dist/index.html
+	CGO_ENABLED=1 $(GO) test -race -tags embedweb ./...
 
 # Keep runtime configuration, data, and installed dependencies.
 # Run separately from build/test so parallel make cannot remove active outputs.
@@ -63,6 +68,7 @@ clean:
 help:
 	@echo make build          - Reuse unchanged dependencies and build the embedded executable
 	@echo make install        - Download Go modules and install frontend dependencies as needed
-	@echo make test           - Build frontend, run frontend tests, then backend tests and vet with and without embedded assets
+	@echo make test           - Build frontend, lint and test frontend, then backend tests and vet with and without embedded assets
+	@echo make test-race      - Build frontend and run embedded backend race tests, requires a C compiler
 	@echo make clean          - Remove build outputs and keep runtime config, data, and dependencies
 	@echo make OUTPUT=release/custom.exe - Customize the output file

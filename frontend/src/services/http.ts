@@ -22,7 +22,7 @@ for (const client of [api, responseApi]) {
 api.interceptors.response.use(
     res => res.data,
     err => {
-        console.error('请求失败:', err.message);
+        if (!axios.isCancel(err)) console.error('请求失败:', err.message);
         return Promise.reject(err);
     }
 );

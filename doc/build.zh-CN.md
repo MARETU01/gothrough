@@ -36,7 +36,8 @@ make build
 | --- | --- |
 | `make` / `make build` | 构建包含前端的可执行文件 |
 | `make install` | 下载 Go 模块并按需安装前端依赖 |
-| `make test` | 构建前端、运行前端测试，以及普通和嵌入版 Go 测试与 vet |
+| `make test` | 构建前端、运行前端 lint 和测试，以及普通和嵌入版 Go 测试与 vet |
+| `make test-race` | 构建前端并运行嵌入版 Go race 检测；需要 C 编译器 |
 | `make clean` | 删除当前 `OUTPUT`、`frontend/dist/` 和 `internal/webassets/dist/`，保留配置、数据和依赖 |
 | `make OUTPUT=release/custom.exe` | 自定义输出文件路径 |
 | `make OUT_DIR=out` | 修改默认输出目录 |
@@ -64,14 +65,13 @@ GOOS=linux GOARCH=amd64 make build
 
 ```sh
 make install
-npm --prefix frontend run lint
 make -j2 build test
 ```
 
-`make test` 已包含前端测试、普通及嵌入版 Go 测试和 vet，无需重复运行。具备 CGO 和 C 编译器时补充 race 检测：
+`make test` 已包含前端 lint 和测试、普通及嵌入版 Go 测试和 vet，无需重复运行。具备 CGO 和 C 编译器时补充 race 检测：
 
 ```sh
-CGO_ENABLED=1 go test -race -tags embedweb ./...
+make test-race
 ```
 
 工作流位于 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)，在 main push、`v*` 标签、PR 和 Actions 手动运行时触发。同一分支的新运行会取消旧运行。

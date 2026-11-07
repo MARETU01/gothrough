@@ -36,7 +36,8 @@ Frontend builds also generate gzip copies of JS/CSS files of at least 1 KiB when
 | --- | --- |
 | `make` / `make build` | Build the executable with embedded frontend assets |
 | `make install` | Download Go modules and install frontend dependencies as needed |
-| `make test` | Build the frontend, run frontend tests, and run Go tests and vet with and without embedded assets |
+| `make test` | Build the frontend, run frontend lint and tests, and run Go tests and vet with and without embedded assets |
+| `make test-race` | Build the frontend and run Go race tests with embedded assets; requires a C compiler |
 | `make clean` | Remove the current `OUTPUT`, `frontend/dist/`, and `internal/webassets/dist/`; keep configuration, data, and dependencies |
 | `make OUTPUT=release/custom.exe` | Set a custom output file path |
 | `make OUT_DIR=out` | Change the default output directory |
@@ -64,14 +65,13 @@ Run locally:
 
 ```sh
 make install
-npm --prefix frontend run lint
 make -j2 build test
 ```
 
-`make test` includes frontend tests and Go tests and vet with and without embedded assets, so separate runs are unnecessary. With CGO and a C compiler available, also run:
+`make test` includes frontend lint and tests and Go tests and vet with and without embedded assets, so separate runs are unnecessary. With CGO and a C compiler available, also run:
 
 ```sh
-CGO_ENABLED=1 go test -race -tags embedweb ./...
+make test-race
 ```
 
 The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on main pushes, `v*` tags, pull requests, and manual Actions runs. A new run for the same branch cancels the previous run.

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppRoutes } from './router';
 import { UploadQueueProvider } from '@/contexts/UploadQueueProvider';
 import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
-import { listFiles } from '@/services/files';
+import { getDiskInfo, listFiles } from '@/services/files';
 import { getClipboardImageSettings, listClipboard } from '@/services/clipboard';
 import { changeLanguage } from '@/i18n';
 
@@ -13,7 +13,7 @@ vi.mock('@/services/upload', () => ({
   initUpload: vi.fn(), uploadChunk: vi.fn(), completeUpload: vi.fn(), cancelUpload: vi.fn(),
 }));
 vi.mock('@/services/files', async importOriginal => ({
-  ...await importOriginal<typeof import('@/services/files')>(), listFiles: vi.fn(),
+  ...await importOriginal<typeof import('@/services/files')>(), listFiles: vi.fn(), getDiskInfo: vi.fn(),
 }));
 vi.mock('@/services/clipboard', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/clipboard')>(),
@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'test.txt' });
   vi.mocked(cancelUpload).mockResolvedValue({ status: 'cancelled' });
   vi.mocked(listFiles).mockResolvedValue({ files: [], total_size_display: '0 B', disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB', disk_pct: 0, disk_pct_warning: false });
+  vi.mocked(getDiskInfo).mockResolvedValue({ disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB', disk_pct: 0, disk_pct_warning: false });
   vi.mocked(listClipboard).mockResolvedValue({ entries: [] });
   vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: false, max_size_mb: 10, max_pixels: 20000000, max_total_size_mb: 200 });
 });
@@ -54,6 +55,8 @@ it('keeps a transfer running while navigating between lazy pages', async () => {
 
   fireEvent.click(screen.getByRole('link', { name: '文件列表' }));
   await screen.findByRole('heading', { name: '已上传文件' }, { timeout: 5000 });
+  await screen.findByText('1 GB');
+  expect(getDiskInfo).toHaveBeenCalled();
   expect(signal?.aborted).toBe(false);
   expect(cancelUpload).not.toHaveBeenCalled();
   await act(async () => { finish({ received: 1 }); });

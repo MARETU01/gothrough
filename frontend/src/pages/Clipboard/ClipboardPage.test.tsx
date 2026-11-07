@@ -25,6 +25,7 @@ const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibility
 beforeEach(() => {
   vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: true, max_size_mb: 10, max_pixels: 20000000, max_total_size_mb: 200 });
   history = [];
+  let nextEntryId = 0;
   window.getSelection()?.removeAllRanges();
   vi.mocked(clearClipboard).mockImplementation(async () => {
     history = [];
@@ -35,7 +36,7 @@ beforeEach(() => {
     return etag === current ? { notModified: true, etag: current } : { entries: [...history], etag: current };
   });
   vi.mocked(createClipboard).mockImplementation(async text => {
-    const entry = record(text);
+    const entry = record(text, `published-${++nextEntryId}`);
     history.unshift(entry);
     return entry;
   });
@@ -351,6 +352,10 @@ it('invalidates the validator after a successful mutation even when the full res
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: 'new' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '发布' })); });
   expect(vi.mocked(listClipboard).mock.lastCall?.[1]).toBeUndefined();
+  expect(screen.getAllByRole('article')).toHaveLength(2);
+  expect(screen.getByText('old')).toBeTruthy();
+  expect(screen.getByText('new')).toBeTruthy();
+  expect(new Set(history.map(entry => entry.id)).size).toBe(2);
   // The server can return to the original representation before the next poll.
   history = [record('old')];
   await advancePoll();
