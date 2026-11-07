@@ -1,4 +1,5 @@
 {
+  "upload.confirmationPending": "The upload result could not be confirmed. Retry checks the same session without uploading again. If the server restarted or the result expired, check the file list first.",
   "auth.draftPreserved": "Your editing draft is preserved. Unlock again to continue editing.",
   "files.interval": "File list updates automatically every {{seconds}} seconds",
   "文件上传 - GoThrough": "Upload files - GoThrough",

@@ -38,12 +38,14 @@ type transferSession struct {
 	info      model.UploadSession
 	file      *os.File
 	closed    bool
+	result    *model.UploadCompletion // guarded by lifecycle
 	touched   time.Time
 }
 
 type UploadService struct {
 	mu          sync.RWMutex
 	sessions    map[string]*transferSession
+	completed   map[string]completedSession
 	names       map[string]bool
 	createdDirs map[string]os.FileInfo // guarded by mu; only directories created by this service
 	uploadDir   string
@@ -55,7 +57,7 @@ type UploadService struct {
 }
 
 func NewUploadService() *UploadService {
-	return &UploadService{sessions: make(map[string]*transferSession), names: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
+	return &UploadService{sessions: make(map[string]*transferSession), completed: make(map[string]completedSession), names: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
 		uploadDir: config.UploadFolder, tempDir: config.TempFolder, slots: make(chan struct{}, config.MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
 }
 
@@ -256,11 +258,17 @@ func (s *UploadService) WriteChunk(id string, index int, body io.Reader) (int, e
 func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	entry, err := s.lookup(id)
 	if err != nil {
+		if result, ok := s.GetCompletion(id); ok {
+			return result.SavedFilename, result.Size, nil
+		}
 		return "", 0, err
 	}
 	entry.lifecycle.Lock()
 	defer entry.lifecycle.Unlock()
 	if entry.closed {
+		if entry.result != nil {
+			return entry.result.SavedFilename, entry.result.Size, nil
+		}
 		return "", 0, ErrSession
 	}
 	entry.mu.Lock()
@@ -314,6 +322,9 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 		return "", 0, utils.StorageError("发布上传文件失败", err)
 	}
 	s.invalidateFiles()
+	entry.result = &model.UploadCompletion{SessionID: id, OriginalFilename: entry.info.OriginalFilename,
+		SavedFilename: entry.info.FinalFilename, Size: stat.Size(), CreatedAt: entry.info.CreatedAt}
+	s.rememberCompletion(*entry.result)
 	entry.closed = true
 	if err := entry.file.Close(); err != nil {
 		slog.Warn("关闭已发布的上传文件失败", "event", "upload.close_failed", "session_id", id, "error", err)
@@ -353,12 +364,17 @@ func (s *UploadService) CancelSession(id string) error {
 // ExpireIdle is deliberately non-blocking for active streams; their lifecycle
 // read lock keeps the payload alive until they finish or disconnect.
 func (s *UploadService) ExpireIdle(age time.Duration) {
-	s.mu.RLock()
+	s.mu.Lock()
+	for id, receipt := range s.completed {
+		if !time.Now().Before(receipt.expires) {
+			delete(s.completed, id)
+		}
+	}
 	entries := make([]*transferSession, 0, len(s.sessions))
 	for _, entry := range s.sessions {
 		entries = append(entries, entry)
 	}
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	for _, entry := range entries {
 		if !entry.lifecycle.TryLock() {
 			continue

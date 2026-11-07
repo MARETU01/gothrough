@@ -228,18 +228,36 @@ export const useUploadQueue = () => {
         item.state = "uploading";
         refreshFileList();
       };
-      item.state = "initializing";
+      const finishSession = async () => {
+        checkActive();
+        item.state = "completing";
+        item.speed = 0;
+        item.completionPending = true;
+        refreshFileList();
+        const complete = await completeUpload(item.session!.sessionId, controller.abort.signal);
+        checkActive();
+        item.completionPending = false;
+        item.state = "success";
+        item.savedFilename = complete.saved_filename || item.savedFilename;
+        item.inflightBytes.clear();
+        recalcLoadedBytes(item);
+      };
+      const confirming = item.completionPending && item.session;
+      item.state = confirming ? "completing" : "initializing";
       item.error = "";
       item.speed = 0;
-      item.session = null;
-      item.savedFilename = "";
-      item.inflightBytes.clear();
-      item.confirmedChunks.clear();
-      item.confirmedBytes = 0;
-      item.transferredBytes = 0;
-      item.loadedBytes = 0;
+      if (!confirming) {
+        item.session = null;
+        item.savedFilename = "";
+        item.inflightBytes.clear();
+        item.confirmedChunks.clear();
+        item.confirmedBytes = 0;
+        item.transferredBytes = 0;
+        item.loadedBytes = 0;
+      }
       refreshFileList();
       try {
+        if (confirming) { await finishSession(); return; }
         // Observe late initialization responses so cancelled sessions can be cleaned up.
         const data = await initUpload({
           filename: item.file.name,
@@ -350,24 +368,15 @@ export const useUploadQueue = () => {
         if (transfer.failure !== undefined) throw transfer.failure;
         checkActive();
         await waitForResume();
-        item.state = "completing";
-        item.speed = 0;
-        refreshFileList();
-        const complete = await completeUpload(
-          session.sessionId,
-          controller.abort.signal,
-        );
-        checkActive();
-        item.state = "success";
-        item.savedFilename = complete.saved_filename || item.savedFilename;
-        item.inflightBytes.clear();
-        recalcLoadedBytes(item);
+        await finishSession();
       } catch (err) {
         clock.pause();
-        await cleanupSession(item);
-        item.session = null;
+        if (!item.completionPending) {
+          await cleanupSession(item);
+          item.session = null;
+          item.loadedBytes = 0;
+        }
         item.inflightBytes.clear();
-        item.loadedBytes = 0;
         if (isStopped()) item.state = "pending";
         else {
           item.state = "error";
@@ -375,7 +384,7 @@ export const useUploadQueue = () => {
             error?: string;
             missing_chunks?: number[];
           }>(err);
-          const failure = body?.missing_chunks
+          const failure = item.completionPending ? message('upload.confirmationPending') : body?.missing_chunks
             ? message('upload.missingChunks', { count: body.missing_chunks.length })
             : apiErrorDescriptor(err);
           item.error = failure;
@@ -479,6 +488,7 @@ export const useUploadQueue = () => {
   };
   const resetAll = () => {
     if (runRef.current) return;
+    itemsRef.current.forEach(item => { if (item.completionPending) void cleanupSession(item); });
     itemsRef.current = [];
     queueClockRef.current = null;
     setQueueElapsedMs(null);
@@ -496,6 +506,7 @@ export const useUploadQueue = () => {
       clocksRef.current.get(item)?.pause();
       stopItem(item);
       itemsRef.current.splice(index, 1);
+      if (item.completionPending && !item.uploadController) void cleanupSession(item);
       refreshFileList();
     },
     [refreshFileList],

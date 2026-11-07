@@ -1,4 +1,5 @@
 import api from './http';
+import { uploadRetryDelay, waitForRetry } from '@/utils/uploadRetry';
 
 /**
  * 大文件分块上传相关接口。
@@ -40,6 +41,7 @@ export interface UploadChunkResponse {
 }
 
 export interface CompleteUploadResponse {
+  status?: 'success';
   saved_filename?: string;
   missing_chunks?: number[];
   error?: string;
@@ -107,10 +109,28 @@ export function uploadChunk({
 }
 
 /** 校验并发布文件：POST /api/upload/complete */
-export function completeUpload(sessionId: string, signal?: AbortSignal) {
-  return api.post<CompleteUploadResponse, CompleteUploadResponse>(UPLOAD_ENDPOINTS.complete, {
-    session_id: sessionId,
-  }, { signal });
+export async function completeUpload(sessionId: string, signal?: AbortSignal): Promise<CompleteUploadResponse> {
+  const abort = signal ?? new AbortController().signal;
+  for (let retry = 0; ; retry++) {
+    try {
+      // fsync for a large file can take longer than the default request timeout.
+      return await api.post<CompleteUploadResponse, CompleteUploadResponse>(UPLOAD_ENDPOINTS.complete, {
+        session_id: sessionId,
+      }, { signal: abort, timeout: 0 });
+    } catch (error) {
+      if (abort.aborted || uploadRetryDelay(error, 0) === null) throw error;
+      // The publication may have succeeded even though its response was lost.
+      try {
+        const result = await api.get<CompleteUploadResponse & { status?: string }, CompleteUploadResponse & { status?: string }>(
+          '/upload/status/' + encodeURIComponent(sessionId), { signal: abort });
+        if (result.status === 'success') return result;
+      } catch { /* Preserve the original failure if confirmation also fails. */ }
+      if (abort.aborted) throw error;
+      const delay = uploadRetryDelay(error, retry);
+      if (delay === null) throw error;
+      await waitForRetry(delay, abort);
+    }
+  }
 }
 
 /** 放弃上传、清理服务端会话：POST /api/upload/cancel */

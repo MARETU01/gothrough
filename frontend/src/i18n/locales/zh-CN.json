@@ -1,4 +1,5 @@
 {
+  "upload.confirmationPending": "暂时无法确认上传结果。重试会确认原会话，不会重复上传；若服务已重启或结果已过期，请先检查文件列表。",
   "auth.draftPreserved": "编辑草稿已保留，重新解锁后可继续编辑。",
   "files.interval": "每 {{seconds}} 秒自动更新文件列表",
   "文件上传 - GoThrough": "文件上传 - GoThrough",

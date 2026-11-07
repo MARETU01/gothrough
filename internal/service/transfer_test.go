@@ -246,8 +246,12 @@ func TestDuplicateWritersAndCompleters(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	if success != 1 {
-		t.Fatalf("published %d times", success)
+	if success != 2 {
+		t.Fatalf("idempotent completions succeeded %d times", success)
+	}
+	files, _, err := s.ListFiles()
+	if err != nil || len(files) != 1 {
+		t.Fatalf("completion retries published extra files: %v %v", files, err)
 	}
 }
 

@@ -64,6 +64,39 @@ afterEach(() => {
 });
 
 describe("upload queue lifecycle", () => {
+  it("retains an uncertain completion and confirms it on manual retry without uploading again", async () => {
+    vi.mocked(completeUpload).mockRejectedValueOnce({ isAxiosError: true, code: 'ERR_NETWORK' });
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    await act(async () => { await hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0].state).toBe('error');
+    expect(hook.result.current.items[0].session?.sessionId).toBe('file-0');
+    expect(cancelUpload).not.toHaveBeenCalled();
+    await act(async () => { await hook.result.current.retryItem(getFileKey(hook.result.current.items[0].file)); });
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(initUpload).toHaveBeenCalledTimes(1);
+    expect(uploadChunk).toHaveBeenCalledTimes(1);
+    expect(completeUpload).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(completeUpload).mock.calls.map(call => call[0])).toEqual(['file-0', 'file-0']);
+  });
+
+  it("keeps the original session when completion is cancelled and later resumed", async () => {
+    vi.mocked(completeUpload).mockImplementationOnce((_id, signal) => new Promise((_resolve, reject) => {
+      signal!.addEventListener('abort', () => reject({ isAxiosError: true, code: 'ERR_CANCELED' }), { once: true });
+    }));
+    const hook = renderHook(useUploadQueue);
+    selectFiles(hook, 1);
+    let run!: Promise<void>;
+    await act(async () => { run = hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0].state).toBe('completing');
+    await act(async () => { hook.result.current.cancelAll(); await run; });
+    expect(cancelUpload).not.toHaveBeenCalled();
+    await act(async () => { await hook.result.current.startAllUploads(); });
+    expect(hook.result.current.items[0].state).toBe('success');
+    expect(initUpload).toHaveBeenCalledTimes(1);
+    expect(uploadChunk).toHaveBeenCalledTimes(1);
+  });
+
   it("honors Retry-After and waits for resume without polling timers", async () => {
     vi.useFakeTimers();
     vi.mocked(uploadChunk).mockRejectedValueOnce({ isAxiosError: true,

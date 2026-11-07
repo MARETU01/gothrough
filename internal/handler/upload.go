@@ -131,9 +131,17 @@ func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io
 func (h *UploadHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	withUploadSession(c, sessionID)
+	if result, ok := h.uploadService.GetCompletion(sessionID); ok {
+		completedResponse(c, result)
+		return
+	}
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
+		if result, ok := h.uploadService.GetCompletion(sessionID); ok {
+			completedResponse(c, result)
+			return
+		}
 		uploadError(c, err)
 		return
 	}
@@ -145,6 +153,7 @@ func (h *UploadHandler) UploadStatus(c *gin.Context) {
 	sortedChunks := session.ReceivedChunks
 
 	c.JSON(http.StatusOK, gin.H{
+		"status":            "uploading",
 		"session_id":        sessionID,
 		"final_filename":    session.FinalFilename,
 		"original_filename": session.OriginalFilename,
@@ -163,9 +172,17 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 		return
 	}
 	withUploadSession(c, sessionID)
+	if result, ok := h.uploadService.GetCompletion(sessionID); ok {
+		completedResponse(c, result)
+		return
+	}
 
 	session, err := h.uploadService.GetSession(sessionID)
 	if err != nil {
+		if result, ok := h.uploadService.GetCompletion(sessionID); ok {
+			completedResponse(c, result)
+			return
+		}
 		uploadError(c, err)
 		return
 	}
@@ -205,13 +222,14 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 		logging.WithRequestFields(c, "upload_elapsed_ms", max(0, time.Since(started).Milliseconds()))
 	}
 	logging.FromContext(c.Request.Context()).Info("文件上传已完成", "event", "upload.completed", "size_bytes", actualSize)
-	c.JSON(http.StatusOK, gin.H{
-		"original_filename": session.OriginalFilename,
-		"saved_filename":    finalFilename,
-		"size":              actualSize,
-		"status":            "success",
-		"message":           "上传完成",
-	})
+	completedResponse(c, model.UploadCompletion{SessionID: sessionID, OriginalFilename: session.OriginalFilename,
+		SavedFilename: finalFilename, Size: actualSize})
+}
+
+func completedResponse(c *gin.Context, result model.UploadCompletion) {
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"session_id": result.SessionID, "original_filename": result.OriginalFilename,
+		"saved_filename": result.SavedFilename, "size": result.Size, "status": "success", "message": "上传完成"})
 }
 
 // 取消上传

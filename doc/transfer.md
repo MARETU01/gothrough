@@ -80,6 +80,8 @@ Lists display PNG thumbnails with a maximum edge of 320 pixels; copying and down
 
 The frontend retries network and transient server failures at most twice, using backoff and honoring `Retry-After`. Waiting periods above 60 seconds stop automatic retries. Invalid requests and permanent storage errors fail immediately; cancellation interrupts retry waits.
 
+Completion is idempotent: the server keeps up to 4096 completion receipts for up to one hour, without retaining temporary files or chunk maps. Repeating completion or querying upload status returns the original saved filename and size with `status: "success"`. A receipt reports the original publication even if the file was subsequently deleted; it never recreates the file. Receipts are lost on restart. Completion requests have no frontend timeout while the server syncs the file. After a transient failure, the frontend checks status before retrying completion. If confirmation still fails, manual retry reuses the same session without uploading again. If the receipt expired or the server restarted, check the file list before starting a new upload.
+
 Folder uploads use `relative_path` to preserve the top-level folder and subdirectories, such as `documents/photos/image.jpg`. File listing, downloading, and deletion use paths relative to the upload directory; encode URL path parameters. Empty folders are not preserved. Conflicting names are renamed without overwriting existing content.
 
 ## Limits and Errors
@@ -98,7 +100,7 @@ Folder uploads use `relative_path` to preserve the top-level folder and subdirec
 | Session expiration | Sessions idle for over 24 hours are cleaned up every 5 minutes, except those with active writes |
 | Empty upload directories | Failed initialization, cancellation, expiration, and file deletion remove empty ancestors created by this service; pre-existing directories and other active uploads are preserved |
 | Restarts and resuming | Sessions stay in memory; restarting clears temporary uploads and does not support resuming them |
-| Downloads | Range requests are supported |
+| Downloads | Range requests are supported; files, previews, and clipboard images share 32 concurrent response slots (429 when full). Each write has a 30-second idle deadline refreshed as data is sent, with no fixed total transfer duration |
 | File list cache | File listings, counts, and totals are cached for 2 seconds and invalidated on upload completion or deletion; external changes appear after expiration, while disk free space is queried live |
 
 For failed requests, use the `X-Request-ID` response header to find server logs. See [troubleshooting](logging.md#troubleshooting).

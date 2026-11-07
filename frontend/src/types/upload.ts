@@ -37,6 +37,8 @@ export interface UploadItem {
   file: File;
   state: UploadState;
   session: UploadSession | null;
+  /** Publication was requested; retries must confirm this session, never re-upload. */
+  completionPending?: boolean;
   speed: number;
   savedFilename: string;
   uploadController: UploadController | null;

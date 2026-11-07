@@ -60,6 +60,15 @@ type SessionRequest struct {
 	SessionID string `json:"session_id"`
 }
 
+// UploadCompletion is a bounded, immutable receipt for an already published file.
+type UploadCompletion struct {
+	SessionID        string `json:"session_id"`
+	OriginalFilename string `json:"original_filename"`
+	SavedFilename    string `json:"saved_filename"`
+	Size             int64  `json:"size"`
+	CreatedAt        string `json:"-"`
+}
+
 // 文件信息
 type FileInfo struct {
 	Name        string `json:"name"`
