@@ -71,7 +71,7 @@ jobs:
       - name: Upload shared frontend assets
         uses: actions/upload-artifact@v7
         with:
-          name: release-web-assets
+          name: gothrough-web-assets-${{ github.ref_name }}
           path: web-assets.tar.gz
           if-no-files-found: error
           compression-level: 0
@@ -114,7 +114,7 @@ jobs:
       - name: Download shared frontend assets
         uses: actions/download-artifact@v8
         with:
-          name: release-web-assets
+          name: gothrough-web-assets-${{ github.ref_name }}
       - name: Restore embedded assets
         run: |
           mkdir -p internal/webassets/dist
@@ -145,10 +145,11 @@ jobs:
       - name: Upload release package
         uses: actions/upload-artifact@v7
         with:
-          name: release-package-${{ matrix.goos }}-${{ matrix.goarch }}
+          # Each job produces one archive. Preserve its filename and format
+          # instead of wrapping tar.gz/zip packages in another ZIP.
+          archive: false
           path: artifacts/*
           if-no-files-found: error
-          compression-level: 0
           retention-days: 7
           overwrite: true
 
@@ -163,8 +164,10 @@ jobs:
       - name: Download all release packages
         uses: actions/download-artifact@v8
         with:
-          pattern: release-package-*
+          pattern: gothrough-${{ github.ref_name }}-*
           merge-multiple: true
+          # Keep the Windows ZIP packages intact when collecting raw artifacts.
+          skip-decompress: true
           path: artifacts
       - name: Generate SHA256 checksums
         working-directory: artifacts

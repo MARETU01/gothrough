@@ -99,6 +99,8 @@ Go 版本从 `go.mod` 读取，Node.js 使用 26.x，依赖按 lockfile 安装�
 
 每个压缩包内有一个目录，包含可执行文件和受版本控制的 `config/config.yaml` 模板，不包含本地运行配置。交叉编译验证各平台代码可以编译；该工作流在 Linux 上运行测试，不会逐一在目标系统执行测试。
 
+Actions 产物直接上传上述压缩包，名称包含项目名、版本、系统和架构，不再套一层 ZIP；Linux/macOS 下载为 `.tar.gz`，Windows 下载为 `.zip`。前端共享资源是独立的内部产物，不会附加到 Release。
+
 全部构建成功后，工作流创建 GitHub Release **草稿**，自动生成更新说明，并上传六个压缩包和 `SHA256SUMS`。预发布标签会自动将草稿标记为预发布。仅最后的上传任务拥有 `contents: write` 权限，使用内置 `GITHUB_TOKEN`，无需另配 Release 密钥；仓库或组织策略须允许该权限。
 
 例如，同步 `main` 并确认 CI 通过后，推送一个尚未使用的标签：

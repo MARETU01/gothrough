@@ -99,6 +99,8 @@ The workflow checks the version, lints and tests the frontend, runs Go tests and
 
 Each archive contains a directory with the executable and the tracked `config/config.yaml` template. Local runtime configuration is never packaged. Cross-platform builds are compilation checks; this workflow runs tests on Linux, not on every target system.
 
+Actions artifacts upload these archives directly, retaining the project name, version, OS, architecture, and original format without an extra ZIP wrapper. Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Shared frontend assets are a separate internal artifact and are not attached to the Release.
+
 After all builds pass, the workflow creates a **draft** GitHub Release with generated notes, the six archives, and `SHA256SUMS`. Prerelease tags automatically mark the draft as a prerelease. Only the final job gets `contents: write`; it uses the built-in `GITHUB_TOKEN`, so no additional release secret is required. Repository or organization policy must allow this permission.
 
 For example, after syncing `main` and checking CI, publish an unused tag:
