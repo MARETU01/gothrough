@@ -68,6 +68,7 @@ func TestSuccessfulRequestFilteringAndFailureDetails(t *testing.T) {
 		settings.Format, settings.LogPolling, settings.LogChunks = "json", verbose, verbose
 		r := testRouter(t, settings, &out)
 		r.GET("/api/clipboard", func(c *gin.Context) { c.Status(200) })
+		r.GET("/api/disk-info", func(c *gin.Context) { c.Status(200) })
 		r.GET("/api/files", func(c *gin.Context) {
 			if c.Query("fail") != "" {
 				c.Status(500)
@@ -85,12 +86,12 @@ func TestSuccessfulRequestFilteringAndFailureDetails(t *testing.T) {
 			}
 		})
 		for _, request := range []struct{ method, path string }{
-			{http.MethodGet, "/api/clipboard"}, {http.MethodGet, "/api/files"}, {http.MethodGet, "/api/upload/status/id"}, {http.MethodPost, "/api/upload/chunk"},
+			{http.MethodGet, "/api/clipboard"}, {http.MethodGet, "/api/files"}, {http.MethodGet, "/api/disk-info"}, {http.MethodGet, "/api/upload/status/id"}, {http.MethodPost, "/api/upload/chunk"},
 		} {
 			r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(request.method, request.path, nil))
 		}
 		got := records(t, out.Bytes())
-		if (!verbose && len(got) != 0) || (verbose && len(got) != 4) {
+		if (!verbose && len(got) != 0) || (verbose && len(got) != 5) {
 			t.Fatalf("filtering: %v", got)
 		}
 		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/upload/chunk?fail=true", nil))

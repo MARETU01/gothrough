@@ -3,12 +3,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FilesPage from './FilesPage';
-import { deleteFile, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
-import { FILES_REFRESH_INTERVAL_MS } from '@/config/files';
+import { deleteFile, getDiskInfo, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
+import { DISK_REFRESH_INTERVAL_MS, FILES_REFRESH_INTERVAL_MS } from '@/config/files';
 
 vi.mock('@/services/files', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/files')>(),
-  listFiles: vi.fn(), deleteFile: vi.fn(), getFilePreview: vi.fn(),
+  listFiles: vi.fn(), deleteFile: vi.fn(), getFilePreview: vi.fn(), getDiskInfo: vi.fn(),
 }));
 
 const makeData = (): FileListResponse => ({
@@ -24,6 +24,7 @@ const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibility
 beforeEach(() => {
   window.getSelection()?.removeAllRanges();
   vi.mocked(listFiles).mockResolvedValue(makeData());
+  vi.mocked(getDiskInfo).mockResolvedValue(makeData());
   vi.mocked(deleteFile).mockResolvedValue({ status: 'deleted' });
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'preview', version: 'v1' });
 });
@@ -135,10 +136,13 @@ it('updates files and storage silently, keeps search/sort/page, clamps deleted p
   const data = makeData();
   const added = { ...data.files[20], name: '文件 22.txt' };
   vi.mocked(listFiles).mockResolvedValue({ ...data, files: [...data.files, added], disk_pct: 42, disk_free_display: '58 GB' });
+  vi.mocked(getDiskInfo).mockResolvedValue({ ...data, disk_pct: 42, disk_free_display: '58 GB' });
   await advancePoll();
   expect(screen.getByText('文件 22.txt')).toBeTruthy();
   expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('文件');
   expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('name_asc');
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('90');
+  await advancePoll(DISK_REFRESH_INTERVAL_MS - FILES_REFRESH_INTERVAL_MS);
   expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('42');
   expect(screen.getByText('58 GB')).toBeTruthy();
   expect(screen.queryByRole('button', { name: '加载中…' })).toBeNull();
@@ -243,4 +247,78 @@ it('does not replace selected text during a background update', async () => {
   selection.removeAllRanges();
   await advancePoll();
   expect(listFiles).toHaveBeenCalledTimes(2);
+});
+
+it('keeps the accepted list on 304 and makes manual refresh unconditional', async () => {
+  vi.mocked(listFiles).mockResolvedValueOnce({ ...makeData(), etag: '"v1"' }).mockResolvedValue({ notModified: true, etag: '"v1"' });
+  await openPollingPage();
+  const first = screen.getByText('文件 01.txt');
+  await advancePoll();
+  expect(vi.mocked(listFiles).mock.lastCall?.[1]).toBe('"v1"');
+  expect(screen.getByText('文件 01.txt')).toBe(first);
+  expect(getDiskInfo).toHaveBeenCalledTimes(1);
+  vi.mocked(listFiles).mockResolvedValue({ ...makeData(), etag: '"v1"' });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '刷新' })); });
+  expect(vi.mocked(listFiles).mock.lastCall?.[1]).toBeUndefined();
+  expect(getDiskInfo).toHaveBeenCalledTimes(2);
+});
+
+it('does not accept validators from aborted file-list responses', async () => {
+  vi.mocked(listFiles).mockResolvedValue({ ...makeData(), etag: '"v1"' });
+  await openPollingPage();
+  let finish!: (value: FileListResponse & { etag: string }) => void;
+  vi.mocked(listFiles).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll();
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+  await act(async () => { finish({ ...makeData(), files: [], etag: '"aborted"' }); });
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  await advancePoll();
+  expect(vi.mocked(listFiles).mock.lastCall?.[1]).toBe('"v1"');
+  expect(screen.getByText('文件 01.txt')).toBeTruthy();
+});
+
+it('invalidates the validator after deletion even if the immediate resync fails', async () => {
+  vi.mocked(listFiles).mockResolvedValue({ ...makeData(), etag: '"v1"' });
+  await openPollingPage();
+  vi.mocked(listFiles).mockRejectedValueOnce(new Error('resync failed'));
+  fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
+  expect(screen.queryByText('文件 01.txt')).toBeNull();
+  vi.mocked(listFiles).mockResolvedValue({ ...makeData(), files: makeData().files.slice(1), etag: '"v2"' });
+  await advancePoll();
+  expect(vi.mocked(listFiles).mock.lastCall?.[1]).toBeUndefined();
+  expect(screen.queryByText('文件 01.txt')).toBeNull();
+});
+
+it('refreshes disk state on its own interval while unchanged lists return 304', async () => {
+  vi.mocked(listFiles).mockResolvedValueOnce({ ...makeData(), etag: '"v1"' }).mockResolvedValue({ notModified: true, etag: '"v1"' });
+  await openPollingPage();
+  const first = screen.getByText('文件 01.txt');
+  vi.mocked(getDiskInfo).mockRejectedValueOnce(new Error('disk offline'));
+  await advancePoll(DISK_REFRESH_INTERVAL_MS);
+  expect(screen.getByText(/自动更新暂不可用/)).toBeTruthy();
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('90');
+  vi.mocked(getDiskInfo).mockResolvedValue({ ...makeData(), disk_pct: 42 });
+  await advancePoll(DISK_REFRESH_INTERVAL_MS);
+  expect(screen.queryByText(/自动更新暂不可用/)).toBeNull();
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('42');
+  expect(screen.getByText('文件 01.txt')).toBe(first);
+  expect(vi.mocked(listFiles).mock.lastCall?.[1]).toBe('"v1"');
+});
+
+it('cancels disk polling during preview and rejects its stale response', async () => {
+  await openPollingPage();
+  let finish!: (value: FileListResponse) => void;
+  vi.mocked(getDiskInfo).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await advancePoll(DISK_REFRESH_INTERVAL_MS);
+  const signal = vi.mocked(getDiskInfo).mock.calls[1][0];
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '预览 文件 01.txt' })); });
+  expect(signal?.aborted).toBe(true);
+  await act(async () => { finish({ ...makeData(), disk_pct: 42 }); });
+  await advancePoll(DISK_REFRESH_INTERVAL_MS * 2);
+  expect(getDiskInfo).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('90');
+  fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+  await advancePoll(DISK_REFRESH_INTERVAL_MS);
+  expect(getDiskInfo).toHaveBeenCalledTimes(3);
 });

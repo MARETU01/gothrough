@@ -24,7 +24,11 @@ Encode filenames when using them as URL path parameters.
 
 File list `mtime` values use RFC3339 timestamps with timezone offsets. The UI displays them in the viewer's local timezone and selected language, and sorts by the actual instant.
 
-The file list waits 3 seconds after each request before automatically refreshing files and disk information, preserving search, sorting, and pagination. Updates pause during deletion confirmation, deletion requests, and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh immediately when visible again. Failed polls preserve content and operation errors and retry on the next cycle. Manual refresh remains available, and background reads do not show the foreground loading state.
+The file list checks for changes 3 seconds after each request; disk information refreshes independently every 15 seconds. Search, sorting, and pagination are preserved. Updates pause during deletion confirmation, deletion requests, and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh immediately when visible again. Each failed poll retains its data and retries without clearing operation errors. Manual refresh and successful edits/deletions immediately refresh both resources. Background reads do not show the foreground loading state.
+
+`GET /api/files?view=list` returns only the file listing and total size with an ETag. Background updates send `If-None-Match` and receive an empty `304` when unchanged. Validators are committed only for accepted responses; cancelled requests cannot advance them. Manual refresh fetches the full listing. The server caches serialized snapshots and reuses them for unchanged scans. Uploads, edits, and deletions invalidate the cache immediately; external changes follow the existing 2-second scan cache. Disk changes do not affect listing validators.
+
+`GET /api/disk-info` independently returns disk capacity, used/free space, `disk_pct`, and `disk_pct_warning`. The original `GET /api/files` retains its combined response for existing clients, without a listing-only ETag. Both resources use `Cache-Control: no-store`.
 
 ### File preview
 

@@ -37,7 +37,7 @@ func HTTP(logger *slog.Logger, settings config.LoggingSettings) gin.HandlerFunc 
 			if !settings.LogChunks && route == "/api/upload/chunk" {
 				return
 			}
-			if !settings.LogPolling && c.Request.Method == http.MethodGet && (route == "/api/files" || route == "/api/clipboard" || route == "/api/upload/status/:session_id") {
+			if !settings.LogPolling && c.Request.Method == http.MethodGet && (route == "/api/files" || route == "/api/disk-info" || route == "/api/clipboard" || route == "/api/upload/status/:session_id") {
 				return
 			}
 		}

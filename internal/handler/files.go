@@ -16,6 +16,21 @@ import (
 
 // 已上传文件列表
 func (h *UploadHandler) ListUploads(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	// Keep the original combined response for existing clients. The compact view
+	// is independently versioned and does not perform a disk-space query.
+	if c.Query("view") == "list" {
+		body, etag, err := h.uploadService.FileListSnapshot()
+		if err != nil {
+			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
+			return
+		}
+		if respondNotModified(c, etag) {
+			return
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
+		return
+	}
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
 		respondError(c, err, http.StatusInternalServerError, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
@@ -26,8 +41,6 @@ func (h *UploadHandler) ListUploads(c *gin.Context) {
 	response["files"] = storage.Files
 	response["total_size"] = storage.TotalSize
 	response["total_size_display"] = utils.FormatFileSize(storage.TotalSize)
-	response["disk_pct"] = math.Round(storage.Disk.UsedPercent*10) / 10
-	response["disk_pct_warning"] = storage.Disk.UsedPercent > 85
 	response["has_files"] = len(storage.Files) > 0
 	c.JSON(http.StatusOK, response)
 }
@@ -97,6 +110,7 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 
 // 磁盘信息 API
 func (h *UploadHandler) DiskInfo(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	storage, err := h.uploadService.StorageInfo()
 	if err != nil {
 		respondError(c, err, http.StatusInternalServerError, "DISK_INFO_FAILED", "获取磁盘信息失败，请稍后重试")
@@ -121,6 +135,8 @@ func uploadRelativePath(c *gin.Context) string {
 
 func diskFields(usage utils.DiskUsage) gin.H {
 	return gin.H{
+		"disk_pct":           math.Round(usage.UsedPercent*10) / 10,
+		"disk_pct_warning":   usage.UsedPercent > 85,
 		"disk_total":         usage.Total,
 		"disk_used":          usage.Used,
 		"disk_free":          usage.Free,

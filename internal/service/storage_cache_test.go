@@ -78,3 +78,24 @@ func TestFileCacheDoesNotHideScanErrors(t *testing.T) {
 		t.Fatalf("storage did not recover: %v", err)
 	}
 }
+
+func TestFileSnapshotVersionSurvivesExpiryAndDiscoversExternalChanges(t *testing.T) {
+	s := testService(t)
+	body, tag, err := s.FileListSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.listing.expires = time.Now().Add(-time.Second)
+	unchanged, next, err := s.FileListSnapshot()
+	if err != nil || tag != next || body != unchanged {
+		t.Fatalf("unchanged scan changed snapshot: %s %s %v", tag, next, err)
+	}
+	if err := os.WriteFile(filepath.Join(s.uploadDir, "external.txt"), []byte("external"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.listing.expires = time.Now().Add(-time.Second)
+	changed, next, err := s.FileListSnapshot()
+	if err != nil || tag == next || changed == body {
+		t.Fatalf("external change not versioned: %v", err)
+	}
+}
