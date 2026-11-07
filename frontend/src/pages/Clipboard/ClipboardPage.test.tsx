@@ -89,7 +89,7 @@ it('preserves the draft and retranslates an existing notice when switching langu
   await screen.findByText('文本已发布。');
   fireEvent.change(screen.getByLabelText('输入或粘贴文本'), { target: { value: '未发布的草稿' } });
   fireEvent.change(screen.getByRole('combobox', { name: '界面语言' }), { target: { value: 'en' } });
-  expect((screen.getByLabelText('Type or paste text') as HTMLTextAreaElement).value).toBe('未发布的草稿');
+  expect((await screen.findByLabelText('Type or paste text') as HTMLTextAreaElement).value).toBe('未发布的草稿');
   expect(screen.getByText('Text published.')).toBeTruthy();
   expect(screen.getByText('已发布的中文内容')).toBeTruthy();
   expect(createClipboard).toHaveBeenCalledTimes(1);

@@ -7,7 +7,7 @@ import { UploadQueueProvider } from '@/contexts/UploadQueueProvider';
 import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
 import { listFiles } from '@/services/files';
 import { getClipboardImageSettings, listClipboard } from '@/services/clipboard';
-import i18n from '@/i18n';
+import { changeLanguage } from '@/i18n';
 
 vi.mock('@/services/upload', () => ({
   initUpload: vi.fn(), uploadChunk: vi.fn(), completeUpload: vi.fn(), cancelUpload: vi.fn(),
@@ -73,7 +73,7 @@ it('loads a lazy page directly and keeps language switching available', async ()
 });
 
 it('localizes the unknown-route page', async () => {
-  await i18n.changeLanguage('en');
+  await changeLanguage('en');
   openApp('/missing');
   expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/');

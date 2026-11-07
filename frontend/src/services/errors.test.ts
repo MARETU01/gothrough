@@ -2,7 +2,7 @@ import { AxiosError, CanceledError } from 'axios';
 import { expect, it } from 'vitest';
 import { apiErrorMessage, getErrorBody, isCanceledError } from './errors';
 import { apiErrorDescriptor } from './errors';
-import i18n from '@/i18n';
+import { changeLanguage } from '@/i18n';
 import { translateMessage } from '@/i18n/messages';
 
 it('prefers the server error and preserves structured error details', () => {
@@ -24,7 +24,7 @@ it('falls back to the original message for network and non-HTTP failures', () =>
 it('translates known error codes and retains messages for unknown or older servers', async () => {
   const descriptor = apiErrorDescriptor({ isAxiosError: true, response: { data: { code: 'CHUNK_TOO_LARGE', error: '原始提示' } } });
   expect(translateMessage(descriptor)).toBe('分块超过大小限制');
-  await i18n.changeLanguage('en');
+  await changeLanguage('en');
   expect(translateMessage(descriptor)).toBe('Chunk exceeds the size limit');
   expect(apiErrorDescriptor({ isAxiosError: true, response: { data: { code: 'NEW_CODE', error: 'Unknown server detail' } } })).toBe('Unknown server detail');
   expect(apiErrorDescriptor(new Error('offline'))).toBe('offline');

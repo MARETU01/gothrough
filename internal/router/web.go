@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,7 +40,7 @@ func webHandler(assets fs.FS) gin.HandlerFunc {
 			}
 		}
 		name := strings.TrimPrefix(urlPath, "/")
-		if !fs.ValidPath(name) || path.Clean(name) != name {
+		if !fs.ValidPath(name) || path.Clean(name) != name || strings.HasSuffix(name, ".gz") {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
@@ -60,6 +61,69 @@ func webHandler(assets fs.FS) gin.HandlerFunc {
 		} else {
 			c.Header("Cache-Control", "no-cache")
 		}
-		files.ServeHTTP(c.Writer, c.Request)
+		if !serveCompressedWebAsset(c, assets, name) {
+			files.ServeHTTP(c.Writer, c.Request)
+		}
 	}
+}
+
+// Only frontend code is compressed; upload/download APIs never pass through here.
+func serveCompressedWebAsset(c *gin.Context, assets fs.FS, name string) bool {
+	if ext := path.Ext(name); ext != ".js" && ext != ".css" {
+		return false
+	}
+	c.Writer.Header().Add("Vary", "Accept-Encoding")
+	accepted := strings.Join(c.Request.Header.Values("Accept-Encoding"), ",")
+	gzipQuality := webEncodingQuality(accepted, "gzip")
+	identityQuality := webEncodingQuality(accepted, "identity")
+	if gzipQuality > 0 && gzipQuality >= identityQuality {
+		if compressed, err := fs.ReadFile(assets, name+".gz"); err == nil {
+			c.Header("Content-Encoding", "gzip")
+			c.Header("Content-Length", strconv.Itoa(len(compressed)))
+			// Use the original filename so ServeContent selects the JS/CSS MIME type.
+			http.ServeContent(c.Writer, c.Request, name, time.Time{}, bytes.NewReader(compressed))
+			return true
+		}
+	}
+	if identityQuality == 0 {
+		c.Header("Cache-Control", "no-store")
+		c.AbortWithStatus(http.StatusNotAcceptable)
+		return true
+	}
+	return false
+}
+
+// Explicit coding preferences override '*'; identity is acceptable by default.
+func webEncodingQuality(header, encoding string) float64 {
+	wildcard := -1.0
+	for _, entry := range strings.Split(header, ",") {
+		parts := strings.Split(entry, ";")
+		coding := strings.TrimSpace(parts[0])
+		if !strings.EqualFold(coding, encoding) && coding != "*" {
+			continue
+		}
+		quality := 1.0
+		for _, parameter := range parts[1:] {
+			key, value, ok := strings.Cut(strings.TrimSpace(parameter), "=")
+			if ok && strings.EqualFold(strings.TrimSpace(key), "q") {
+				parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+				if err != nil || !(parsed >= 0 && parsed <= 1) {
+					quality = 0
+				} else {
+					quality = parsed
+				}
+			}
+		}
+		if coding != "*" {
+			return quality
+		}
+		wildcard = quality
+	}
+	if encoding == "identity" && wildcard != 0 {
+		return 1
+	}
+	if wildcard >= 0 {
+		return wildcard
+	}
+	return 0
 }

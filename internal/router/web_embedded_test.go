@@ -3,6 +3,9 @@
 package router
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"io/fs"
 	"net/http/httptest"
 	"strings"
@@ -24,11 +27,12 @@ func TestEmbeddedBuildIncludesFrontend(t *testing.T) {
 		}
 	}
 	count := 0
+	compressedCount := 0
 	err := fs.WalkDir(root, "assets", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
+		if entry.IsDir() || strings.HasSuffix(name, ".gz") {
 			return nil
 		}
 		response := httptest.NewRecorder()
@@ -37,9 +41,31 @@ func TestEmbeddedBuildIncludesFrontend(t *testing.T) {
 			t.Errorf("embedded asset unavailable: %s (%d)", name, response.Code)
 		}
 		count++
+		if _, err := fs.Stat(root, name+".gz"); err == nil {
+			req := httptest.NewRequest("GET", "/"+name, nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			encoded := httptest.NewRecorder()
+			r.ServeHTTP(encoded, req)
+			if encoded.Code != 200 || encoded.Header().Get("Content-Encoding") != "gzip" {
+				t.Fatalf("compressed asset unavailable: %s (%d)", name, encoded.Code)
+			}
+			reader, err := gzip.NewReader(encoded.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil || !bytes.Equal(decoded, response.Body.Bytes()) {
+				t.Fatalf("compressed asset differs from original: %s (%v)", name, err)
+			}
+			compressedCount++
+		}
 		return nil
 	})
 	if err != nil || count == 0 {
 		t.Fatalf("no embedded assets: count=%d err=%v", count, err)
+	}
+	if compressedCount == 0 {
+		t.Fatal("build did not include precompressed frontend assets")
 	}
 }

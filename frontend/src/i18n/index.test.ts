@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { detectLanguage, LANGUAGE_STORAGE_KEY } from './index';
+import i18n, { changeLanguage, detectLanguage, LANGUAGE_STORAGE_KEY } from './index';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
 
@@ -19,4 +19,17 @@ it('keeps translation coverage and interpolation parameters aligned', () => {
     expect(en[key], key).not.toBe('');
     expect(placeholders(en[key]), key).toEqual(placeholders(zhCN[key]));
   }
+});
+
+it('loads a missing dictionary before applying and persisting the language', async () => {
+  i18n.removeResourceBundle('en', 'translation');
+  const changing = changeLanguage('en');
+  expect(i18n.resolvedLanguage).toBe('zh-CN');
+  await changing;
+  expect(i18n.hasResourceBundle('en', 'translation')).toBe(true);
+  expect(i18n.t('language.label')).toBe('Interface language');
+  expect(document.documentElement.lang).toBe('en');
+  expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en');
+  await changeLanguage('zh-CN');
+  expect(i18n.t('language.label')).toBe('界面语言');
 });

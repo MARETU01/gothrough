@@ -30,6 +30,8 @@ Open `http://localhost:8080` by default. The build installs dependencies as need
 
 The default configuration is copied to `config/config.yaml` under the output directory without overwriting an existing file. Configuration, certificates, and runtime data remain external.
 
+Frontend builds also generate gzip copies of JS/CSS files of at least 1 KiB when compression reduces their size. The embedded server automatically negotiates gzip with browsers and retains the original files for other clients. Compression happens during the build, requires no runtime setting or additional dependency, and reduces network traffic at the cost of a slightly larger executable. Upload and download APIs are unaffected.
+
 | Command | Purpose |
 | --- | --- |
 | `make` / `make build` | Build the executable with embedded frontend assets |

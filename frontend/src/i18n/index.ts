@@ -1,7 +1,5 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import zhCN from './locales/zh-CN.json';
-import en from './locales/en.json';
 
 export const LANGUAGE_STORAGE_KEY = 'gothrough.language';
 export const supportedLanguages = ['zh-CN', 'en'] as const;
@@ -25,18 +23,48 @@ function initialLanguage(): Language {
   catch { return detectLanguage(undefined, languages); }
 }
 
-// Keep small, offline-ready dictionaries in the bundle. Literal Chinese keys
-// keep static copy readable; parameterized messages use named keys.
-void i18n.use(initReactI18next).init({
-  resources: { 'zh-CN': { translation: zhCN }, en: { translation: en } },
-  lng: initialLanguage(),
-  supportedLngs: [...supportedLanguages],
-  fallbackLng: 'zh-CN',
-  keySeparator: false,
-  nsSeparator: false,
-  interpolation: { escapeValue: false },
-  initAsync: false,
-});
+const localeLoaders = {
+  'zh-CN': () => import('./locales/zh-CN.json').then(module => module.default),
+  en: () => import('./locales/en.json').then(module => module.default),
+};
+
+async function initialize() {
+  let language = initialLanguage();
+  let dictionary;
+  try {
+    dictionary = await localeLoaders[language]();
+  } catch (error) {
+    if (language === 'zh-CN') throw error;
+    language = 'zh-CN';
+    dictionary = await localeLoaders[language]();
+  }
+  await i18n.use(initReactI18next).init({
+    resources: { [language]: { translation: dictionary } },
+    lng: language,
+    supportedLngs: [...supportedLanguages],
+    // Both dictionaries have complete, matching keys (checked in tests).
+    // Avoid loading an additional fallback dictionary on an English visit.
+    fallbackLng: false,
+    load: 'currentOnly',
+    keySeparator: false,
+    nsSeparator: false,
+    interpolation: { escapeValue: false },
+    initAsync: false,
+  });
+}
+
+// Rendering and language changes wait until the initial dictionary is ready.
+export const i18nReady = initialize();
+
+export async function changeLanguage(language: Language) {
+  await i18nReady;
+  if (!i18n.hasResourceBundle(language, 'translation')) {
+    const dictionary = await localeLoaders[language]();
+    i18n.addResourceBundle(language, 'translation', dictionary);
+  }
+  // Keep the current UI and saved preference if downloading the locale fails.
+  await i18n.changeLanguage(language);
+}
 
 function updateDocument(language: string) {
   if (typeof document !== 'undefined') document.documentElement.lang = language;
