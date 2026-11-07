@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useBlocker } from 'react-router-dom';
+import { useEditorDraft } from '@/contexts/EditorDraftContext';
 import { downloadFileUrl, getFilePreview, previewFileUrl, saveFileText, type FilePreviewInfo } from '@/services/files';
 import { apiErrorDescriptor, getErrorBody } from '@/services/errors';
 import { translateMessage, type Message } from '@/i18n/messages';
@@ -13,10 +15,12 @@ import './FilePreview.css';
 
 export function FilePreview({ name, onClose, onSaved }: { name: string; onClose: () => void; onSaved?: () => void }) {
   const { t } = useTranslation();
-  const [info, setInfo] = useState<FilePreviewInfo | null>(null);
+  const preserved = useEditorDraft();
+  const [restored] = useState(() => preserved.draft?.name === name ? preserved.draft : null);
+  const [info, setInfo] = useState<FilePreviewInfo | null>(() => restored?.info ?? null);
   const [error, setError] = useState<Message>('');
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState(() => restored !== null);
+  const [draft, setDraft] = useState(() => restored?.text ?? '');
   const [saving, setSaving] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [editError, setEditError] = useState<Message>('');
@@ -29,27 +33,28 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   const reloadRequest = useRef<AbortController | null>(null);
   const dirty = editing && draft !== info?.text;
   const draftBytes = new TextEncoder().encode(draft).length;
+  const blocker = useBlocker(dirty || saving);
+  const navigationBlocked = blocker.state === 'blocked';
+  const hasPendingAction = navigationBlocked || pendingAction !== null;
 
   useEffect(() => {
-    if (editing && !pendingAction) editor.current?.focus();
-  }, [editing, pendingAction]);
+    // If a pending save succeeds, the blocked navigation no longer loses edits.
+    if (blocker.state === 'blocked' && !dirty && !saving) blocker.proceed();
+  }, [blocker, dirty, saving]);
+
+  useEffect(() => {
+    if (editing && !hasPendingAction) editor.current?.focus();
+  }, [editing, hasPendingAction]);
 
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; reloadRequest.current?.abort(); };
   }, []);
 
-  useEffect(() => {
-    if (!dirty && !saving) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty, saving]);
-
   function performAction(action: 'close' | 'cancel' | 'reload') {
-    if (action === 'close') onClose();
+    if (action === 'close') { preserved.discard(name); onClose(); }
     else if (action === 'reload') void reload();
-    else { setEditing(false); setEditError(''); }
+    else { preserved.discard(name); setEditing(false); setEditError(''); }
   }
   function requestAction(action: 'close' | 'cancel' | 'reload') {
     if (busy.current || reloading) return;
@@ -57,8 +62,26 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
     else performAction(action);
   }
   function close() {
-    if (pendingAction) setPendingAction(null);
+    if (navigationBlocked) { blocker.reset(); setPendingAction(null); }
+    else if (pendingAction) setPendingAction(null);
     else requestAction('close');
+  }
+
+  function confirmDiscard() {
+    if (navigationBlocked) {
+      preserved.discard(name);
+      setPendingAction(null);
+      blocker.proceed();
+    } else if (pendingAction) {
+      const action = pendingAction;
+      setPendingAction(null);
+      performAction(action);
+    }
+  }
+
+  function keepEditing() {
+    if (navigationBlocked) blocker.reset();
+    setPendingAction(null);
   }
 
   async function save() {
@@ -67,6 +90,7 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
     try {
       const result = await saveFileText(name, draft, info.version);
       if (!alive.current) return;
+      preserved.discard(name);
       setInfo({ ...info, text: draft, version: result.version });
       setEditing(false); setConflict(false); setSaved(true);
       onSaved?.();
@@ -89,6 +113,7 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
     try {
       const result = await getFilePreview(name, controller.signal);
       if (!alive.current) return;
+      preserved.discard(name);
       setInfo(result); setDraft(result.text); setEditing(false); setConflict(false); setSaved(false);
     } catch (reason) {
       if (alive.current) setEditError(apiErrorDescriptor(reason));
@@ -96,6 +121,9 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
   }
 
   useEffect(() => {
+    // Do not replace a restored draft's base version with a fresh server version:
+    // another device may have edited the file while this session was locked.
+    if (restored) return;
     const controller = new AbortController();
     void getFilePreview(name, controller.signal).then(result => {
       if (!controller.signal.aborted) setInfo(result);
@@ -103,26 +131,26 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
       if (!controller.signal.aborted) setError(apiErrorDescriptor(reason));
     });
     return () => controller.abort();
-  }, [name]);
+  }, [name, restored]);
 
   const url = previewFileUrl(name);
   return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving || reloading} onClose={close}>
-      {pendingAction && <ConfirmPanel message={t('edit.discard')} confirmLabel={t('edit.discardConfirm')} cancelLabel={t('edit.keepEditing')} onConfirm={() => { const action = pendingAction; setPendingAction(null); performAction(action); }} onCancel={() => setPendingAction(null)} />}
+      {hasPendingAction && <ConfirmPanel message={t('edit.discard')} disabled={saving || reloading} confirmLabel={t('edit.discardConfirm')} cancelLabel={t('edit.keepEditing')} onConfirm={confirmDiscard} onCancel={keepEditing} />}
       {error ? <StatusMessage tone="error">{translateMessage(error)}</StatusMessage> : !info ? <StatusMessage tone="loading">{t('preview.loading')}</StatusMessage> : <>
         {info.kind === 'text' && <>
           <div className="file-editor-toolbar">
             {editing ? <>
-              <Button disabled={saving || reloading || !!pendingAction || !dirty || conflict || draftBytes > 1048576} onClick={() => void save()}>{t(saving ? 'edit.saving' : 'edit.save')}</Button>
-              <Button variant="outline" disabled={saving || reloading || !!pendingAction} onClick={() => requestAction('cancel')}>{t('edit.cancel')}</Button>
+              <Button disabled={saving || reloading || hasPendingAction || !dirty || conflict || draftBytes > 1048576} onClick={() => void save()}>{t(saving ? 'edit.saving' : 'edit.save')}</Button>
+              <Button variant="outline" disabled={saving || reloading || hasPendingAction} onClick={() => requestAction('cancel')}>{t('edit.cancel')}</Button>
               <span>{t('edit.bytes', { count: draftBytes })}</span>
             </> : <Button variant="outline" disabled={!info.version || reloading} onClick={() => { setDraft(info.text); setEditing(true); setEditError(''); setSaved(false); }}>{t('edit.button')}</Button>}
-            {conflict && <RefreshButton loading={reloading} disabled={saving || !!pendingAction} onClick={() => requestAction('reload')} label={t('edit.reload')} />}
+            {conflict && <RefreshButton loading={reloading} disabled={saving || hasPendingAction} onClick={() => requestAction('reload')} label={t('edit.reload')} />}
           </div>
           {editError && <StatusMessage tone="error">{translateMessage(editError)}</StatusMessage>}
           {saved && <StatusMessage tone="success">{t('edit.saved')}</StatusMessage>}
           {editing ? <>
             <label className="sr-only" htmlFor="file-editor-text">{t('edit.content')}</label>
-            <textarea ref={editor} id="file-editor-text" className="file-editor-text" spellCheck={false} value={draft} disabled={saving || reloading || !!pendingAction} aria-invalid={draftBytes > 1048576} onChange={event => setDraft(event.target.value)} />
+            <textarea ref={editor} id="file-editor-text" className="file-editor-text" spellCheck={false} value={draft} disabled={saving || reloading || hasPendingAction} aria-invalid={draftBytes > 1048576} onChange={event => { setDraft(event.target.value); if (info) preserved.remember({ name, info, text: event.target.value }); }} />
             {draftBytes > 1048576 && <StatusMessage tone="error">{t('errors.TEXT_TOO_LARGE')}</StatusMessage>}
           </> : <pre>{info.text}</pre>}
         </>}

@@ -44,6 +44,8 @@ Clipboard images use the same preview dialog. Automatic clipboard updates pause 
 
 Text previews offer Edit, Save, and Cancel editing. Discarding a modified draft requires confirmation; failed saves preserve the draft. Successful saves refresh file sizes and modification times in the list.
 
+Browser Back/Forward and in-app navigation also block unsaved edits, offering to continue editing or discard. Navigation waits for pending saves. Expired-session drafts stay in page memory and reopen when the user unlocks and returns to the file list, retaining their original version for conflict checks. Drafts are not written to persistent browser storage; refreshing or closing the page still warns about unsaved changes.
+
 Text preview metadata includes `version`. Send `PUT /api/files/*filename` with `{"text":"new content","version":"preview version"}`. Success returns the new version. Missing versions return 428, changed contents return 409, and deleted files return 404. On conflict, copy any draft content you need before reloading; forced overwrites are not offered.
 
 Only supported UTF-8 text files up to 1 MiB after encoding (including BOM and line endings) can be edited. Original BOM and permission bits are preserved. Editors use LF; saves retain the source's first newline style (LF, CRLF, or CR). Unchanged content preserves original bytes, including mixed endings. Writes use a synced temporary file in the same directory before replacement. Version checking and edits/deletes within the service are serialized. Do not run multiple editing services against the same data directory or modify files externally during a save.

@@ -117,7 +117,7 @@ func SafeUploadRelpath(filename, uploadFolder string) string {
 	}
 
 	cleaned := filepath.Clean(filename)
-	if strings.HasPrefix(cleaned, "..") || cleaned == ".." {
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
 		return ""
 	}
 

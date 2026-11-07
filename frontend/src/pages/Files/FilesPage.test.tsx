@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FilesPage from './FilesPage';
 import { deleteFile, getDiskInfo, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
@@ -33,7 +33,7 @@ afterEach(() => {
   if (originalVisibility) Object.defineProperty(document, 'visibilityState', originalVisibility);
   else Reflect.deleteProperty(document, 'visibilityState');
 });
-const openPage = () => render(createElement(MemoryRouter, null, createElement(FilesPage)));
+const openPage = () => render(createElement(RouterProvider, { router: createMemoryRouter([{ path: '*', element: createElement(FilesPage) }]) }));
 
 const advancePoll = (milliseconds = FILES_REFRESH_INTERVAL_MS) =>
   act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });

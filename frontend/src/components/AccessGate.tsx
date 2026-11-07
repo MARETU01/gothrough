@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { LockKeyhole, ArrowRight, ShieldCheck } from 'lucide-react';
 import { responseApi } from '@/services/http';
 import { AccessContext } from '@/contexts/AccessContext';
+import { useEditorDraft } from '@/contexts/EditorDraftContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { Button } from './ui/button';
 import { StatusMessage } from './StatusMessage';
@@ -13,6 +14,7 @@ type AccessState = { enabled: boolean; authenticated: boolean };
 
 export function AccessGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
+  const { draft: preservedDraft } = useEditorDraft();
   const [access, setAccess] = useState<AccessState | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -77,6 +79,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <span className="access-eyebrow">{t('auth.privateSpace')}</span>
       <h1 id="access-title">{t('auth.title')}</h1>
       <p className="access-description">{t('auth.description')}</p>
+      {preservedDraft && <StatusMessage>{t('auth.draftPreserved')}</StatusMessage>}
       {access ? <form onSubmit={event => void login(event)}>
         <label htmlFor="access-password">{t('auth.password')}</label>
         <input id="access-password" type="password" autoComplete="current-password" autoFocus maxLength={256} placeholder={t('auth.placeholder')} value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} aria-describedby={error ? 'access-error' : undefined} aria-invalid={error === 'auth.invalid'} />

@@ -17,6 +17,7 @@ import { Timestamp } from '@/components/Timestamp';
 import { timestampValue } from '@/utils/dateTime';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { DISK_REFRESH_INTERVAL_MS, FILES_REFRESH_INTERVAL_MS } from '@/config/files';
+import { useEditorDraft } from '@/contexts/EditorDraftContext';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
@@ -45,7 +46,8 @@ export default function FilesPage() {
   const [page, setPage] = useState(1);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [previewing, setPreviewing] = useState<string | null>(null);
+  const { draft: preservedDraft } = useEditorDraft();
+  const [previewing, setPreviewing] = useState<string | null>(() => preservedDraft?.name ?? null);
   const deleteInProgress = useRef(false);
   const autoPaused = confirming !== null || deleting !== null || previewing !== null;
   const autoRefresh = useCallback(async () => {

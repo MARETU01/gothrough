@@ -55,3 +55,17 @@ func TestFilenameSmallLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeUploadRelpathAllowsDotPrefixesWithoutAllowingTraversal(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"..notes.txt", "..backup/report.txt", ".hidden", "nested/..notes.txt"} {
+		if got := SafeUploadRelpath(name, root); filepath.ToSlash(got) != name {
+			t.Fatalf("valid name %q rejected: %q", name, got)
+		}
+	}
+	for _, name := range []string{"..", "../secret.txt", `..\secret.txt`, "nested/../../secret.txt"} {
+		if got := SafeUploadRelpath(name, root); got != "" {
+			t.Fatalf("traversal %q accepted: %q", name, got)
+		}
+	}
+}

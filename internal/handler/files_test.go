@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,49 @@ import (
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/model"
 )
+
+func TestDotPrefixedUploadedFilesCanBeReadEditedAndDeleted(t *testing.T) {
+	for _, name := range []string{"..notes.txt", "..backup.folder/report.txt"} {
+		t.Run(name, func(t *testing.T) {
+			s, h := setup(t)
+			info, err := s.InitSession(model.InitRequest{Filename: filepath.Base(name), RelativePath: name, TotalSize: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.WriteChunk(info.SessionID, 0, bytes.NewBufferString("old")); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := s.CompleteSession(info.SessionID); err != nil {
+				t.Fatal(err)
+			}
+			path := "/api/files/" + url.PathEscape(name)
+			res := httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path, nil))
+			if res.Code != 200 || res.Body.String() != "old" {
+				t.Fatalf("download: %d %s", res.Code, res.Body.String())
+			}
+			res = httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path+"?preview=info", nil))
+			var preview struct{ Version string }
+			if err := json.Unmarshal(res.Body.Bytes(), &preview); err != nil {
+				t.Fatal(err)
+			}
+			body, _ := json.Marshal(map[string]string{"text": "updated", "version": preview.Version})
+			req := httptest.NewRequest(http.MethodPut, path, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			res = httptest.NewRecorder()
+			h.ServeHTTP(res, req)
+			if res.Code != 200 {
+				t.Fatalf("edit: %d %s", res.Code, res.Body.String())
+			}
+			res = httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, path, nil))
+			if res.Code != 200 {
+				t.Fatalf("delete: %d %s", res.Code, res.Body.String())
+			}
+		})
+	}
+}
 
 func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 	s, h := setup(t)

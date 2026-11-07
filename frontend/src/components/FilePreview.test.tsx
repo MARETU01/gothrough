@@ -3,6 +3,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { FilePreview } from './FilePreview';
 import { getFilePreview, saveFileText } from '@/services/files';
 import { AxiosError } from 'axios';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import type { ReactNode } from 'react';
+
+const renderPreview = (element: ReactNode) => render(<RouterProvider router={createMemoryRouter([{ path: '*', element }])} />);
 
 vi.mock('@/services/files', async original => ({
   ...await original<typeof import('@/services/files')>(), getFilePreview: vi.fn(), saveFileText: vi.fn(),
@@ -12,7 +16,7 @@ it('saves edits with the preview version and updates the preview', async () => {
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'old', version: 'v1' });
   vi.mocked(saveFileText).mockResolvedValue({ version: 'v2' });
   const onSaved = vi.fn();
-  render(<FilePreview name="file.txt" onClose={vi.fn()} onSaved={onSaved} />);
+  renderPreview(<FilePreview name="file.txt" onClose={vi.fn()} onSaved={onSaved} />);
   fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
   fireEvent.change(screen.getByRole('textbox', { name: '文件内容' }), { target: { value: 'new' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
@@ -29,7 +33,7 @@ it('keeps drafts after conflicts and asks before discarding on escape or reload'
   reason.response = { data: { code: 'TEXT_CONFLICT' }, status: 409, statusText: '', headers: {}, config: {} as never };
   vi.mocked(saveFileText).mockRejectedValue(reason);
   const onClose = vi.fn();
-  render(<FilePreview name="file.txt" onClose={onClose} />);
+  renderPreview(<FilePreview name="file.txt" onClose={onClose} />);
   fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'my draft' } });
   fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }));
@@ -51,7 +55,7 @@ it('renders uploaded markup as text, keeps download available, and restores focu
   const trigger = document.createElement('button');
   document.body.append(trigger); trigger.focus();
   const onClose = vi.fn();
-  const view = render(<FilePreview name="folder/代码.html" onClose={onClose} />);
+  const view = renderPreview(<FilePreview name="folder/代码.html" onClose={onClose} />);
   expect((await screen.findByText('<script>alert(1)</script>')).tagName).toBe('PRE');
   expect(view.container.querySelector('script')).toBeNull();
   expect(screen.getByRole('link', { name: '下载' }).getAttribute('href')).toBe('/api/files/' + encodeURIComponent('folder/代码.html'));
@@ -62,7 +66,7 @@ it('renders uploaded markup as text, keeps download available, and restores focu
 
 it('reports unsupported previews and aborts pending requests when closed', async () => {
   vi.mocked(getFilePreview).mockRejectedValue(new Error('unsupported'));
-  const view = render(<FilePreview name="sample.bin" onClose={vi.fn()} />);
+  const view = renderPreview(<FilePreview name="sample.bin" onClose={vi.fn()} />);
   expect((await screen.findByRole('alert')).textContent).toBe('unsupported');
   const signal = vi.mocked(getFilePreview).mock.calls.at(-1)![1]!;
   view.unmount(); expect(signal.aborted).toBe(true);
@@ -71,7 +75,7 @@ it('reports unsupported previews and aborts pending requests when closed', async
 it('streams media through the protected URL and handles unsupported browser codecs', async () => {
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'video', mime_type: 'video/mp4', text: '' });
   const onClose = vi.fn();
-  const view = render(<FilePreview name="movie.mp4" onClose={onClose} />);
+  const view = renderPreview(<FilePreview name="movie.mp4" onClose={onClose} />);
   await waitFor(() => expect(view.container.querySelector('video')).not.toBeNull());
   const video = view.container.querySelector('video')!;
   expect(video.getAttribute('src')).toBe('/api/files/movie.mp4?preview=1');
