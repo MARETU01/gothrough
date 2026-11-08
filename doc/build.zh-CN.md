@@ -26,11 +26,11 @@ make build
 ./release/gothrough
 ```
 
-默认访问 `http://localhost:9815`。构建按需安装依赖、生成前端资源，再以 `embedweb` 标签编译 Go。部署只需可执行文件、外部配置及所需证书，目标机器无需 Node.js。程序还需有数据目录的读写权限；端口、TLS 和数据目录规则见[配置说明](configuration.zh-CN.md)。
+构建按需安装依赖、生成前端资源，再以 `embedweb` 编译 Go。默认访问 `http://localhost:9815`。部署只需可执行文件、配置及证书，并保证数据目录可读写；详见[配置说明](configuration.zh-CN.md)，部署机器无需 Node.js。
 
 默认配置复制到输出目录的 `config/config.yaml`，已有文件不会被覆盖。配置、证书和运行数据均不嵌入程序。
 
-前端构建还会为不小于 1 KiB 且压缩后更小的 JS/CSS 文件生成 gzip 副本。嵌入版服务自动根据浏览器支持情况返回 gzip，其他客户端仍可获取原文件。压缩在构建时完成，无需运行时配置或额外依赖，以可执行文件略微增大换取网络传输量减少。上传和下载 API 不受影响。
+构建为不小于 1 KiB 且压缩后更小的 JS/CSS 生成 gzip 副本，嵌入服务自动协商压缩或原始资源，无需运行时配置。
 
 | 命令 | 用途 |
 | --- | --- |
@@ -64,11 +64,10 @@ GOOS=linux GOARCH=amd64 make build
 本地执行：
 
 ```sh
-make install
 make -j2 build test
 ```
 
-`make test` 已包含前端 lint 和测试、普通及嵌入版 Go 测试和 vet，无需重复运行。具备 CGO 和 C 编译器时补充 race 检测：
+`make test` 包含前端构建、lint、测试及普通和嵌入版 Go 测试、vet；浏览器测试[单独运行](../frontend/README.zh-CN.md#浏览器流程测试)。具备 CGO 和 C 编译器时补充 race 检测：
 
 ```sh
 make test-race
@@ -86,9 +85,25 @@ make test-race
 
 Go 版本从 `go.mod` 读取，Node.js 使用 26.x，依赖按 lockfile 安装。Windows 无 C 工具链时，可在本地完成其他检查并查看 CI 的 Linux race 结果。镜像凭据、标签规则和发布步骤集中在 [Docker 部署](docker.zh-CN.md#github-自动构建与发布)。
 
+### 按需检查
+
+资源紧张时可降低前端测试并发：
+
+```sh
+npm --prefix frontend test -- --maxWorkers=2
+```
+
+测量未变化的列表快照获取和并发响应编码：
+
+```sh
+go test ./internal/service ./internal/handler -run '^$' -bench 'BenchmarkFileListSnapshot|BenchmarkFileResponseConcurrentMisses' -benchmem
+```
+
+这些基准只测快照获取和编码开销，不包含磁盘扫描或完整 HTTP 延迟。
+
 ## GitHub Release
 
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) 在推送 `v*` 标签时运行。版本须符合 Docker 发布的格式，例如 `v0.0.4` 或 `v0.0.4-beta.1`，且标签对应的提交已包含在 `main` 历史中。先合并并推送工作流，再打标签；标签对应的提交必须包含该工作流。
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) 在推送 `v*` 标签时运行。版本须符合 Docker 发布的格式，例如 `v0.0.4` 或 `v0.0.4-beta.1`，标签提交须已包含在远程 `main` 中，并包含发布工作流。
 
 工作流先校验版本、检查前端 lint 和测试，执行普通及嵌入版 Go 测试与 vet，并构建一次前端。随后六个 Linux 任务并行通过 `CGO_ENABLED=0`、`embedweb` 标签交叉编译：
 
@@ -100,7 +115,7 @@ Go 版本从 `go.mod` 读取，Node.js 使用 26.x，依赖按 lockfile 安装�
 
 每个压缩包内有一个目录，包含可执行文件和受版本控制的 `config/config.yaml` 模板，不包含本地运行配置。交叉编译验证各平台代码可以编译；该工作流在 Linux 上运行测试，不会逐一在目标系统执行测试。
 
-Actions 产物直接上传上述压缩包，名称包含项目名、版本、系统和架构，不再套一层 ZIP；Linux/macOS 下载为 `.tar.gz`，Windows 下载为 `.zip`。前端共享资源是独立的内部产物，不会附加到 Release。
+Actions 直接上传原格式压缩包，不额外套 ZIP；前端共享资源仅作为内部产物，不附加到 Release。
 
 全部构建成功后，工作流创建 GitHub Release **草稿**，自动生成更新说明，并上传六个压缩包和 `SHA256SUMS`。预发布标签会自动将草稿标记为预发布。仅最后的上传任务拥有 `contents: write` 权限，使用内置 `GITHUB_TOKEN`，无需另配 Release 密钥；仓库或组织策略须允许该权限。
 

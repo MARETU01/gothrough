@@ -4,116 +4,128 @@ English | [简体中文](transfer.zh-CN.md)
 
 [Back to the project README](../README.md)
 
-## Upload and File APIs
+## Using the UI
 
-All backend endpoints use the `/api` prefix.
+- Browse folders with breadcrumbs, search, sorting, and pagination. Search covers all files and shows full paths; clearing it restores the current directory. The URL's `dir` preserves location through reloads and history. Empty directories disappear from the browser, which falls back to a surviving parent. Narrow screens show file cards.
+- File lists refresh 3 seconds after each request; disk information refreshes independently every 15 seconds. Updates retain data and filters, pause during deletion confirmation/requests and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh when visible. Failures retain data and action feedback; manual refresh and successful edits/deletions refresh both resources.
+- Previews support images, UTF-8 text, PDFs, and browser-supported media, with download fallback. Escape closes the dialog; phones use a full-screen view. Clipboard images share the dialog and pause automatic updates while open.
+- Signing out with unfinished uploads requires confirmation. Confirming interrupts transfers and clears the queue; cancelling keeps it running. Refreshing the browser or restarting the server cannot resume uploads.
+
+## Authentication
+
+All endpoints use `/api`. With password protection enabled, file, upload, disk, and clipboard endpoints require a session; browser mutations also pass same-origin checks. See [access configuration](configuration.md#access-password) for cookies, proxy settings, and login limits.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/auth/status` | Return `enabled` and `authenticated` |
+| POST | `/api/auth/login` | Send `{"password":"<password>"}` to obtain a session cookie |
+| POST | `/api/auth/logout` | Revoke the current session and clear its cookie |
+
+## Upload and File APIs
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/upload/init` | Initialize an upload |
 | POST | `/api/upload/chunk` | Upload a chunk |
-| GET | `/api/upload/status/:session_id` | Query upload progress |
-| POST | `/api/upload/complete` | Complete an upload |
-| POST | `/api/upload/cancel` | Cancel an upload |
+| GET | `/api/upload/status/:session_id` | Query progress or a completion receipt |
+| POST | `/api/upload/complete` | Validate and publish the file |
+| POST | `/api/upload/cancel` | Cancel and clean up a session |
 | GET | `/api/files` | List files |
-| GET | `/api/files/*filename` | Download a file, with Range request support |
-| GET | `/api/folder-download?path=relative-folder` | Stream a folder as ZIP |
+| GET | `/api/files/*filename` | Download or preview; supports Range |
+| PUT | `/api/files/*filename` | Save text with a version check |
 | DELETE | `/api/files/*filename` | Delete a file |
+| GET | `/api/folder-download?path=relative-folder` | Stream a folder ZIP |
 | GET | `/api/disk-info` | Get disk information |
 
-Encode filenames when using them as URL path parameters.
+URL-encode relative file paths and folder query parameters.
 
-The file browser shows direct children of the current directory, with folders first and pagination within that directory. Open folders to browse their contents; breadcrumbs and Up one level navigate to parents. The URL's `dir` parameter preserves the location through reloads and browser history. Search covers all files and shows full paths; clearing search restores the current directory. When a directory's last file disappears, the browser falls back to its nearest surviving parent.
+### File queries
 
-On narrow screens, file rows become cards with file metadata and visible preview, download, and delete controls. Desktop retains the table. Locking the application with unfinished uploads (including queued or paused files) requires confirmation: signing out interrupts transfers and clears the in-memory queue. Cancelling the confirmation keeps the queue running.
+`GET /api/files?view=browser` filters and paginates on the server. Parameters are `dir` (relative directory, default root), `q` (case-insensitive full-path search, up to 1024 bytes), `sort` (default `mtime_desc`), `page` (positive integer, default 1), and `page_size` (1–100, default 20). Sort options are `mtime_asc`, `mtime_desc`, `size_asc`, `size_desc`, `name_asc`, and `name_desc`; invalid queries return `400 INVALID_FILE_QUERY`.
 
-`GET /api/files?view=browser` performs directory filtering, search, sorting, and pagination on the server. Parameters: `dir` (relative directory, default root), `q` (case-insensitive full-path search, up to 1024 bytes), `sort` (`mtime_desc` by default; also `mtime_asc`, `size_asc`, `size_desc`, `name_asc`, `name_desc`), `page` (positive integer, default 1), and `page_size` (1–100, default 20). Invalid parameters return `400` with `INVALID_FILE_QUERY`. Folders stay first; name ordering is case-insensitive lexical ordering with full-path tie breaking, independent of browser locale. Search returns matching files across all directories. Missing directories fall back to their nearest surviving parent and out-of-range pages clamp to the last available page.
+For example, `/api/files?view=browser&dir=docs&page=2&page_size=20` returns direct children of `docs`, folders first. Names sort case-insensitively with full-path tie breaking, independent of browser locale. Search spans all directories. Missing directories fall back to surviving parents; pages beyond the result clamp to the last page.
 
-The browser response contains paged `files` with `folder` and `label` fields, resolved `directory`, matched `total`, `folder_count`, global `total_files`, `page`, `page_size`, `total_pages`, and global `total_size_display`. It uses query-specific ETags and conditional requests; accepted validators never cross queries. The directory index and up to 32 cached query responses share the existing snapshot lifetime and are invalidated with file mutations. This bounds response sizes and client work; the server still scans metadata after the existing cache expires. Original combined and `view=list` responses remain compatible with older clients, and the frontend can still display their full snapshots.
+Responses contain `files` (name, size, size display, `mtime`, `folder`, `label`), resolved `directory`, matched `total` and `folder_count`, global `total_files` and `total_size_display`, and `page`, `page_size`, `total_pages`. Timestamps use RFC3339 with timezone offsets; the UI displays local time and sorts by instant.
 
-Folders are derived from uploaded file paths. Choose Download ZIP on a folder row to download the whole folder, regardless of file pagination or search results. URL-encode the `path` query parameter. It must name a folder inside the upload directory; downloading the upload root is not supported. ZIP entries retain the selected folder name and internal hierarchy, skipping symlinks and special files. Archives stream directly without temporary ZIP files. At most two folder archives run at once, also sharing the download concurrency limit; excess requests return `429`. Folder downloads use the existing access authentication.
+| Request | Response and caching |
+| --- | --- |
+| `GET /api/files?view=browser` | Paged data with a query-specific ETag |
+| `GET /api/files?view=list` | Full file list, total bytes/display, and `has_files`, with an ETag |
+| `GET /api/files` | Legacy combined file/disk response, without a listing ETag |
+| `GET /api/disk-info` | Disk total/used/free values and displays, `disk_pct`, `disk_pct_warning`, and upload totals |
 
-Dynamic archives do not support Range/resume or snapshots. Avoid editing or deleting source files during download. Read failures or client disconnects abort the download rather than complete a partial ZIP; retry the download. Uploads do not preserve empty directories, but existing empty subdirectories on disk are included in archives.
+Responses use `Cache-Control: no-store`. Conditional reads send `If-None-Match`; unchanged content returns an empty `304`. Reuse validators only for the same query and accepted responses; manual refresh fetches full data. Uploads, edits, and deletions invalidate listing caches; external changes appear after the 2-second scan cache expires. Disk changes do not affect listing ETags. The frontend also supports older full-list responses. Cache implementation belongs in [architecture](architecture.md#queries-and-http-responses).
 
-File list `mtime` values use RFC3339 timestamps with timezone offsets. The UI displays them in the viewer's local timezone and selected language, and sorts by the actual instant.
+### Folder ZIP downloads
 
-The file list checks for changes 3 seconds after each request; disk information refreshes independently every 15 seconds. Search, sorting, and pagination are preserved. Updates pause during deletion confirmation, deletion requests, and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh immediately when visible again. Each failed poll retains its data and retries without clearing operation errors. Manual refresh and successful edits/deletions immediately refresh both resources. Background reads do not show the foreground loading state.
+The `path` must select a folder inside uploads; downloading the upload root is unsupported. ZIPs contain the whole selected folder and hierarchy, independent of file pagination/search, and skip symlinks and special files. Existing empty subdirectories are included, although uploads do not preserve them.
 
-`GET /api/files?view=list` returns only the file listing and total size with an ETag. Background updates send `If-None-Match` and receive an empty `304` when unchanged. Validators are committed only for accepted responses; cancelled requests cannot advance them. Manual refresh fetches the full listing. The server caches serialized snapshots and reuses them for unchanged scans. Uploads, edits, and deletions invalidate the cache immediately; external changes follow the existing 2-second scan cache. Disk changes do not affect listing validators.
-
-`GET /api/disk-info` independently returns disk capacity, used/free space, `disk_pct`, and `disk_pct_warning`. The original `GET /api/files` retains its combined response for existing clients, without a listing-only ETag. Both resources use `Cache-Control: no-store`.
+Archives stream without temporary ZIPs, Range support, or source snapshots. Avoid changing source files during download. Read failures/disconnects abort the stream; retry the download. At most two archives run concurrently and also consume shared download slots; excess requests return `429`.
 
 ### File preview
 
-The file list opens previews in a modal, full screen on phones. Close it or press Escape to return to the list. Images, UTF-8 text, PDFs, and browser-supported audio/video are supported, with a download fallback.
+`GET /api/files/*filename?preview=info` returns `kind` (`text`, `image`, `pdf`, `audio`, or `video`), `mime_type`, and `text`; text results also include `version`. Text is limited to 1 MiB (413 when exceeded); unsupported types/encodings return 415. HTML, SVG, and code render as plain text without execution.
 
-Clipboard images use the same preview dialog. Automatic clipboard updates pause while it is open and resume after closing.
-
-`GET /api/files/*filename?preview=info` returns `kind`, `mime_type`, and `text`. The kind is `text`, `image`, `pdf`, `audio`, or `video`; only text previews contain a text body. Text is limited to 1 MiB (413 for oversized files); unsupported types or encodings return 415. HTML, SVG, and source code are displayed as plain text without executing content.
-
-`GET /api/files/*filename?preview=1` serves supported files inline with Range support. Both modes reuse download authentication and path validation and disable caching. Regular downloads retain their existing behavior.
+`?preview=1` serves supported content inline with Range. Both modes reuse download authentication/path checks and disable caching.
 
 ### Text editing
 
-Text previews offer Edit, Save, and Cancel editing. Discarding a modified draft requires confirmation; failed saves preserve the draft. Successful saves refresh file sizes and modification times in the list.
+Send `PUT /api/files/*filename` with `{"text":"new content","version":"<preview version>"}`. Success returns the new `version`; a missing version returns 428, changed contents 409, and a deleted file 404. Conflicts retain drafts and offer no forced overwrite.
 
-Browser Back/Forward and in-app navigation also block unsaved edits, offering to continue editing or discard. Navigation waits for pending saves. Expired-session drafts stay in page memory and reopen when the user unlocks and returns to the file list, retaining their original version for conflict checks. Drafts are not written to persistent browser storage; refreshing or closing the page still warns about unsaved changes.
+Edits support UTF-8 text up to 1 MiB after encoding, including BOM and line endings. Saves preserve BOM, permissions, and the original first newline style (LF, CRLF, or CR); unchanged text preserves all original bytes. Replacement is atomic, with version checks serialized against in-service edits/deletes. Use one server per data directory and avoid external writes during saves.
 
-Text preview metadata includes `version`. Send `PUT /api/files/*filename` with `{"text":"new content","version":"preview version"}`. Success returns the new version. Missing versions return 428, changed contents return 409, and deleted files return 404. On conflict, copy any draft content you need before reloading; forced overwrites are not offered.
-
-Only supported UTF-8 text files up to 1 MiB after encoding (including BOM and line endings) can be edited. Original BOM and permission bits are preserved. Editors use LF; saves retain the source's first newline style (LF, CRLF, or CR). Unchanged content preserves original bytes, including mixed endings. Writes use a synced temporary file in the same directory before replacement. Version checking and edits/deletes within the service are serialized. Do not run multiple editing services against the same data directory or modify files externally during a save.
-
-All unlocked visitors may edit, following the existing shared access model. When password protection is enabled, PUT requests require a valid session and pass the same-origin checks.
+Unsaved edits require confirmation before discarding or navigating; navigation waits for pending saves. Failed saves retain drafts. Expired-session drafts remain in page memory and reopen after unlocking with their original version. Refreshing/closing warns about unsaved changes but does not persist drafts.
 
 ## Clipboard API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/clipboard` | List the latest entries in an `entries` array |
-| POST | `/api/clipboard` | Publish text with a JSON body such as `{"text":"shared content"}` |
+| GET | `/api/clipboard` | Return newest-first `entries` |
+| POST | `/api/clipboard` | Publish text: `{"text":"shared content"}` |
 | DELETE | `/api/clipboard/:id` | Delete one entry |
 | DELETE | `/api/clipboard` | Clear all entries |
-| GET | `/api/clipboard/image-config` | Get image availability and configured limits |
-| POST | `/api/clipboard/image` | Publish a PNG/JPEG using the multipart field `image` |
-| GET | `/api/clipboard/:id/image` | Serve the original PNG; `?download=1` downloads it, `?thumbnail=1` serves a thumbnail |
+| GET | `/api/clipboard/image-config` | Get image availability and limits |
+| POST | `/api/clipboard/image` | Publish PNG/JPEG using multipart field `image` |
+| GET | `/api/clipboard/:id/image` | Original PNG; `?download=1` downloads, `?thumbnail=1` serves a thumbnail |
 
-Successful publication returns the created entry. Entries include `id` and `created_at`; `type` identifies the entry type, with a missing value treated as text for compatibility. Text entries contain `text`; image entries contain `image` metadata. Text is treated as plain text, limited to 65,536 UTF-8 bytes per entry. The latest 100 entries across text and images are retained.
+Publication returns the created entry with `id`, `created_at`, and `type` (missing means text for compatibility). Text entries contain `text`; image entries contain `image` metadata. The latest 100 entries are retained; each text entry supports 65,536 UTF-8 bytes. Responses use `Cache-Control: no-store`; lists support ETag/`If-None-Match` and empty `304` responses.
 
-Clipboard responses use `Cache-Control: no-store`. Lists provide an `ETag`; `If-None-Match` returns `304` without a body when content is unchanged, or the full list when it changes.
-
-See [configuration](configuration.md#image-clipboard) for image limits, decoding concurrency, and storage recovery rules.
-
-Lists display PNG thumbnails with a maximum edge of 320 pixels; copying and downloading use the original. Thumbnails are cached in memory and released when entries are deleted or evicted. After restart, they are rebuilt on first access and need no separate backup.
+PNG thumbnails have a maximum edge of 320 pixels; copying/downloading uses originals. Thumbnail caches are released on deletion/eviction and rebuilt after restart. See [image configuration](configuration.md#image-clipboard) for limits, persistence, and recovery.
 
 ## Upload Flow
 
-1. Initialize with the filename, size, and optional `relative_path` to obtain a session, chunk size, and transport mode.
-2. Send chunks using the returned size. `upload_transport: "raw"` indicates an `application/octet-stream` request body; use multipart if the server does not advertise this capability. The server also accepts multipart clients.
-3. After sending all chunks, call completion. The server validates the file size and chunk completeness before publishing the file. Use the cancellation endpoint to cancel a task.
+1. Initialize with a filename, size, and optional `relative_path`, obtaining a session, chunk size, and transport.
+2. For `upload_transport: "raw"`, send `application/octet-stream` chunks with `session_id` and zero-based `chunk_index` query parameters. Otherwise use multipart fields `session_id`, `chunk_index`, and `chunk`. The server supports both.
+3. After all chunks, call completion to validate size/completeness and publish. Use cancellation to abandon the session.
 
-The frontend retries network and transient server failures at most twice, using backoff and honoring `Retry-After`. Waiting periods above 60 seconds stop automatic retries. Invalid requests and permanent storage errors fail immediately; cancellation interrupts retry waits.
+Example JSON bodies and selected response fields (`<UUID>` is the returned session ID):
 
-Completion is idempotent: the server keeps up to 4096 completion receipts for up to one hour, without retaining temporary files or chunk maps. Repeating completion or querying upload status returns the original saved filename and size with `status: "success"`. A receipt reports the original publication even if the file was subsequently deleted; it never recreates the file. Receipts are lost on restart. Completion requests have no frontend timeout while the server syncs the file. After a transient failure, the frontend checks status before retrying completion. If confirmation still fails, manual retry reuses the same session without uploading again. If the receipt expired or the server restarted, check the file list before starting a new upload.
+| Operation | Request body | Response fields |
+| --- | --- | --- |
+| Initialize `note.txt` | `{"filename":"note.txt","total_size":5}` | `{"session_id":"<UUID>","chunk_size":8388608,"total_chunks":1,"final_filename":"note.txt","upload_transport":"raw"}` |
+| Complete | `{"session_id":"<UUID>"}` | `{"status":"success","saved_filename":"note.txt","size":5}` |
 
-Folder uploads use `relative_path` to preserve the top-level folder and subdirectories, such as `documents/photos/image.jpg`. File listing, downloading, and deletion use paths relative to the upload directory; encode URL path parameters. Empty folders are not preserved. Conflicting names are renamed without overwriting existing content.
+The frontend retries transient failures at most twice with backoff and `Retry-After`; waits above 60 seconds stop automatic retries. Permanent request/storage errors fail immediately, and cancellation interrupts waits. Chunk and completion requests have no frontend timeout.
+
+Completion is idempotent: up to 4096 receipts survive for up to one hour, retaining no payload/chunk maps. Repeating completion or status queries returns the original filename/size with `status: "success"`, even if the file was later deleted; it never recreates the file. Receipts are lost on restart.
+
+After a transient completion failure, the frontend checks status before retrying; manual retry keeps the original session without re-uploading. If the receipt expired or the server restarted, check the file list before starting again. Folder uploads use `relative_path` (for example `docs/photos/image.jpg`); empty folders are omitted and conflicting names are renamed without overwrite.
 
 ## Limits and Errors
 
 | Item | Limit or behavior |
 | --- | --- |
-| Default transport settings | 8 MiB chunks; frontend sends 3 chunks per file concurrently and processes 2 files at a time |
+| Default transport | 8 MiB chunks; frontend runs 3 chunks/file and 2 files concurrently |
 | File size | Up to 1 TiB |
-| Upload JSON | Initialization bodies up to 64 KiB; original filenames up to 4096 UTF-8 bytes. Completion/cancellation bodies up to 1 KiB and session IDs must be canonical UUIDs |
-| Server capacity | Up to 16 concurrent chunk requests and 1024 active sessions; exceeding limits returns 429 |
-| Relative paths | Up to 32 components and 4096 bytes; each sanitized component is limited to 200 UTF-8 bytes, including extensions and conflict suffixes |
-| Path validation | Absolute paths, traversal, and symlinks are rejected; invalid paths return 400 and parent path conflicts return 409 |
-| Storage requirement | Temporary and upload directories must share a filesystem with hard-link support |
-| Disk checks | Initialization checks free space without reserving capacity; concurrent uploads may still exhaust it |
-| Storage errors | Space or quota exhaustion returns 507, permission errors return 403, and read-only filesystems return 503 |
-| Session expiration | Sessions idle for over 24 hours are cleaned up every 5 minutes, except those with active writes |
-| Empty upload directories | Failed initialization, cancellation, expiration, and file deletion remove empty ancestors created by this service; pre-existing directories and other active uploads are preserved |
-| Restarts and resuming | Sessions stay in memory; restarting clears temporary uploads and does not support resuming them |
-| Downloads | Range requests are supported; files, previews, and clipboard images share 32 concurrent response slots (429 when full). Each write has a 30-second idle deadline refreshed as data is sent, with no fixed total transfer duration |
-| File list cache | File listings, counts, and totals are cached for 2 seconds and invalidated on upload completion or deletion; external changes appear after expiration, while disk free space is queried live |
+| Upload JSON | Init: 64 KiB body, original filename up to 4096 UTF-8 bytes. Complete/cancel: 1 KiB body, canonical UUID |
+| Server capacity | 16 concurrent chunks and 1024 active sessions; excess returns 429 |
+| Relative paths | At most 32 components/4096 bytes; sanitized components up to 200 UTF-8 bytes including extension/conflict suffix |
+| Path checks | Reject absolute paths, traversal, and symlinks; invalid path: 400, parent conflict: 409 |
+| Storage | Temp and published files share a filesystem with hard-link support; init checks free space without reserving it |
+| Storage errors | Space/quota exhaustion: 507, permission: 403, read-only: 503 |
+| Session expiration | Every 5 minutes, release sessions idle for over 24 hours; skip active writes |
+| Directory cleanup | Failed init, cancellation, expiry, and deletion remove only empty service-created ancestors; preserve pre-existing/active directories |
+| Restarts | Sessions are in memory; startup clears temporary uploads, with no resume |
+| Downloads | Files/previews/clipboard images share 32 slots (429 when full); 30-second write-idle deadline, refreshed on progress, without a fixed total duration |
 
-For failed requests, use the `X-Request-ID` response header to find server logs. See [troubleshooting](logging.md#troubleshooting).
+Error responses provide stable `code` and public `error` fields. Use `X-Request-ID` to find the full cause in [server logs](logging.md#troubleshooting).

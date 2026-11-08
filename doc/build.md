@@ -26,11 +26,11 @@ make build
 ./release/gothrough
 ```
 
-Open `http://localhost:9815` by default. The build installs dependencies as needed, generates frontend assets, and compiles Go with `embedweb`. Deploy the executable, external configuration, and any required certificates; Node.js is not needed on the target machine. The application needs read/write access to its data directory. See [configuration](configuration.md) for ports, TLS, and data paths.
+The build installs dependencies, generates frontend assets, and compiles Go with `embedweb`. Open `http://localhost:9815`. Deploy the executable, configuration, and certificates with read/write access to the data directory; see [configuration](configuration.md). Deployment needs no Node.js.
 
 The default configuration is copied to `config/config.yaml` under the output directory without overwriting an existing file. Configuration, certificates, and runtime data remain external.
 
-Frontend builds also generate gzip copies of JS/CSS files of at least 1 KiB when compression reduces their size. The embedded server automatically negotiates gzip with browsers and retains the original files for other clients. Compression happens during the build, requires no runtime setting or additional dependency, and reduces network traffic at the cost of a slightly larger executable. Upload and download APIs are unaffected.
+Builds precompress JS/CSS files of at least 1 KiB when gzip saves space. The embedded server negotiates compressed or original assets automatically; no runtime setup is needed.
 
 | Command | Purpose |
 | --- | --- |
@@ -64,11 +64,10 @@ When adding frontend pages, update the SPA fallback routes in `internal/router/w
 Run locally:
 
 ```sh
-make install
 make -j2 build test
 ```
 
-`make test` includes frontend lint and tests and Go tests and vet with and without embedded assets, so separate runs are unnecessary. With CGO and a C compiler available, also run:
+`make test` covers frontend build/lint/tests and Go tests/vet with and without embedded assets. Browser tests run [separately](../frontend/README.md#browser-workflow-tests). With CGO and a C compiler, also run:
 
 ```sh
 make test-race
@@ -86,9 +85,25 @@ The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs o
 
 Go uses the version in `go.mod`; Node.js uses 26.x, and dependencies follow the lockfile. On Windows without a C toolchain, run the other checks locally and inspect Linux race results in CI. Image credentials, tag rules, and release steps are documented in [Docker deployment](docker.md#automated-builds-and-publishing-on-github).
 
+### Targeted checks
+
+For resource-limited machines, reduce frontend test concurrency:
+
+```sh
+npm --prefix frontend test -- --maxWorkers=2
+```
+
+Measure unchanged listing snapshots and concurrent response encoding:
+
+```sh
+go test ./internal/service ./internal/handler -run '^$' -bench 'BenchmarkFileListSnapshot|BenchmarkFileResponseConcurrentMisses' -benchmem
+```
+
+These isolate snapshot acquisition and encoding costs; they do not measure disk scans or end-to-end HTTP latency.
+
 ## GitHub Releases
 
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) runs when a `v*` tag is pushed. The version must follow the Docker version format, such as `v0.0.4` or `v0.0.4-beta.1`, and its commit must already be in `main`. Merge and push the workflow before tagging; the tagged commit must contain it.
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) runs when a `v*` tag is pushed. The version must follow the Docker version format, such as `v0.0.4` or `v0.0.4-beta.1`, and its commit must already be in remote `main` and contain the release workflow.
 
 The workflow checks the version, lints and tests the frontend, runs Go tests and vet with and without embedded assets, and builds the frontend once. Six parallel Linux jobs then cross-compile with `CGO_ENABLED=0` and `embedweb`:
 
@@ -100,7 +115,7 @@ The workflow checks the version, lints and tests the frontend, runs Go tests and
 
 Each archive contains a directory with the executable and the tracked `config/config.yaml` template. Local runtime configuration is never packaged. Cross-platform builds are compilation checks; this workflow runs tests on Linux, not on every target system.
 
-Actions artifacts upload these archives directly, retaining the project name, version, OS, architecture, and original format without an extra ZIP wrapper. Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Shared frontend assets are a separate internal artifact and are not attached to the Release.
+Actions uploads the archives directly without an extra ZIP wrapper. Shared frontend assets are an internal artifact, excluded from Release downloads.
 
 After all builds pass, the workflow creates a **draft** GitHub Release with generated notes, the six archives, and `SHA256SUMS`. Prerelease tags automatically mark the draft as a prerelease. Only the final job gets `contents: write`; it uses the built-in `GITHUB_TOKEN`, so no additional release secret is required. Repository or organization policy must allow this permission.
 

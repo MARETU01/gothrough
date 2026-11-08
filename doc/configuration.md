@@ -4,7 +4,13 @@ English | [简体中文](configuration.zh-CN.md)
 
 [Back to the project README](../README.md)
 
-Run all commands on this page from the project root. Runtime configuration is stored in `config/config.yaml`.
+Run examples from the repository root. Edit the configuration used by your deployment:
+
+| Startup method | Default configuration |
+| --- | --- |
+| Source development / Compose | `config/config.yaml` |
+| Default locally built executable | `release/config/config.yaml` |
+| Explicit selection | The path passed to `-config` or `GOTHROUGH_CONFIG` |
 
 ## LAN and Internet Access
 
@@ -19,7 +25,7 @@ GoThrough supports both LAN and public internet deployments, without restricting
 
 For public deployments, enable an [access password](#access-password) and provide HTTPS through the built-in TLS support or a reverse proxy. Reverse proxies must preserve the original Host and serve the frontend and `/api` under the same domain. If the proxy runs on the same host, the backend can bind to `127.0.0.1`, exposing only the proxy endpoint. Listener settings do not configure router mappings or automatically make the server publicly reachable.
 
-Docker maps host port 9815 to the container by default. Compose uses the project's root `config/config.yaml`; running a release executable normally uses `release/config/config.yaml`. Set the password in the configuration actually used, or through environment variables. See [Docker deployment](docker.md) for details.
+Docker port mapping and volume setup are covered in [Docker deployment](docker.md).
 
 ## Access Password
 
@@ -42,11 +48,11 @@ All unlocked visitors share the same permissions and content. Valid sessions sur
 
 ## Configuration File
 
-The external `config/config.yaml` file:
+The template groups settings in this order: listener and HTTPS (`server`), access protection (`auth`), data directory (`storage`), clipboard features (`clipboard`), then logging (`logging`). This puts common deployment settings first; YAML key order does not affect loading or override precedence.
+
+Common configuration fields:
 
 ```yaml
-storage:
-  data_dir: ".."
 server:
   host: "0.0.0.0"
   port: 9815
@@ -54,6 +60,8 @@ server:
     enabled: false
     cert_file: "certs/server.crt"
     key_file: "certs/server.key"
+storage:
+  data_dir: ".."
 ```
 
 Relative certificate paths are resolved from the directory containing the configuration file. In this example, they refer to `config/certs/server.crt` and `config/certs/server.key`. Certificates and private keys are not embedded in the executable, and `config/certs/` is excluded from Git. Enabling TLS does not automatically change the port to 443; set `server.port` to the desired port, such as 8443. The server starts a single HTTP or HTTPS listener.
