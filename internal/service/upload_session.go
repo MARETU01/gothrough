@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/utils"
 	"uuid"
@@ -42,30 +41,11 @@ type transferSession struct {
 	touched   time.Time
 }
 
-type UploadService struct {
-	mu          sync.RWMutex
-	sessions    map[string]*transferSession
-	completed   map[string]completedSession
-	names       map[string]bool
-	createdDirs map[string]os.FileInfo // guarded by mu; only directories created by this service
-	uploadDir   string
-	tempDir     string
-	slots       chan struct{}
-	diskUsage   func(string) (utils.DiskUsage, error)
-	listingMu   sync.Mutex
-	listing     *fileListing
-}
-
-func NewUploadService(uploadDir, tempDir string) *UploadService {
-	return &UploadService{sessions: make(map[string]*transferSession), completed: make(map[string]completedSession), names: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
-		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, config.MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
-}
-
-func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession, error) {
+func (s *FileService) InitSession(req model.InitRequest) (*model.UploadSession, error) {
 	if len(req.Filename) > 4096 {
 		return nil, ErrPath
 	}
-	if req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize || req.Filename == "" {
+	if req.TotalSize < 0 || req.TotalSize > MaxUploadSize || req.Filename == "" {
 		return nil, ErrChunk
 	}
 	safeName := utils.SanitizeFilenameKeepUnicode(req.Filename, utils.MaxFilenameBytes)
@@ -90,7 +70,7 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 			s.cleanupParents(safeName)
 		}
 	}()
-	if len(s.sessions) >= config.MaxUploadSessions {
+	if len(s.sessions) >= MaxUploadSessions {
 		return nil, ErrBusy
 	}
 	for parent := filepath.Dir(filepath.FromSlash(safeName)); parent != "."; parent = filepath.Dir(parent) {
@@ -142,7 +122,7 @@ func (s *UploadService) InitSession(req model.InitRequest) (*model.UploadSession
 		return nil, errors.Join(utils.StorageError("创建上传临时文件失败", err), utils.StorageError("清理失败的上传会话失败", cleanupErr))
 	}
 	// No full-file preallocation; capacity is checked but not reserved.
-	chunkSize := int64(config.ChunkSize)
+	chunkSize := int64(ChunkSize)
 	chunks := int(req.TotalSize / chunkSize)
 	if req.TotalSize%chunkSize != 0 {
 		chunks++
@@ -163,7 +143,7 @@ func conflictName(name string) string {
 	return filepath.ToSlash(filepath.Join(dir, utils.FilenameWithSuffix(base, "_"+uuid.NewV7().String(), utils.MaxFilenameBytes)))
 }
 
-func (s *UploadService) lookup(id string) (*transferSession, error) {
+func (s *FileService) lookup(id string) (*transferSession, error) {
 	s.mu.RLock()
 	entry := s.sessions[id]
 	s.mu.RUnlock()
@@ -187,7 +167,7 @@ func snapshot(entry *transferSession) *model.UploadSession {
 	return &src
 }
 
-func (s *UploadService) GetSession(id string) (*model.UploadSession, error) {
+func (s *FileService) GetSession(id string) (*model.UploadSession, error) {
 	entry, err := s.lookup(id)
 	if err != nil {
 		return nil, err
@@ -202,7 +182,7 @@ func (s *UploadService) GetSession(id string) (*model.UploadSession, error) {
 
 // WriteChunk streams a bounded block directly to its final offset. Only a fully
 // received body with verified EOF is acknowledged. Retries never overwrite an acknowledged block.
-func (s *UploadService) WriteChunk(id string, index int, body io.Reader) (int, error) {
+func (s *FileService) WriteChunk(id string, index int, body io.Reader) (int, error) {
 	select {
 	case s.slots <- struct{}{}:
 		defer func() { <-s.slots }()
@@ -255,7 +235,7 @@ func (s *UploadService) WriteChunk(id string, index int, body io.Reader) (int, e
 	return entry.info.ReceivedCount(), nil
 }
 
-func (s *UploadService) CompleteSession(id string) (string, int64, error) {
+func (s *FileService) CompleteSession(id string) (string, int64, error) {
 	entry, err := s.lookup(id)
 	if err != nil {
 		if result, ok := s.GetCompletion(id); ok {
@@ -331,7 +311,7 @@ func (s *UploadService) CompleteSession(id string) (string, int64, error) {
 	return entry.info.FinalFilename, stat.Size(), nil
 }
 
-func (s *UploadService) remove(entry *transferSession) {
+func (s *FileService) remove(entry *transferSession) {
 	s.mu.Lock()
 	delete(s.sessions, entry.info.SessionID)
 	delete(s.names, nameKey(entry.info.FinalFilename))
@@ -345,14 +325,14 @@ func (s *UploadService) remove(entry *transferSession) {
 
 // The caller must hold entry.lifecycle exclusively. Keep admission/lifecycle
 // locking with the caller: expiration must continue using TryLock.
-func (s *UploadService) closeSessionLocked(entry *transferSession) error {
+func (s *FileService) closeSessionLocked(entry *transferSession) error {
 	entry.closed = true
 	err := entry.file.Close()
 	s.remove(entry)
 	return err
 }
 
-func (s *UploadService) CancelSession(id string) error {
+func (s *FileService) CancelSession(id string) error {
 	entry, err := s.lookup(id)
 	if err != nil {
 		return err
@@ -367,7 +347,7 @@ func (s *UploadService) CancelSession(id string) error {
 
 // ExpireIdle is deliberately non-blocking for active streams; their lifecycle
 // read lock keeps the payload alive until they finish or disconnect.
-func (s *UploadService) ExpireIdle(age time.Duration) {
+func (s *FileService) ExpireIdle(age time.Duration) {
 	s.mu.Lock()
 	for id, receipt := range s.completed {
 		if !time.Now().Before(receipt.expires) {
@@ -397,7 +377,7 @@ func (s *UploadService) ExpireIdle(age time.Duration) {
 	slog.Debug("闲置上传会话检查完成", "event", "upload.cleanup_scan", "sessions", len(entries))
 }
 
-func (s *UploadService) Close() {
+func (s *FileService) Close() {
 	s.mu.RLock()
 	ids := make([]string, 0, len(s.sessions))
 	for id := range s.sessions {

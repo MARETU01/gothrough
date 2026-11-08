@@ -17,7 +17,7 @@ func TestLoginLimitsIsolateSourcesAndIgnoreSpoofedHeaders(t *testing.T) {
 			if trusted {
 				settings.TrustedProxies = []string{"192.0.2.1"}
 			}
-			r := SetupRouter(nil, nil, config.DefaultLoggingSettings(), settings)
+			r := SetupRouter(nil, nil, nil, config.DefaultLoggingSettings(), settings)
 			request := func(peer, forwarded, password string) int {
 				req := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"password":"`+password+`"}`))
 				req.RemoteAddr = peer + ":12345"

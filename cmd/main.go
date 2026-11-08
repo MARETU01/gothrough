@@ -65,8 +65,8 @@ func serve(ctx context.Context, settings *config.Settings) error {
 		return err
 	}
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
-	uploadService := service.NewUploadService(paths.UploadDir, paths.TempDir)
-	defer uploadService.Close()
+	files := service.NewFileService(paths.UploadDir, paths.TempDir)
+	defer files.Close()
 	cleanupDone := make(chan struct{})
 	go func() {
 		defer close(cleanupDone)
@@ -75,16 +75,16 @@ func serve(ctx context.Context, settings *config.Settings) error {
 		for {
 			select {
 			case <-ticker.C:
-				uploadService.ExpireIdle(24 * time.Hour)
+				files.ExpireIdle(24 * time.Hour)
 			case <-cleanupCtx.Done():
 				return
 			}
 		}
 	}()
 	defer func() { stopCleanup(); <-cleanupDone }()
-	uploadHandler := handler.NewUploadHandler(uploadService)
+	uploadHandler := handler.NewUploadHandler(files)
 	clipboardHandler := handler.NewClipboardHandler(clipboardService)
-	r := router.SetupRouter(uploadHandler, clipboardHandler, settings.Logging, settings.Auth)
+	r := router.SetupRouter(uploadHandler, handler.NewFileHandler(files), clipboardHandler, settings.Logging, settings.Auth)
 
 	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,

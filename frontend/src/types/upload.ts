@@ -31,28 +31,28 @@ export interface UploadController {
   abort: AbortController;
 }
 
-/** 队列中的单个上传项（itemsRef / items 数组元素） */
+/** 上传任务的只读状态（由 features/upload/task.ts 持有可变实现） */
 export interface UploadItem {
-  error: Message;
-  file: File;
-  state: UploadState;
-  session: UploadSession | null;
+  readonly error: Message;
+  readonly file: File;
+  readonly state: UploadState;
+  readonly session: Readonly<UploadSession> | null;
   /** Publication was requested; retries must confirm this session, never re-upload. */
-  completionPending?: boolean;
-  speed: number;
-  savedFilename: string;
-  uploadController: UploadController | null;
+  readonly completionPending?: boolean;
+  readonly speed: number;
+  readonly savedFilename: string;
+  readonly uploadController: UploadController | null;
   /** 进行中分块的实时已发送字节：chunk_index -> loaded（来自 axios onUploadProgress） */
-  inflightBytes: Map<number, number>;
+  readonly inflightBytes: ReadonlyMap<number, number>;
   /** 已确认分块索引及其实际字节数，避免乱序响应和尾块造成重复计算。 */
-  confirmedChunks: Set<number>;
-  confirmedBytes: number;
+  readonly confirmedChunks: ReadonlySet<number>;
+  readonly confirmedBytes: number;
   /** 实际传输的累计字节（包含重试），用于窗口速度采样。 */
-  transferredBytes: number;
+  readonly transferredBytes: number;
   /** 展示用已发送总字节 = 服务端已确认分块字节 + 进行中分块字节（见 recalcLoadedBytes） */
-  loadedBytes: number;
+  readonly loadedBytes: number;
   /** Current attempt elapsed time, excluding user pauses; null until started. */
-  elapsedMs: number | null;
+  readonly elapsedMs: number | null;
 }
 
 /** 顶部状态提示消息 */

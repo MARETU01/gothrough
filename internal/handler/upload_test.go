@@ -27,7 +27,7 @@ type testRouter struct {
 	tempDir   string
 }
 
-func setup(t testing.TB) (*service.UploadService, *testRouter) {
+func setup(t testing.TB) (*service.FileService, *testRouter) {
 	t.Helper()
 	root := t.TempDir()
 	uploadDir := filepath.Join(root, "uploads")
@@ -35,13 +35,13 @@ func setup(t testing.TB) (*service.UploadService, *testRouter) {
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	s := service.NewUploadService(uploadDir, tempDir)
+	s := service.NewFileService(uploadDir, tempDir)
 	t.Cleanup(s.Close)
 	clipboard, err := service.NewClipboardService(filepath.Join(root, "clipboard"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s, &testRouter{Handler: router.SetupRouter(handler.NewUploadHandler(s), handler.NewClipboardHandler(clipboard), config.DefaultLoggingSettings()), uploadDir: uploadDir, tempDir: tempDir}
+	return s, &testRouter{Handler: router.SetupRouter(handler.NewUploadHandler(s), handler.NewFileHandler(s), handler.NewClipboardHandler(clipboard), config.DefaultLoggingSettings()), uploadDir: uploadDir, tempDir: tempDir}
 }
 
 func post(t *testing.T, h http.Handler, path, contentType string, body io.Reader) *httptest.ResponseRecorder {
@@ -72,11 +72,11 @@ func initHTTP(t *testing.T, h http.Handler, name string, size int) model.UploadS
 
 func TestRawMultipartAndRangeDownload(t *testing.T) {
 	_, h := setup(t)
-	payload := bytes.Repeat([]byte("a"), config.ChunkSize+7)
+	payload := bytes.Repeat([]byte("a"), service.ChunkSize+7)
 	info := initHTTP(t, h, "测试文件.txt", len(payload))
 	// Last block first, then multipart compatibility for the initial full block.
 	path := fmt.Sprintf("/api/upload/chunk?session_id=%s&chunk_index=1", info.SessionID)
-	if res := post(t, h, path, "application/octet-stream", bytes.NewReader(payload[config.ChunkSize:])); res.Code != 200 {
+	if res := post(t, h, path, "application/octet-stream", bytes.NewReader(payload[service.ChunkSize:])); res.Code != 200 {
 		t.Fatalf("raw: %d %s", res.Code, res.Body.String())
 	}
 	var form bytes.Buffer
@@ -87,7 +87,7 @@ func TestRawMultipartAndRangeDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = part.Write(payload[:config.ChunkSize])
+	_, _ = part.Write(payload[:service.ChunkSize])
 	_ = writer.Close()
 	if res := post(t, h, "/api/upload/chunk", writer.FormDataContentType(), &form); res.Code != 200 {
 		t.Fatalf("multipart: %d %s", res.Code, res.Body.String())
@@ -250,7 +250,7 @@ func TestInvalidRawAndEmpty(t *testing.T) {
 // Browser/WAN throughput is still bounded by the user's network and reverse proxy.
 func BenchmarkHTTPUpload(b *testing.B) {
 	const blocks = 8
-	chunk := bytes.Repeat([]byte{0x42}, config.ChunkSize)
+	chunk := bytes.Repeat([]byte{0x42}, service.ChunkSize)
 	for _, workers := range []int{1, 3, 4} {
 		b.Run(fmt.Sprintf("workers=%d", workers), func(b *testing.B) {
 			s, h := setup(b)

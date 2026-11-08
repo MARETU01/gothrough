@@ -37,7 +37,7 @@ func TestFolderArchiveInterruptedDuringTransfer(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			s := NewUploadService(base, t.TempDir())
+			s := NewFileService(base, t.TempDir())
 			defer s.Close()
 			a, err := s.OpenFolder("folder")
 			if err != nil {
@@ -81,7 +81,7 @@ func TestFolderArchiveCancellationAndWriterFailure(t *testing.T) {
 	if err := os.WriteFile(file, []byte("content"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewUploadService(base, t.TempDir())
+	s := NewFileService(base, t.TempDir())
 	defer s.Close()
 	a, err := s.OpenFolder("folder")
 	if err != nil {

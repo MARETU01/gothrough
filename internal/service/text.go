@@ -72,7 +72,7 @@ func encodeEditedText(text string, original []byte) []byte {
 	return []byte(text)
 }
 
-func (s *UploadService) SaveText(filename, version, text string) (string, error) {
+func (s *FileService) SaveText(filename, version, text string) (string, error) {
 	if !IsTextFile(filename) {
 		return "", ErrTextType
 	}

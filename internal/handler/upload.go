@@ -10,22 +10,20 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/service"
-	"github.com/MARETU01/gothrough/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 type UploadHandler struct {
-	uploadService *service.UploadService
-	streams       chan struct{}
+	files   *service.FileService
+	streams chan struct{}
 }
 
-func NewUploadHandler(us *service.UploadService) *UploadHandler {
-	return &UploadHandler{uploadService: us, streams: make(chan struct{}, config.MaxConcurrentChunks)}
+func NewUploadHandler(files *service.FileService) *UploadHandler {
+	return &UploadHandler{files: files, streams: make(chan struct{}, service.MaxConcurrentChunks)}
 }
 
 // 初始化分块上传
@@ -35,12 +33,12 @@ func (h *UploadHandler) UploadInit(c *gin.Context) {
 		invalidJSON(c, err, "INVALID_UPLOAD", "无效的上传请求")
 		return
 	}
-	if req.Filename == "" || req.TotalSize < 0 || req.TotalSize > config.MaxUploadSize {
+	if req.Filename == "" || req.TotalSize < 0 || req.TotalSize > service.MaxUploadSize {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_UPLOAD", "error": "缺少 filename 或 total_size"})
 		return
 	}
 
-	session, err := h.uploadService.InitSession(req)
+	session, err := h.files.InitSession(req)
 	if err != nil {
 		uploadError(c, err)
 		return
@@ -68,9 +66,9 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 		uploadError(c, service.ErrBusy)
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, config.ChunkSize+1024*1024)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.ChunkSize+1024*1024)
 	if strings.HasPrefix(c.GetHeader("Content-Type"), "application/octet-stream") {
-		if c.Request.ContentLength > config.ChunkSize {
+		if c.Request.ContentLength > service.ChunkSize {
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "CHUNK_TOO_LARGE", "error": "分块超过大小限制"})
 			return
 		}
@@ -113,7 +111,7 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io.Reader) {
 	withUploadSession(c, id)
 	logging.WithRequestFields(c, "chunk_index", index)
-	count, err := h.uploadService.WriteChunk(id, index, body)
+	count, err := h.files.WriteChunk(id, index, body)
 	if err != nil {
 		uploadError(c, err)
 		return
@@ -125,7 +123,7 @@ func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io
 func (h *UploadHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	withUploadSession(c, sessionID)
-	state, err := h.uploadService.LookupUpload(sessionID)
+	state, err := h.files.LookupUpload(sessionID)
 	if err != nil {
 		uploadError(c, err)
 		return
@@ -162,7 +160,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 		return
 	}
 	withUploadSession(c, sessionID)
-	state, err := h.uploadService.LookupUpload(sessionID)
+	state, err := h.files.LookupUpload(sessionID)
 	if err != nil {
 		uploadError(c, err)
 		return
@@ -173,7 +171,7 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 	}
 	session := state.Session
 
-	finalFilename, actualSize, err := h.uploadService.CompleteSession(sessionID)
+	finalFilename, actualSize, err := h.files.CompleteSession(sessionID)
 	if err != nil {
 		_ = c.Error(err)
 		if errors.Is(err, service.ErrMissingChunks) {
@@ -226,7 +224,7 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 	}
 	withUploadSession(c, sessionID)
 
-	if err := h.uploadService.CancelSession(sessionID); err != nil {
+	if err := h.files.CancelSession(sessionID); err != nil {
 		uploadError(c, err)
 		return
 	}
@@ -274,18 +272,10 @@ func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
 		return http.StatusBadRequest, "INVALID_PATH", service.ErrPath.Error()
 	case errors.Is(err, service.ErrPathConflict):
 		return http.StatusConflict, "PATH_CONFLICT", service.ErrPathConflict.Error()
-	case errors.Is(err, utils.ErrStorageFull):
-		return http.StatusInsufficientStorage, "STORAGE_FULL", utils.ErrStorageFull.Error()
-	case errors.Is(err, utils.ErrStoragePermission):
-		return http.StatusForbidden, "STORAGE_PERMISSION", utils.ErrStoragePermission.Error()
-	case errors.Is(err, utils.ErrStorageReadOnly):
-		return http.StatusServiceUnavailable, "STORAGE_READ_ONLY", utils.ErrStorageReadOnly.Error()
-	case errors.Is(err, utils.ErrHardlinkUnsupported):
-		return http.StatusInternalServerError, "HARDLINK_UNSUPPORTED", utils.ErrHardlinkUnsupported.Error()
 	case errors.Is(err, service.ErrBusy):
 		return busyErrorDetails(c)
 	case requestTooLarge(err):
 		return http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "请求体过大"
 	}
-	return http.StatusInternalServerError, "UPLOAD_FAILED", "上传失败，请稍后重试"
+	return storageErrorDetails(err, "UPLOAD_FAILED", "上传失败，请稍后重试")
 }

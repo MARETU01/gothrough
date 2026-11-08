@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *UploadHandler) EditText(c *gin.Context) {
+func (h *FileHandler) EditText(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	rel := h.uploadRelativePath(c)
 	if rel == "" {
@@ -31,7 +31,7 @@ func (h *UploadHandler) EditText(c *gin.Context) {
 		respondError(c, nil, 428, "TEXT_VERSION_REQUIRED", "请重新加载文件后再保存")
 		return
 	}
-	version, err := h.uploadService.SaveText(rel, req.Version, *req.Text)
+	version, err := h.files.SaveText(rel, req.Version, *req.Text)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrTextConflict):
@@ -45,10 +45,7 @@ func (h *UploadHandler) EditText(c *gin.Context) {
 		case errors.Is(err, os.ErrNotExist):
 			respondError(c, err, 404, "FILE_NOT_FOUND", "文件不存在")
 		default:
-			status, code, msg := uploadErrorDetails(c, err)
-			if code == "UPLOAD_FAILED" {
-				code, msg = "TEXT_SAVE_FAILED", "保存失败，请稍后重试"
-			}
+			status, code, msg := storageErrorDetails(err, "TEXT_SAVE_FAILED", "保存失败，请稍后重试")
 			respondError(c, err, status, code, msg)
 		}
 		return

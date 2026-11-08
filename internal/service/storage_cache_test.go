@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/MARETU01/gothrough/internal/model"
 )
 
 func TestFileCacheExpiryAndCallerIsolation(t *testing.T) {
@@ -30,6 +33,23 @@ func TestFileCacheExpiryAndCallerIsolation(t *testing.T) {
 	refreshed, err := s.StorageInfo()
 	if err != nil || len(refreshed.Files) != 2 || refreshed.TotalSize != 3 {
 		t.Fatalf("external change not discovered: %+v %v", refreshed, err)
+	}
+}
+
+// Isolate the cost of acquiring an unchanged listing; no disk scan or JSON.
+func BenchmarkFileListSnapshot(b *testing.B) {
+	s := NewFileService(b.TempDir(), b.TempDir())
+	files := make([]model.FileInfo, 50000)
+	for i := range files {
+		files[i] = model.FileInfo{Name: "file.txt", Size: 1}
+	}
+	s.listing = &fileListing{files: files, totalSize: 50000, expires: time.Now().Add(time.Hour), version: 1}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if _, _, err := s.FileListSnapshot(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -87,15 +107,41 @@ func TestFileSnapshotVersionSurvivesExpiryAndDiscoversExternalChanges(t *testing
 	}
 	s.listing.expires = time.Now().Add(-time.Second)
 	unchanged, next, err := s.FileListSnapshot()
-	if err != nil || tag != next || body != unchanged {
-		t.Fatalf("unchanged scan changed snapshot: %s %s %v", tag, next, err)
+	if err != nil || tag != next || !reflect.DeepEqual(body, unchanged) {
+		t.Fatalf("unchanged scan changed snapshot: %d %d %v", tag, next, err)
 	}
 	if err := os.WriteFile(filepath.Join(s.uploadDir, "external.txt"), []byte("external"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	s.listing.expires = time.Now().Add(-time.Second)
 	changed, next, err := s.FileListSnapshot()
-	if err != nil || tag == next || changed == body {
+	if err != nil || tag == next || reflect.DeepEqual(changed, body) {
 		t.Fatalf("external change not versioned: %v", err)
+	}
+}
+
+func TestListingSnapshotsSurviveMutationsAndIsolateConsumers(t *testing.T) {
+	s := testService(t)
+	if err := os.WriteFile(filepath.Join(s.uploadDir, "keep.txt"), []byte("abc"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, version, err := s.FileListSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := snapshot.Data()
+	data.Files[0].Name = "caller mutation"
+	if snapshot.Data().Files[0].Name != "keep.txt" {
+		t.Fatal("consumer changed the snapshot")
+	}
+	if err := s.DeleteFile("keep.txt"); err != nil {
+		t.Fatal(err)
+	}
+	current, next, err := s.FileListSnapshot()
+	if err != nil || next == version || len(current.Data().Files) != 0 {
+		t.Fatalf("new snapshot: %d %v", next, err)
+	}
+	if old := snapshot.Data(); len(old.Files) != 1 || old.Files[0].Name != "keep.txt" || old.TotalSize != 3 {
+		t.Fatalf("retained snapshot changed after deletion: %+v", old)
 	}
 }

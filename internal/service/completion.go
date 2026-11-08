@@ -16,7 +16,7 @@ type completedSession struct {
 
 // GetCompletion returns the original receipt, even if the response was lost or
 // the file was subsequently renamed/deleted. Never publish it a second time.
-func (s *UploadService) GetCompletion(id string) (model.UploadCompletion, bool) {
+func (s *FileService) GetCompletion(id string) (model.UploadCompletion, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	receipt, ok := s.completed[id]
@@ -27,7 +27,7 @@ func (s *UploadService) GetCompletion(id string) (model.UploadCompletion, bool) 
 	return receipt.result, ok
 }
 
-func (s *UploadService) rememberCompletion(result model.UploadCompletion) {
+func (s *FileService) rememberCompletion(result model.UploadCompletion) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()

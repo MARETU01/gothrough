@@ -1,21 +1,22 @@
 package router
 
 import (
+	"log/slog"
+
 	"github.com/MARETU01/gothrough/internal/config"
 	"github.com/MARETU01/gothrough/internal/handler"
 	"github.com/MARETU01/gothrough/internal/logging"
-	"log/slog"
 
 	"github.com/gin-gonic/gin"
 )
 
 // 注册所有路由
-func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, logSettings config.LoggingSettings, authSettings ...config.AuthSettings) *gin.Engine {
+func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard *handler.ClipboardHandler, logSettings config.LoggingSettings, authSettings ...config.AuthSettings) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(logging.HTTP(slog.Default(), logSettings), logging.Recovery())
 
-	r.MaxMultipartMemory = config.MaxMultipartMemory
+	r.MaxMultipartMemory = 50 * 1024 * 1024 // Parsing threshold; handlers enforce request body limits.
 
 	api := r.Group("/api")
 	settings := config.AuthSettings{}
@@ -41,12 +42,12 @@ func SetupRouter(h *handler.UploadHandler, clipboard *handler.ClipboardHandler, 
 		api.GET("/upload/status/:session_id", h.UploadStatus)
 		api.POST("/upload/complete", h.UploadComplete)
 		api.POST("/upload/cancel", h.UploadCancel)
-		api.GET("/files", h.ListUploads)
-		api.GET("/folder-download", downloads, handler.DownloadLimits(2, handler.DownloadIdleTimeout), h.DownloadFolder)
-		api.GET("/files/*filename", downloads, h.DownloadUpload)
-		api.PUT("/files/*filename", h.EditText)
-		api.DELETE("/files/*filename", h.DeleteFile)
-		api.GET("/disk-info", h.DiskInfo)
+		api.GET("/files", files.ListFiles)
+		api.GET("/folder-download", downloads, handler.DownloadLimits(2, handler.DownloadIdleTimeout), files.DownloadFolder)
+		api.GET("/files/*filename", downloads, files.DownloadUpload)
+		api.PUT("/files/*filename", files.EditText)
+		api.DELETE("/files/*filename", files.DeleteFile)
+		api.GET("/disk-info", files.DiskInfo)
 		api.GET("/clipboard", clipboard.List)
 		api.GET("/clipboard/image-config", clipboard.ImageConfig)
 		api.POST("/clipboard/image", clipboard.CreateImage)

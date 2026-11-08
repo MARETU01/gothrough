@@ -18,7 +18,7 @@ import (
 )
 
 // 已上传文件列表
-func (h *UploadHandler) ListUploads(c *gin.Context) {
+func (h *FileHandler) ListFiles(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	if c.Query("view") == "browser" {
 		query := service.BrowserQuery{Directory: c.Query("dir"), Search: c.Query("q"), Sort: c.DefaultQuery("sort", "mtime_desc"), Page: 1, PageSize: 20}
@@ -43,32 +43,42 @@ func (h *UploadHandler) ListUploads(c *gin.Context) {
 			respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
 			return
 		}
-		body, etag, err := h.uploadService.FileBrowserSnapshot(query)
+		page, version, err := h.files.FileBrowserSnapshot(query)
 		if err != nil {
 			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 			return
 		}
-		if respondNotModified(c, etag) {
+		response, err := h.encodeListing(fmt.Sprintf("browser:%#v", query), version, func() any { return page })
+		if err != nil {
+			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 			return
 		}
-		c.Data(http.StatusOK, "application/json; charset=utf-8", body)
+		if respondNotModified(c, response.etag) {
+			return
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", response.body)
 		return
 	}
 	// Keep the original combined response for existing clients. The compact view
 	// is independently versioned and does not perform a disk-space query.
 	if c.Query("view") == "list" {
-		body, etag, err := h.uploadService.FileListSnapshot()
+		listing, version, err := h.files.FileListSnapshot()
 		if err != nil {
 			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 			return
 		}
-		if respondNotModified(c, etag) {
+		response, err := h.encodeListing("list", version, func() any { return listing.Data() })
+		if err != nil {
+			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 			return
 		}
-		c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(body))
+		if respondNotModified(c, response.etag) {
+			return
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", response.body)
 		return
 	}
-	storage, err := h.uploadService.StorageInfo()
+	storage, err := h.files.StorageInfo()
 	if err != nil {
 		respondError(c, err, http.StatusInternalServerError, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 		return
@@ -83,13 +93,13 @@ func (h *UploadHandler) ListUploads(c *gin.Context) {
 }
 
 // 文件下载
-func (h *UploadHandler) DownloadUpload(c *gin.Context) {
+func (h *FileHandler) DownloadUpload(c *gin.Context) {
 	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return
 	}
 
-	file, info, err := h.uploadService.OpenFile(rel)
+	file, info, err := h.files.OpenFile(rel)
 	if err != nil {
 		if errors.Is(err, service.ErrFileInaccessible) {
 			respondError(c, err, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
@@ -112,13 +122,13 @@ func (h *UploadHandler) DownloadUpload(c *gin.Context) {
 }
 
 // 文件删除
-func (h *UploadHandler) DeleteFile(c *gin.Context) {
+func (h *FileHandler) DeleteFile(c *gin.Context) {
 	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return
 	}
 
-	if err := h.uploadService.DeleteFile(rel); err != nil {
+	if err := h.files.DeleteFile(rel); err != nil {
 		if os.IsNotExist(err) {
 			respondError(c, err, http.StatusNotFound, "FILE_NOT_FOUND", "文件不存在")
 			return
@@ -135,9 +145,9 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 }
 
 // 磁盘信息 API
-func (h *UploadHandler) DiskInfo(c *gin.Context) {
+func (h *FileHandler) DiskInfo(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	storage, err := h.uploadService.StorageInfo()
+	storage, err := h.files.StorageInfo()
 	if err != nil {
 		respondError(c, err, http.StatusInternalServerError, "DISK_INFO_FAILED", "获取磁盘信息失败，请稍后重试")
 		return
@@ -150,9 +160,9 @@ func (h *UploadHandler) DiskInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *UploadHandler) uploadRelativePath(c *gin.Context) string {
+func (h *FileHandler) uploadRelativePath(c *gin.Context) string {
 	filename := strings.TrimPrefix(c.Param("filename"), "/")
-	rel := h.uploadService.RelativePath(filename)
+	rel := h.files.RelativePath(filename)
 	if rel == "" {
 		respondError(c, nil, http.StatusNotFound, "FILE_INACCESSIBLE", "文件不存在或无法访问")
 	}

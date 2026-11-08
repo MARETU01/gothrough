@@ -1,10 +1,10 @@
 import { message } from '@/i18n/messages';
 import { useCallback, useEffect, useRef, useState } from "react";
+import { UploadTask } from '@/features/upload/task';
 import { cleanupSession, stopItem, transferFile } from '@/features/upload/engine';
 import { apiErrorDescriptor, getErrorBody } from "@/services/errors";
 import type {
   UploadController,
-  UploadItem,
   UploadViewItem,
   StatusMessage,
 } from "@/types/upload";
@@ -18,7 +18,7 @@ import { createElapsedClock } from "@/utils/elapsed";
 import { collectDroppedFiles } from "@/utils/droppedFiles";
 
 export const useUploadQueue = () => {
-  const itemsRef = useRef<UploadItem[]>([]);
+  const itemsRef = useRef<UploadTask[]>([]);
   const globalPausedRef = useRef(false);
   const mountedRef = useRef(true);
   const runRef = useRef<{ cancelled: boolean } | null>(null);
@@ -38,8 +38,8 @@ export const useUploadQueue = () => {
     signal?.addEventListener('abort', wake, { once: true });
   }), []);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const snapshotsRef = useRef(new WeakMap<UploadItem, UploadViewItem>());
-  const clocksRef = useRef(new WeakMap<UploadItem, ReturnType<typeof createElapsedClock>>());
+  const snapshotsRef = useRef(new WeakMap<UploadTask, UploadViewItem>());
+  const clocksRef = useRef(new WeakMap<UploadTask, ReturnType<typeof createElapsedClock>>());
   const queueClockRef = useRef<ReturnType<typeof createElapsedClock> | null>(null);
   const [queueElapsedMs, setQueueElapsedMs] = useState<number | null>(null);
   const [items, setItems] = useState<UploadViewItem[]>([]);
@@ -54,7 +54,7 @@ export const useUploadQueue = () => {
     if (queueClockRef.current) setQueueElapsedMs(queueClockRef.current.read());
     const next = itemsRef.current.map((item) => {
       const clock = clocksRef.current.get(item);
-      if (clock) item.elapsedMs = clock.read();
+      if (clock) item.sampleElapsed(clock.read());
       const snapshot = createUploadSnapshot(
         item,
         snapshotsRef.current.get(item),
@@ -107,7 +107,7 @@ export const useUploadQueue = () => {
   }, [hasUnfinished]);
   useEffect(() => {
     if (!running || globalPaused || canceling) return;
-    const samples = new WeakMap<UploadItem, { bytes: number; time: number }>();
+    const samples = new WeakMap<UploadTask, { bytes: number; time: number }>();
     const started = Date.now();
     itemsRef.current.forEach(item => samples.set(item, { bytes: item.transferredBytes, time: started }));
     const timer = setInterval(() => {
@@ -122,7 +122,7 @@ export const useUploadQueue = () => {
             : 0;
         samples.set(item, { bytes: item.transferredBytes, time: now });
         if (item.speed !== speed) {
-          item.speed = speed;
+          item.sampleSpeed(speed);
           changed = true;
         }
       });
@@ -135,21 +135,7 @@ export const useUploadQueue = () => {
     Array.from(files).forEach((file) => {
       const key = getFileKey(file);
       if (keys.has(key)) return;
-      itemsRef.current.push({
-        file,
-        state: "pending",
-        error: "",
-        session: null,
-        speed: 0,
-        savedFilename: "",
-        uploadController: null,
-        inflightBytes: new Map(),
-        confirmedChunks: new Set(),
-        confirmedBytes: 0,
-        transferredBytes: 0,
-        loadedBytes: 0,
-        elapsedMs: null,
-      });
+      itemsRef.current.push(new UploadTask(file, refreshFileList));
       keys.add(key);
     });
     refreshFileList();
@@ -170,12 +156,12 @@ export const useUploadQueue = () => {
     }
   };
   const uploadFileChunked = useCallback(
-    async (item: UploadItem, run: { cancelled: boolean }) => {
+    async (item: UploadTask, run: { cancelled: boolean }) => {
       const controller: UploadController = {
         cancelled: false,
         abort: new AbortController(),
       };
-      item.uploadController = controller;
+      item.attachController(controller);
       const clock = createElapsedClock();
       clocksRef.current.set(item, clock);
       clock.resume();
@@ -189,19 +175,14 @@ export const useUploadQueue = () => {
           isStopped,
           isPaused: () => globalPausedRef.current,
           waitForChange,
-          onChange: refreshFileList,
         });
       } catch (err) {
         clock.pause();
         if (!item.completionPending) {
           await cleanupSession(item);
-          item.session = null;
-          item.loadedBytes = 0;
         }
-        item.inflightBytes.clear();
-        if (isStopped()) item.state = "pending";
+        if (isStopped()) item.interrupt();
         else {
-          item.state = "error";
           const body = getErrorBody<{
             error?: string;
             missing_chunks?: number[];
@@ -209,7 +190,7 @@ export const useUploadQueue = () => {
           const failure = item.completionPending ? message('upload.confirmationPending') : body?.missing_chunks
             ? message('upload.missingChunks', { count: body.missing_chunks.length })
             : apiErrorDescriptor(err);
-          item.error = failure;
+          item.fail(failure);
           if (mountedRef.current)
             setStatus({
               text: message('upload.failed', { name: item.file.name, error: failure }),
@@ -218,12 +199,10 @@ export const useUploadQueue = () => {
         }
       } finally {
         clock.pause();
-        item.speed = 0;
-        item.uploadController = null;
-        refreshFileList();
+        item.endAttempt();
       }
     },
-    [refreshFileList, waitForChange],
+    [waitForChange],
   );
   const startUploads = useCallback(
     async (fileKey?: string) => {
@@ -277,7 +256,7 @@ export const useUploadQueue = () => {
     itemsRef.current.forEach((i) => {
       if (i.uploadController) {
         clocksRef.current.get(i)?.pause();
-        i.speed = 0;
+        i.sampleSpeed(0);
       }
     });
     refreshFileList();
@@ -300,8 +279,7 @@ export const useUploadQueue = () => {
       clocksRef.current.get(item)?.pause();
       stopItem(item);
       if (item.uploadController) {
-        item.state = "canceling";
-        item.speed = 0;
+        item.markCanceling();
       }
     });
     setGlobalPaused(false);
