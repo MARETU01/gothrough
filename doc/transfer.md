@@ -11,6 +11,8 @@ English | [简体中文](transfer.zh-CN.md)
 - Previews support images, UTF-8 text, PDFs, and browser-supported media, with download fallback. Escape closes the dialog; phones use a full-screen view. Clipboard images share the dialog and pause automatic updates while open.
 - Signing out with unfinished uploads requires confirmation. Confirming interrupts transfers and clears the queue; cancelling keeps it running. Refreshing the browser or restarting the server cannot resume uploads.
 
+- Select files/folders to download a ZIP or delete them. Select current page covers at most 20 entries; directory, search, sort, page changes, and manual refresh clear selection. Selection pauses polling. Deletion confirms count, names, and recursive scope; cancellation keeps the selection, and partial failures retain failed items for retry.
+
 ## Authentication
 
 All endpoints use `/api`. With password protection enabled, file, upload, disk, and clipboard endpoints require a session; browser mutations also pass same-origin checks. See [access configuration](configuration.md#access-password) for cookies, proxy settings, and login limits.
@@ -36,6 +38,8 @@ All endpoints use `/api`. With password protection enabled, file, upload, disk, 
 | DELETE | `/api/files/*filename` | Delete a file |
 | GET | `/api/folder-download?path=relative-folder` | Stream a folder ZIP |
 | GET | `/api/disk-info` | Get disk information |
+| GET | `/api/batch-download?path=a&path=docs` | Stream selected files/folders as ZIP |
+| POST | `/api/batch-delete` | Delete a selection with per-item results |
 
 URL-encode relative file paths and folder query parameters.
 
@@ -55,6 +59,14 @@ Responses contain `files` (name, size, size display, `mtime`, `folder`, `label`)
 | `GET /api/disk-info` | Disk total/used/free values and displays, `disk_pct`, `disk_pct_warning`, and upload totals |
 
 Responses use `Cache-Control: no-store`. Conditional reads send `If-None-Match`; unchanged content returns an empty `304`. Reuse validators only for the same query and accepted responses; manual refresh fetches full data. Uploads, edits, and deletions invalidate listing caches; external changes appear after the 2-second scan cache expires. Disk changes do not affect listing ETags. The frontend also supports older full-list responses. Cache implementation belongs in [architecture](architecture.md#queries-and-http-responses).
+
+### Bulk operations
+
+Download 1–100 files/folders with repeated `path` query parameters. ZIP entries keep full upload-relative paths; selecting both a parent folder and its child includes content once. All top-level paths are checked before starting the response. Streaming, cancellation, and failure behavior follows folder ZIPs; both archive routes share two archive slots and the 32-response download limit. Query strings are limited to 64 KiB; reduce the selection for long paths.
+
+Example deletion body: `{"entries":[{"path":"docs","folder":true},{"path":"note.txt","folder":false}]}`. Limit: 100 entries and a 512 KiB body. Invalid paths or duplicate selections return `400 INVALID_FILE_SELECTION` before any deletion. Valid requests return `200` with a `results` array: each item contains `path` and `deleted`; failed items add `code` and `error`. Folders with unfinished uploads fail with `FOLDER_BUSY`, changed entry types with `SELECTION_CHANGED`; other items continue.
+
+Folder deletion includes all descendants. Symlinks and special entries fail that item and are never followed. Neither batches nor individual recursive deletions are atomic; deleted content is not rolled back. Refresh to inspect failures before retrying. Batch deletion retains session/same-origin checks and shares mutation coordination with upload publication.
 
 ### Folder ZIP downloads
 

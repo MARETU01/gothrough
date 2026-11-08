@@ -36,6 +36,7 @@ func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard
 	api.POST("/auth/logout", auth.logout)
 	api.Use(auth.requireSession)
 	downloads := handler.DownloadLimits(handler.MaxConcurrentDownloads, handler.DownloadIdleTimeout)
+	archives := handler.DownloadLimits(2, handler.DownloadIdleTimeout)
 	{
 		api.POST("/upload/init", h.UploadInit)
 		api.POST("/upload/chunk", h.UploadChunk)
@@ -43,7 +44,9 @@ func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard
 		api.POST("/upload/complete", h.UploadComplete)
 		api.POST("/upload/cancel", h.UploadCancel)
 		api.GET("/files", files.ListFiles)
-		api.GET("/folder-download", downloads, handler.DownloadLimits(2, handler.DownloadIdleTimeout), files.DownloadFolder)
+		api.GET("/folder-download", downloads, archives, files.DownloadFolder)
+		api.GET("/batch-download", downloads, archives, files.DownloadSelection)
+		api.POST("/batch-delete", files.DeleteSelection)
 		api.GET("/files/*filename", downloads, files.DownloadUpload)
 		api.PUT("/files/*filename", files.EditText)
 		api.DELETE("/files/*filename", files.DeleteFile)

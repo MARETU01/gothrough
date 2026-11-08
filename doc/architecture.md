@@ -12,10 +12,10 @@ English | [简体中文](architecture.zh-CN.md)
 | `internal/config/`, `internal/app/storage.go` | Validate settings, then prepare instance-local storage |
 | `internal/router/` | Routes, authentication, and middleware |
 | `internal/handler/upload.go` | Upload HTTP protocol and request admission |
-| `internal/handler/file_handler.go`, `files.go`, `edit.go`, `folder_download.go` | File HTTP responses, previews, streaming, and JSON/ETag caching |
+| `internal/handler/file_handler.go`, `files.go`, `edit.go`, `folder_download.go`, `selection.go` | File HTTP responses, previews, streaming, and JSON/ETag caching |
 | `internal/service/file_service.go` | Coordinate file mutations and shared state |
 | `internal/service/upload_session.go`, `completion.go` | Upload sessions, chunks, receipts, and resource release |
-| `internal/service/files.go`, `text.go`, `folder*.go` | Confined file operations, editing, directory management, and ZIP generation |
+| `internal/service/files.go`, `text.go`, `folder*.go`, `selection*.go` | Confined file operations, editing, directory management, and ZIP generation |
 | `internal/service/file_listing.go`, `file_browser.go` | Listing generations, directory queries, and disk information |
 | `internal/service/clipboard*.go` | Clipboard history, images, and persistence |
 | `internal/utils/` | Filename, disk, and platform filesystem operations |

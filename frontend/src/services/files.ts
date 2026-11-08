@@ -49,6 +49,16 @@ export const deleteFile = (name: string) => api.delete<{ status: string }, { sta
 export const downloadFileUrl = (name: string) => '/api/files/' + encodeURIComponent(name);
 export const downloadFolderUrl = (name: string) => '/api/folder-download?path=' + encodeURIComponent(name);
 
+export interface FileSelection { path: string; folder: boolean }
+export interface DeleteSelectionResult { path: string; deleted: boolean; code?: string; error?: string }
+export const deleteSelection = (entries: FileSelection[]) =>
+  api.post<{ results: DeleteSelectionResult[] }, { results: DeleteSelectionResult[] }>('/batch-delete', { entries });
+export const downloadSelectionUrl = (paths: string[]) => {
+  const query = new URLSearchParams();
+  paths.forEach(path => query.append('path', path));
+  return '/api/batch-download?' + query;
+};
+
 export interface FilePreviewInfo {
   kind: 'text' | 'image' | 'pdf' | 'audio' | 'video';
   mime_type: string;

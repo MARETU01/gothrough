@@ -12,10 +12,10 @@
 | `internal/config/`、`internal/app/storage.go` | 校验配置，再准备实例级存储 |
 | `internal/router/` | 路由、认证和中间件 |
 | `internal/handler/upload.go` | 上传 HTTP 协议及请求并发限制 |
-| `internal/handler/file_handler.go`、`files.go`、`edit.go`、`folder_download.go` | 文件 HTTP 响应、预览、流式传输及 JSON/ETag 缓存 |
+| `internal/handler/file_handler.go`、`files.go`、`edit.go`、`folder_download.go`、`selection.go` | 文件 HTTP 响应、预览、流式传输及 JSON/ETag 缓存 |
 | `internal/service/file_service.go` | 协调文件修改和共享状态 |
 | `internal/service/upload_session.go`、`completion.go` | 上传会话、分块、完成结果和资源释放 |
-| `internal/service/files.go`、`text.go`、`folder*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
+| `internal/service/files.go`、`text.go`、`folder*.go`、`selection*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
 | `internal/service/file_listing.go`、`file_browser.go` | 列表版本、目录查询和磁盘信息 |
 | `internal/service/clipboard*.go` | 剪贴板历史、图片和持久化 |
 | `internal/utils/` | 文件名、磁盘及平台文件系统操作 |

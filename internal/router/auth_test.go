@@ -50,6 +50,14 @@ func TestAccessProtectsAllContentRoutes(t *testing.T) {
 	}
 }
 
+func TestBulkDeletionRejectsCrossOriginRequests(t *testing.T) {
+	r := SetupRouter(nil, nil, nil, config.DefaultLoggingSettings(), config.AuthSettings{Password: "test-password"})
+	res := authRequest(r, "POST", "/api/batch-delete", `{"entries":[]}`, nil, "https://another.example", false)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin deletion: %d", res.Code)
+	}
+}
+
 func TestAccessSessionLifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	a := newAccessAuth("test-password")

@@ -15,6 +15,7 @@ vi.mock('@/services/files', () => ({
   getFilePreview: vi.fn(), saveFileText: vi.fn(), deleteFile: vi.fn(),
   downloadFileUrl: (name: string) => '/api/files/' + name,
   previewFileUrl: (name: string) => '/api/files/' + name + '?preview=1',
+  downloadSelectionUrl: vi.fn(() => '/api/batch-download'),
 }));
 
 beforeEach(() => {
