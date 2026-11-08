@@ -33,6 +33,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | `src/config/features.ts` | Shared feature definitions for lazy routes, navigation entries, and home cards |
 | `src/contexts/UploadQueueProvider.tsx` | Application-level queue that continues across in-app navigation |
 | `src/hooks/useUploadQueue.ts` | Queue scheduling, React snapshots, clocks, and page lifecycle |
+| `src/features/upload/task.ts` | Own task mutations and notifications; expose read-only state and progress collections |
 | `src/features/upload/engine.ts` | Single-file protocol, chunk concurrency, retries, and completion without React |
 | `src/hooks/useRemoteData.ts`, `useAutoRefresh.ts` | Loading, background refresh, stale responses, and request cancellation |
 | `src/services/` | API calls and error presentation; transport cancellation lives in `src/utils/cancellation.ts` |
@@ -40,7 +41,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | `src/i18n/` | Translation resources, language detection, and message descriptors |
 | `src/components/`, `src/styles/` | Shared components and styles |
 
-Add new features to `src/config/features.ts`, then update the Go SPA fallback allowlist in `internal/router/web.go`. Shared definitions contain translation keys rather than translated strings. The file browser uses server-side directory/search/page queries, with full-snapshot support for older servers. Narrow screens render the same file rows as cards. Logout asks for confirmation before discarding unfinished uploads.
+Add features to `src/config/features.ts` and the Go SPA fallback allowlist in `internal/router/web.go`; shared definitions store translation keys. Update uploads through named `UploadTask` methods; the task and engine have no React or localization runtime dependencies. See [state ownership](../doc/architecture.md#frontend-state).
 
 ## Browser workflow tests
 

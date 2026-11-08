@@ -15,10 +15,10 @@ import (
 	"github.com/MARETU01/gothrough/internal/model"
 )
 
-func testService(t testing.TB) *UploadService {
+func testService(t testing.TB) *FileService {
 	t.Helper()
 	root := t.TempDir()
-	s := NewUploadService(filepath.Join(root, "uploads"), filepath.Join(root, "temp"))
+	s := NewFileService(filepath.Join(root, "uploads"), filepath.Join(root, "temp"))
 	if err := os.MkdirAll(s.uploadDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func testService(t testing.TB) *UploadService {
 	return s
 }
 
-func smallSession(t *testing.T, s *UploadService, name string, size int64) *model.UploadSession {
+func smallSession(t *testing.T, s *FileService, name string, size int64) *model.UploadSession {
 	t.Helper()
 	info, err := s.InitSession(model.InitRequest{Filename: name, TotalSize: size})
 	if err != nil {

@@ -18,7 +18,7 @@ type FolderArchive struct {
 	Name string
 }
 
-func (s *UploadService) OpenFolder(name string) (*FolderArchive, error) {
+func (s *FileService) OpenFolder(name string) (*FolderArchive, error) {
 	rel := s.RelativePath(name)
 	if rel == "" {
 		return nil, ErrFileInaccessible

@@ -1,9 +1,6 @@
 package service
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"slices"
 	"time"
 
@@ -17,12 +14,11 @@ type fileListing struct {
 	files     []model.FileInfo
 	totalSize int64
 	expires   time.Time
-	body      string
-	etag      string
+	version   uint64
 	browser   *browserIndex
 }
 
-func (s *UploadService) invalidateFiles() {
+func (s *FileService) invalidateFiles() {
 	s.listingMu.Lock()
 	s.listing = nil
 	s.listingMu.Unlock()
@@ -30,7 +26,7 @@ func (s *UploadService) invalidateFiles() {
 
 // Serialize refreshes so simultaneous list/disk requests share a single scan.
 // A short TTL also discovers changes made outside this process.
-func (s *UploadService) cachedFiles() ([]model.FileInfo, int64, error) {
+func (s *FileService) cachedFiles() ([]model.FileInfo, int64, error) {
 	s.listingMu.Lock()
 	defer s.listingMu.Unlock()
 	if err := s.refreshListingLocked(); err != nil {
@@ -39,7 +35,7 @@ func (s *UploadService) cachedFiles() ([]model.FileInfo, int64, error) {
 	return append([]model.FileInfo{}, s.listing.files...), s.listing.totalSize, nil
 }
 
-func (s *UploadService) refreshListingLocked() error {
+func (s *FileService) refreshListingLocked() error {
 	if s.listing == nil || !time.Now().Before(s.listing.expires) {
 		files, size, err := s.ListFiles()
 		if err != nil {
@@ -49,28 +45,41 @@ func (s *UploadService) refreshListingLocked() error {
 			s.listing.expires = time.Now().Add(fileListingTTL)
 			return nil
 		}
-		body, err := json.Marshal(struct {
-			Files            []model.FileInfo `json:"files"`
-			TotalSize        int64            `json:"total_size"`
-			TotalSizeDisplay string           `json:"total_size_display"`
-			HasFiles         bool             `json:"has_files"`
-		}{files, size, utils.FormatFileSize(size), len(files) > 0})
-		if err != nil {
-			return err
-		}
-		s.listing = &fileListing{files: files, totalSize: size, expires: time.Now().Add(fileListingTTL), body: string(body), etag: fmt.Sprintf(`"%x"`, sha256.Sum256(body))}
+		s.listingVersion++
+		s.listing = &fileListing{files: files, totalSize: size, expires: time.Now().Add(fileListingTTL), version: s.listingVersion}
 	}
 	return nil
 }
 
-// The cached JSON and validator are immutable and exclude volatile disk space.
-func (s *UploadService) FileListSnapshot() (string, string, error) {
+// FileList is detached from the cache; callers may modify their own copy.
+type FileList struct {
+	Files            []model.FileInfo `json:"files"`
+	TotalSize        int64            `json:"total_size"`
+	TotalSizeDisplay string           `json:"total_size_display"`
+	HasFiles         bool             `json:"has_files"`
+}
+
+// ListingSnapshot retains an immutable file generation. Acquiring it does not
+// copy all entries; Data returns an isolated copy only when a consumer needs it.
+type ListingSnapshot struct {
+	files     []model.FileInfo
+	totalSize int64
+}
+
+func (snapshot ListingSnapshot) Data() FileList {
+	return FileList{Files: append([]model.FileInfo{}, snapshot.files...), TotalSize: snapshot.totalSize,
+		TotalSizeDisplay: utils.FormatFileSize(snapshot.totalSize), HasFiles: len(snapshot.files) > 0}
+}
+
+// FileListSnapshot returns a read-only snapshot and its generation, independent of HTTP encoding.
+func (s *FileService) FileListSnapshot() (ListingSnapshot, uint64, error) {
 	s.listingMu.Lock()
 	defer s.listingMu.Unlock()
 	if err := s.refreshListingLocked(); err != nil {
-		return "", "", err
+		return ListingSnapshot{}, 0, err
 	}
-	return s.listing.body, s.listing.etag, nil
+	listing := s.listing
+	return ListingSnapshot{files: listing.files, totalSize: listing.totalSize}, listing.version, nil
 }
 
 type StorageInfo struct {
@@ -79,7 +88,7 @@ type StorageInfo struct {
 	Disk      utils.DiskUsage
 }
 
-func (s *UploadService) StorageInfo() (StorageInfo, error) {
+func (s *FileService) StorageInfo() (StorageInfo, error) {
 	files, totalSize, err := s.cachedFiles()
 	if err != nil {
 		return StorageInfo{}, err

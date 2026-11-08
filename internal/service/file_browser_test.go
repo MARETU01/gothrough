@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,17 +22,13 @@ func TestFileBrowserQueriesAndInvalidation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read := func(query BrowserQuery) (BrowserPage, string) {
+	read := func(query BrowserQuery) (BrowserPage, uint64) {
 		t.Helper()
-		body, etag, err := s.FileBrowserSnapshot(query)
+		result, version, err := s.FileBrowserSnapshot(query)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var result BrowserPage
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatal(err)
-		}
-		return result, etag
+		return result, version
 	}
 	query := BrowserQuery{Sort: "name_asc", Page: 1, PageSize: 20}
 	root, rootTag := read(query)
@@ -46,8 +41,8 @@ func TestFileBrowserQueriesAndInvalidation(t *testing.T) {
 	if second.Page != 2 || second.TotalPages != 2 || len(second.Files) != 5 || second.Files[0].Label != "file 20.txt" {
 		t.Fatalf("second: %+v", second)
 	}
-	if tag == rootTag {
-		t.Fatal("query validators must differ")
+	if tag != rootTag {
+		t.Fatal("queries must share a listing generation")
 	}
 	_, sameTag := read(query)
 	if sameTag != tag {
@@ -103,12 +98,8 @@ func TestFileBrowserSortsTimesByInstant(t *testing.T) {
 	s.listing.files[0].Mtime = "2026-11-06T20:00:00+08:00"
 	s.listing.files[1].Mtime = "2026-11-06T13:00:00Z"
 	s.listing.browser = nil
-	body, _, err := s.FileBrowserSnapshot(BrowserQuery{Sort: "mtime_desc", Page: 1, PageSize: 20})
+	result, _, err := s.FileBrowserSnapshot(BrowserQuery{Sort: "mtime_desc", Page: 1, PageSize: 20})
 	if err != nil {
-		t.Fatal(err)
-	}
-	var result BrowserPage
-	if err := json.Unmarshal(body, &result); err != nil {
 		t.Fatal(err)
 	}
 	if result.Files[0].Mtime != "2026-11-06T13:00:00Z" {
@@ -118,18 +109,22 @@ func TestFileBrowserSortsTimesByInstant(t *testing.T) {
 
 func TestFileBrowserCacheIsBoundedAndCallerIsolated(t *testing.T) {
 	s := testService(t)
+	if err := os.WriteFile(filepath.Join(s.uploadDir, "entry.txt"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	var readers sync.WaitGroup
 	for i := 0; i < 48; i++ {
 		readers.Go(func() {
-			query := BrowserQuery{Search: fmt.Sprint(i), Page: 1, PageSize: 20}
-			body, _, err := s.FileBrowserSnapshot(query)
+			query := BrowserQuery{Page: i + 1, PageSize: 20}
+			result, _, err := s.FileBrowserSnapshot(query)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			body[0] = '!'
+			result.Directory = "corrupted"
+			result.Files[0].Label = "corrupted"
 			fresh, _, err := s.FileBrowserSnapshot(query)
-			if err != nil || !json.Valid(fresh) {
+			if err != nil || fresh.Directory == "corrupted" || len(fresh.Files) != 1 || fresh.Files[0].Label != "entry.txt" {
 				t.Errorf("caller corrupted cached snapshot: %v", err)
 			}
 		})
@@ -141,7 +136,7 @@ func TestFileBrowserCacheIsBoundedAndCallerIsolated(t *testing.T) {
 }
 
 func BenchmarkFileBrowserCachedPage(b *testing.B) {
-	s := NewUploadService(b.TempDir(), b.TempDir())
+	s := NewFileService(b.TempDir(), b.TempDir())
 	b.Cleanup(func() { s.Close() })
 	files := make([]model.FileInfo, 50000)
 	for i := range files {

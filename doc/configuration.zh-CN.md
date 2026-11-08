@@ -4,7 +4,13 @@
 
 [返回项目首页](../README.zh-CN.md)
 
-本页命令均在项目根目录执行。运行配置位于 `config/config.yaml`。
+示例在仓库根目录执行。请修改当前部署实际加载的配置：
+
+| 启动方式 | 默认配置 |
+| --- | --- |
+| 源码开发 / Compose | `config/config.yaml` |
+| 默认本地构建的可执行文件 | `release/config/config.yaml` |
+| 显式指定 | `-config` 或 `GOTHROUGH_CONFIG` 指向的文件 |
 
 ## 局域网与公网访问
 
@@ -19,7 +25,7 @@ GoThrough 支持局域网和公网部署，没有按客户端来源限制为局�
 
 公网部署请开启[访问口令](#访问口令)，并通过程序自带 TLS 或反向代理提供 HTTPS。反向代理部署时保留原始 `Host`，将网页与 `/api` 放在同一域名下；若代理运行在同一宿主机，可将后端绑定到 `127.0.0.1`，仅对外开放代理入口。监听地址和端口配置本身不会建立路由器映射或自动开放公网访问。
 
-Docker 默认将宿主机 9815 端口映射到容器。Compose 使用项目根目录的 `config/config.yaml`；直接运行发布程序通常使用 `release/config/config.yaml`。请在实际使用的配置文件或环境变量中设置口令。具体规则见 [Docker 部署](docker.zh-CN.md)。
+端口映射与数据卷设置见 [Docker 部署](docker.zh-CN.md)。
 
 ## 访问口令
 
@@ -42,11 +48,11 @@ auth:
 
 ## 配置文件
 
-外部配置文件 `config/config.yaml`：
+模板依次排列监听地址与 HTTPS（`server`）、访问保护（`auth`）、数据目录（`storage`）、剪贴板功能（`clipboard`）和日志（`logging`），将部署时常用的设置放在前面。YAML 字段顺序不影响加载结果或覆盖优先级。
+
+常用配置字段示例：
 
 ```yaml
-storage:
-  data_dir: ".."
 server:
   host: "0.0.0.0"
   port: 9815
@@ -54,6 +60,8 @@ server:
     enabled: false
     cert_file: "certs/server.crt"
     key_file: "certs/server.key"
+storage:
+  data_dir: ".."
 ```
 
 相对证书路径以配置文件所在目录为基准，示例对应 `config/certs/server.crt` 与 `config/certs/server.key`。证书、私钥不嵌入程序，`config/certs/` 不纳入 Git。启用 TLS 后端口不会自动改为 443；需将 `server.port` 设置为期望端口（例如 8443）。服务只启动一个 HTTP 或 HTTPS 监听器。

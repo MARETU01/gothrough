@@ -33,6 +33,7 @@ npm run lint
 | `src/config/features.ts` | 懒加载路由、导航入口和首页卡片共用的功能定义 |
 | `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，支持站内切换页面后继续上传 |
 | `src/hooks/useUploadQueue.ts` | 队列调度、React 快照、计时与页面生命周期 |
+| `src/features/upload/task.ts` | 拥有任务状态修改和通知，对外提供只读状态及进度集合 |
 | `src/features/upload/engine.ts` | 不使用 React 的单文件协议、分块并发、重试和完成确认 |
 | `src/hooks/useRemoteData.ts`、`useAutoRefresh.ts` | 数据加载、后台刷新、过期响应处理与请求取消 |
 | `src/services/` | API 调用与错误展示；传输取消判断位于 `src/utils/cancellation.ts` |
@@ -40,7 +41,7 @@ npm run lint
 | `src/i18n/` | 翻译资源、语言检测与消息描述 |
 | `src/components/`、`src/styles/` | 公共组件与样式 |
 
-新增功能先修改 `src/config/features.ts`，再同步 Go 的 `internal/router/web.go` 中 SPA 回退白名单。共用定义保存翻译 key，不保存译文。文件列表使用服务端目录、搜索和分页查询，并兼容旧服务端的完整快照；窄屏下同一组文件行呈现为卡片。退出前如有未完成上传，会先要求确认。
+新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。
 
 ## 浏览器流程测试
 

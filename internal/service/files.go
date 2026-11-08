@@ -17,13 +17,13 @@ var ErrFileInaccessible = errors.New("文件不存在或无法访问")
 
 // RelativePath is the shared lexical path policy for reads, edits, and deletion.
 // The caller supplies a literal name that the HTTP router has already decoded.
-func (s *UploadService) RelativePath(filename string) string {
+func (s *FileService) RelativePath(filename string) string {
 	return utils.SafeUploadRelpath(filename, s.uploadDir)
 }
 
 // OpenFile confines the filesystem lookup to this service's upload directory.
 // The caller owns the returned handle; the root handle can be released here.
-func (s *UploadService) OpenFile(filename string) (*os.File, os.FileInfo, error) {
+func (s *FileService) OpenFile(filename string) (*os.File, os.FileInfo, error) {
 	rel := s.RelativePath(filename)
 	if rel == "" {
 		return nil, nil, ErrFileInaccessible
@@ -49,7 +49,7 @@ func (s *UploadService) OpenFile(filename string) (*os.File, os.FileInfo, error)
 	return file, info, nil
 }
 
-func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
+func (s *FileService) ListFiles() ([]model.FileInfo, int64, error) {
 	entries := []model.FileInfo{}
 	var totalSize int64
 
@@ -97,7 +97,7 @@ func (s *UploadService) ListFiles() ([]model.FileInfo, int64, error) {
 }
 
 // 删除已上传的文件
-func (s *UploadService) DeleteFile(filename string) error {
+func (s *FileService) DeleteFile(filename string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rel := s.RelativePath(filename)

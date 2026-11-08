@@ -9,7 +9,7 @@ type UploadState struct {
 	Completion *model.UploadCompletion
 }
 
-func (s *UploadService) LookupUpload(id string) (UploadState, error) {
+func (s *FileService) LookupUpload(id string) (UploadState, error) {
 	if result, ok := s.GetCompletion(id); ok {
 		return UploadState{Completion: &result}, nil
 	}

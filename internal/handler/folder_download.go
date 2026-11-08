@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (h *UploadHandler) DownloadFolder(c *gin.Context) {
-	folder, err := h.uploadService.OpenFolder(c.Query("path"))
+func (h *FileHandler) DownloadFolder(c *gin.Context) {
+	folder, err := h.files.OpenFolder(c.Query("path"))
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, service.ErrFileInaccessible) {

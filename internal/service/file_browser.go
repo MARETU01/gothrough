@@ -1,11 +1,7 @@
 package service
 
 import (
-	"bytes"
 	"cmp"
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -44,16 +40,16 @@ type BrowserPage struct {
 // copy and sort the selected directory; searches scan the cached file metadata.
 type browserIndex struct {
 	children map[string][]BrowserEntry
-	pages    map[BrowserQuery]browserSnapshot
+	pages    map[BrowserQuery]BrowserPage
 }
 
-type browserSnapshot struct {
-	body []byte
-	etag string
+func cloneBrowserPage(page BrowserPage) BrowserPage {
+	page.Files = append([]BrowserEntry{}, page.Files...)
+	return page
 }
 
 func newBrowserIndex(files []model.FileInfo) *browserIndex {
-	index := &browserIndex{children: map[string][]BrowserEntry{"": {}}, pages: make(map[BrowserQuery]browserSnapshot)}
+	index := &browserIndex{children: map[string][]BrowserEntry{"": {}}, pages: make(map[BrowserQuery]BrowserPage)}
 	for _, file := range files {
 		parts := strings.Split(file.Name, "/")
 		parent := ""
@@ -70,11 +66,11 @@ func newBrowserIndex(files []model.FileInfo) *browserIndex {
 	return index
 }
 
-func (s *UploadService) FileBrowserSnapshot(query BrowserQuery) ([]byte, string, error) {
+func (s *FileService) FileBrowserSnapshot(query BrowserQuery) (BrowserPage, uint64, error) {
 	s.listingMu.Lock()
 	if err := s.refreshListingLocked(); err != nil {
 		s.listingMu.Unlock()
-		return nil, "", err
+		return BrowserPage{}, 0, err
 	}
 	listing := s.listing
 	if listing.browser == nil {
@@ -83,7 +79,7 @@ func (s *UploadService) FileBrowserSnapshot(query BrowserQuery) ([]byte, string,
 	index := listing.browser
 	if cached, ok := index.pages[query]; ok {
 		s.listingMu.Unlock()
-		return bytes.Clone(cached.body), cached.etag, nil
+		return cloneBrowserPage(cached), listing.version, nil
 	}
 	s.listingMu.Unlock()
 
@@ -149,17 +145,6 @@ func (s *UploadService) FileBrowserSnapshot(query BrowserQuery) ([]byte, string,
 	result := BrowserPage{Files: entries[start:min(start+pageSize, len(entries))], Directory: directory,
 		Total: len(entries), FolderCount: folderCount, TotalFiles: len(listing.files), Page: page,
 		PageSize: pageSize, TotalPages: totalPages, TotalSizeDisplay: utils.FormatFileSize(listing.totalSize)}
-	body, err := json.Marshal(result)
-	if err != nil {
-		return nil, "", err
-	}
-	// Bind validators to query identity as well as content, so a validator from
-	// another directory/search/page can never produce an unrelated 304.
-	identity, _ := json.Marshal(query)
-	sum := sha256.New()
-	_, _ = sum.Write(identity)
-	_, _ = sum.Write(body)
-	etag := fmt.Sprintf(`"%x"`, sum.Sum(nil))
 	s.listingMu.Lock()
 	if s.listing == listing {
 		// Bound query caches even when users enter many different searches.
@@ -169,8 +154,9 @@ func (s *UploadService) FileBrowserSnapshot(query BrowserQuery) ([]byte, string,
 				break
 			}
 		}
-		index.pages[query] = browserSnapshot{body: bytes.Clone(body), etag: etag}
+		// Retain only the page, not the backing array of all matching entries.
+		index.pages[query] = cloneBrowserPage(result)
 	}
 	s.listingMu.Unlock()
-	return body, etag, nil
+	return cloneBrowserPage(result), listing.version, nil
 }

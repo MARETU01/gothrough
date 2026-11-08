@@ -30,7 +30,7 @@ func authRequest(r http.Handler, method, path, body string, cookie *http.Cookie,
 }
 
 func TestAccessProtectsAllContentRoutes(t *testing.T) {
-	r := SetupRouter(nil, nil, config.DefaultLoggingSettings(), config.AuthSettings{Password: "test-password"})
+	r := SetupRouter(nil, nil, nil, config.DefaultLoggingSettings(), config.AuthSettings{Password: "test-password"})
 	for _, query := range []string{"?preview=1", "?preview=info"} {
 		w := authRequest(r, "GET", "/api/files/sample.txt"+query, "", nil, "", false)
 		if w.Code != http.StatusUnauthorized {

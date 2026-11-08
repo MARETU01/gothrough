@@ -39,7 +39,7 @@ func sanitizeUploadPath(name string) (string, error) {
 	return strings.Join(parts, "/"), nil
 }
 
-func (s *UploadService) prepareParent(name string) error {
+func (s *FileService) prepareParent(name string) error {
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
 		return utils.StorageError("打开上传目录失败", err)
@@ -82,7 +82,7 @@ func (s *UploadService) prepareParent(name string) error {
 
 // Called with s.mu held. Remove only empty ancestors created by this service,
 // and preserve directories reserved by any other active upload.
-func (s *UploadService) cleanupParents(name string) {
+func (s *FileService) cleanupParents(name string) {
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
 		return
