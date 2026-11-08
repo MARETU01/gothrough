@@ -45,3 +45,10 @@ it('refreshes disk state independently without a file-list validator', async () 
   expect(adapter.mock.calls[0][0].url).toBe('/disk-info');
   expect(adapter.mock.calls[0][0].headers.get('If-None-Match')).toBeUndefined();
 });
+
+it('encodes server-side directory, search, sorting, and pagination', async () => {
+  const adapter = respond(200, { files: [], directory: '文档/照片', total: 0, total_size_display: '0 B' });
+  await listFiles(undefined, undefined, { directory: '文档/照片', search: 'a & b', sort: 'size_desc', page: 2, pageSize: 20 });
+  const url = new URL(adapter.mock.calls[0][0].url!, 'http://localhost');
+  expect(Object.fromEntries(url.searchParams)).toEqual({ view: 'browser', dir: '文档/照片', q: 'a & b', sort: 'size_desc', page: '2', page_size: '20' });
+});

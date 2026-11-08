@@ -1,26 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clipboard, Files, Upload, MonitorSmartphone } from 'lucide-react';
+import { ArrowRight, MonitorSmartphone } from 'lucide-react';
 import './HomePage.css';
+import { features } from '@/config/features';
 
 export default function HomePage() {
   const { t } = useTranslation();
   usePageTitle(t("app.title"));
-  const features = [
-    {
-      path: '/upload', title: t("文件上传"), icon: Upload, action: t("开始上传"),
-      description: t("拖入文件或文件夹，保留目录结构。支持多文件队列、暂停和失败重试。"),
-    },
-    {
-      path: '/files', title: t("文件列表"), icon: Files, action: t("查看文件"),
-      description: t("查找、下载和管理已上传的文件，随时了解文件大小与磁盘空间。"),
-    },
-    {
-      path: '/clipboard', title: t("共享剪贴板"), icon: Clipboard, action: t("分享文本"),
-      description: t("粘贴并发布一段文字，在另一台设备查看和复制，历史记录自动保存。"),
-    },
-  ];
 
   return (
     <main className="home-page">
@@ -36,9 +23,9 @@ export default function HomePage() {
           {features.map(({ path, title, icon: Icon, action, description }) => (
             <Link key={path} to={path} className="home-feature" aria-labelledby={`home${path}`}>
               <span className="home-feature-icon"><Icon aria-hidden="true" /></span>
-              <h2 id={`home${path}`}>{title}</h2>
-              <p>{description}</p>
-              <span className="home-feature-action">{action}<ArrowRight aria-hidden="true" /></span>
+              <h2 id={`home${path}`}>{t(title)}</h2>
+              <p>{t(description)}</p>
+              <span className="home-feature-action">{t(action)}<ArrowRight aria-hidden="true" /></span>
             </Link>
           ))}
         </nav>

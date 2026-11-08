@@ -19,6 +19,7 @@ type fileListing struct {
 	expires   time.Time
 	body      string
 	etag      string
+	browser   *browserIndex
 }
 
 func (s *UploadService) invalidateFiles() {

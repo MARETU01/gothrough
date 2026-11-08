@@ -30,6 +30,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | Path | Responsibility |
 | --- | --- |
 | `src/pages/`, `src/router.tsx` | Pages and routing |
+| `src/config/features.ts` | Shared feature definitions for lazy routes, navigation entries, and home cards |
 | `src/contexts/UploadQueueProvider.tsx` | Application-level queue that continues across in-app navigation |
 | `src/hooks/useUploadQueue.ts` | Queue scheduling, React snapshots, clocks, and page lifecycle |
 | `src/features/upload/engine.ts` | Single-file protocol, chunk concurrency, retries, and completion without React |
@@ -38,6 +39,21 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | `src/config/` | Upload settings and clipboard refresh interval |
 | `src/i18n/` | Translation resources, language detection, and message descriptors |
 | `src/components/`, `src/styles/` | Shared components and styles |
+
+Add new features to `src/config/features.ts`, then update the Go SPA fallback allowlist in `internal/router/web.go`. Shared definitions contain translation keys rather than translated strings. The file browser uses server-side directory/search/page queries, with full-snapshot support for older servers. Narrow screens render the same file rows as cards. Logout asks for confirmation before discarding unfinished uploads.
+
+## Browser workflow tests
+
+After installing npm dependencies, run:
+
+```sh
+npm exec -- playwright install chromium webkit
+npm run test:e2e
+```
+
+Run these commands in `frontend`. Playwright starts an isolated Go API on port 19815 and Vite on 5183; neither port may already be in use. It builds a test executable and writes disposable configuration and data under ignored `.e2e-runtime/`, without loading local deployment configuration or inheriting `GOTHROUGH_*` overrides. Test output and failure traces go to ignored `test-results/`. Stop test processes before removing these generated directories.
+
+The suite covers desktop Chromium, mobile Chromium, and mobile-size WebKit: navigation and language switching, upload/preview/edit/download, manual clipboard fallback, cancelling and confirming logout during a transfer, and server-side pagination/search. These are browser emulations, not native-device certification. CI installs browser dependencies with `--with-deps` and runs the suite separately from Vitest; `make test` does not run browser tests.
 
 ## Internationalization
 

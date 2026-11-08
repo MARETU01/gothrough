@@ -1,24 +1,22 @@
 import { useTranslation } from 'react-i18next';
-import { useContext, useEffect, useId, useRef, useState } from 'react';
-import { AccessContext } from '@/contexts/AccessContext';
+import { useEffect, useId, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import './Navigation.css';
 import { useSharedUploadQueue } from '@/contexts/UploadQueueContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { Button } from '@/components/ui/button';
-import { Clipboard, Files, House, LockKeyhole, Menu, Upload, X } from 'lucide-react';
+import { House, Menu, X } from 'lucide-react';
+import { features } from '@/config/features';
+import { LogoutButton } from '@/components/LogoutButton';
 
-// Add future pages here so desktop and mobile navigation stay in sync.
+// Feature routes and cards use the same registry.
 const navigationItems = [
   { path: '/', label: '主页', icon: House },
-  { path: '/upload', label: '文件上传', icon: Upload },
-  { path: '/files', label: '文件列表', icon: Files },
-  { path: '/clipboard', label: '剪贴板', icon: Clipboard },
+  ...features,
 ];
 
 export const Navigation: React.FC = () => {
   const { t } = useTranslation();
-  const access = useContext(AccessContext);
   const location = useLocation();
   const [expandedAt, setExpandedAt] = useState<string | null>(null);
   const expanded = expandedAt === location.key;
@@ -36,6 +34,8 @@ export const Navigation: React.FC = () => {
       if (event.target instanceof Node && !navRef.current?.contains(event.target)) setExpandedAt(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      // Native dialogs own Escape while they are open (for example logout).
+      if (event.target instanceof Element && event.target.closest('dialog[open]')) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         setExpandedAt(null);
         toggleRef.current?.focus();
@@ -79,7 +79,7 @@ export const Navigation: React.FC = () => {
           </div>
           <div className="nav-tools">
             <LanguageSwitcher />
-            {access.enabled && <Button variant="outline" type="button" onClick={() => { closeMenu(); void access.logout(); }}><LockKeyhole aria-hidden="true" />{t('auth.lock')}</Button>}
+            <LogoutButton />
           </div>
         </div>
       </div>

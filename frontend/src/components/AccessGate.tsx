@@ -36,10 +36,13 @@ export function AccessGate({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [check]);
   useEffect(() => {
+    // Cleanup requests may receive 401 after a deliberate logout. They must
+    // not turn the already locked page into a spurious session-expired error.
+    if (!access?.authenticated) return;
     const lock = () => { setAccess({ enabled: true, authenticated: false }); setError('auth.expired'); };
     window.addEventListener('gothrough:auth-required', lock);
     return () => window.removeEventListener('gothrough:auth-required', lock);
-  }, []);
+  }, [access?.authenticated]);
 
   async function login(event: FormEvent) {
     event.preventDefault();

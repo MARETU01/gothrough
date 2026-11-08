@@ -1,4 +1,9 @@
 {
+  "auth.confirmLock": "Lock and sign out?",
+  "auth.uploadWarning": "There are unfinished files in the queue. Signing out interrupts active uploads and clears the queue. You will need to select the files again after unlocking.",
+  "auth.lockAnyway": "Stop uploads and sign out",
+  "auth.keepUploading": "Stay on this page",
+  "errors.INVALID_FILE_QUERY": "Invalid file query. Reload the page and try again.",
   "nav.menu": "Menu",
   "nav.open": "Open navigation menu",
   "nav.close": "Close navigation menu",

@@ -6,7 +6,9 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/MARETU01/gothrough/internal/logging"
@@ -18,6 +20,40 @@ import (
 // 已上传文件列表
 func (h *UploadHandler) ListUploads(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
+	if c.Query("view") == "browser" {
+		query := service.BrowserQuery{Directory: c.Query("dir"), Search: c.Query("q"), Sort: c.DefaultQuery("sort", "mtime_desc"), Page: 1, PageSize: 20}
+		valid := len(query.Directory) <= 4096 && len(query.Search) <= 1024 && !strings.ContainsAny(query.Directory, "\\\x00") &&
+			(query.Directory == "" || (path.Clean(query.Directory) == query.Directory && query.Directory != "." && query.Directory != ".." && !strings.HasPrefix(query.Directory, "../") && !strings.HasPrefix(query.Directory, "/")))
+		for key, target := range map[string]*int{"page": &query.Page, "page_size": &query.PageSize} {
+			if value, exists := c.GetQuery(key); exists {
+				number, err := strconv.Atoi(value)
+				if err != nil || number < 1 || (key == "page_size" && number > 100) {
+					valid = false
+				} else {
+					*target = number
+				}
+			}
+		}
+		switch query.Sort {
+		case "name_asc", "name_desc", "size_asc", "size_desc", "mtime_asc", "mtime_desc":
+		default:
+			valid = false
+		}
+		if !valid {
+			respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
+			return
+		}
+		body, etag, err := h.uploadService.FileBrowserSnapshot(query)
+		if err != nil {
+			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
+			return
+		}
+		if respondNotModified(c, etag) {
+			return
+		}
+		c.Data(http.StatusOK, "application/json; charset=utf-8", body)
+		return
+	}
 	// Keep the original combined response for existing clients. The compact view
 	// is independently versioned and does not perform a disk-space query.
 	if c.Query("view") == "list" {

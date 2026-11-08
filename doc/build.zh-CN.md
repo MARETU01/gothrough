@@ -80,6 +80,7 @@ make test-race
 | --- | --- | --- |
 | Backend | Ubuntu、Windows，CGO 关闭 | 普通 Go 测试、vet、无嵌入资源构建；Linux 另测镜像标签规则 |
 | Frontend and embedded build | Ubuntu，CGO 开启 | 前端 lint、测试、构建，Go 嵌入版构建、测试、vet 和 race 检测 |
+| Browser workflows | Ubuntu | 使用独立 Go API 和 Vite 的 Playwright 测试，覆盖桌面及手机 Chromium、手机尺寸 WebKit；独立于 `make test` |
 | Verify Docker image | Ubuntu，仅 PR、标签和手动运行 | amd64 容器页面、分块上传、下载一致性及重启持久化 |
 | Publish versioned Docker image | Ubuntu，仅版本标签且检查通过 | 发布 amd64/arm64 镜像 |
 

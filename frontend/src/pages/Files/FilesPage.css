@@ -53,11 +53,25 @@
 .files-pagination button[aria-current='page'] { background: #00796b; border-color: #00796b; color: white; }
 .files-pagination span { font-size: 12px; color: #546e6a; }
 @media (max-width: 600px) {
+  .files-table-scroll { border: 0; overflow: visible; }
+  .files-page table, .files-page tbody { display: block; }
+  .files-page thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .files-page tbody { display: grid; gap: 12px; }
+  .files-page tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); min-width: 0; padding: 14px; border: 1px solid #d1e8e4; border-radius: 12px; background: white; }
+  .files-page tbody td { min-width: 0; padding: 0; border: 0; }
+  .files-page .files-name { grid-column: 1 / -1; min-width: 0; max-width: none; margin-bottom: 12px; }
+  .files-folder-link { min-height: 44px; width: 100%; }
+  .files-page .files-size, .files-page .files-time { white-space: normal; font-size: 12px; overflow-wrap: anywhere; }
+  .files-size::before, .files-time::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #78938d; }
+  .files-page tbody td:last-child { grid-column: 1 / -1; width: auto; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dcece9; white-space: normal; }
+  .files-row-actions { display: block; white-space: normal; }
+  .files-page .files-action-controls { flex-wrap: wrap; justify-content: flex-start; }
+  .files-actions-sizing { display: none; }
+  .files-action-controls [data-slot='button'] { min-height: 44px; }
   .files-header h1 { font-size: 24px; }
   .files-disk { padding: 14px; gap: 18px; }
   .files-disk dl { gap: 18px; }
   .files-disk-meter { flex-basis: 100%; min-width: 0; }
   .files-toolbar input { flex-basis: 100%; }
-  .files-page th, .files-page td { padding: 12px 10px; }
   .files-pagination button { padding: 8px 10px; }
 }

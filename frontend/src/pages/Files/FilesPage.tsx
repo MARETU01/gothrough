@@ -2,7 +2,7 @@ import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { deleteFile, downloadFileUrl, downloadFolderUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile } from '@/services/files';
+import { deleteFile, downloadFileUrl, downloadFolderUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile, type FileBrowserEntry } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -27,6 +27,12 @@ export default function FilesPage() {
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage;
   const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('mtime_desc');
+  const [page, setPage] = useState(1);
+  const requestedDirectory = searchParams.get('dir') ?? '';
+  const requestKey = JSON.stringify([requestedDirectory, query.trim(), sort, page]);
+  const [acceptedRequestKey, setAcceptedRequestKey] = useState('');
   const SORT_OPTIONS = [
     ['mtime_desc', t("最近修改 ↓")], ['mtime_asc', t("最近修改 ↑")],
     ['size_desc', t("文件大小 ↓")], ['size_asc', t("文件大小 ↑")],
@@ -35,19 +41,18 @@ export default function FilesPage() {
 
   usePageTitle(t("已上传文件 - GoThrough"));
   const etag = useRef<string | undefined>(undefined);
+  const acceptedKey = useRef('');
   const loadFiles = useCallback(async (signal?: AbortSignal, context?: RemoteLoadContext) => {
-    const result = await listFiles(signal, context?.background ? etag.current : undefined);
-    context?.onAccepted(() => { etag.current = result.etag; });
+    const result = await listFiles(signal, context?.background && acceptedKey.current === requestKey ? etag.current : undefined,
+      { directory: requestedDirectory, search: query.trim(), sort, page, pageSize: PAGE_SIZE });
+    context?.onAccepted(() => { etag.current = result.etag; acceptedKey.current = requestKey; setAcceptedRequestKey(requestKey); });
     return result.notModified ? NOT_MODIFIED : result;
-  }, []);
+  }, [requestedDirectory, query, sort, page, requestKey]);
   const { data, setData, loading, error, setError, backgroundError, refresh, cancel, cancelBackground, mounted } =
     useRemoteData<FileListData | null>(loadFiles, null);
   const { data: disk, loading: diskLoading, error: diskError, backgroundError: diskBackgroundError, refresh: refreshDisk, cancel: cancelDisk, cancelBackground: cancelDiskBackground } =
     useRemoteData<DiskInfo | null>(getDiskInfo, null);
   const [notice, setNotice] = useState<Message>('');
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState('mtime_desc');
-  const [page, setPage] = useState(1);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const { draft: preservedDraft } = useEditorDraft();
@@ -89,12 +94,12 @@ export default function FilesPage() {
 
   // If the last file in a directory disappears, show the nearest surviving
   // parent. The URL retains the requested path while the initial list loads.
-  const requestedDirectory = searchParams.get('dir') ?? '';
   const directory = useMemo(() => {
+    if (data?.directory !== undefined) return data.directory;
     let current = requestedDirectory;
     while (current && !folders.has(current)) current = current.split('/').slice(0, -1).join('/');
     return current;
-  }, [requestedDirectory, folders]);
+  }, [requestedDirectory, folders, data]);
   const searching = query.trim().length > 0;
   const breadcrumbs = directory ? directory.split('/') : [];
 
@@ -112,6 +117,7 @@ export default function FilesPage() {
   }
 
   const filtered = useMemo(() => {
+    if (data?.directory !== undefined) return data.files as FileBrowserEntry[];
     const keyword = query.trim().toLocaleLowerCase();
     const prefix = directory ? directory + '/' : '';
     const files: BrowserEntry[] = (data?.files ?? [])
@@ -135,10 +141,12 @@ export default function FilesPage() {
       return (direction === 'asc' ? comparison : -comparison) || a.name.localeCompare(b.name);
     });
   }, [data, folders, directory, query, sort, language]);
-  const folderCount = filtered.filter(entry => entry.folder).length;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageFiles = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const folderCount = data?.folder_count ?? filtered.filter(entry => entry.folder).length;
+  const totalEntries = data?.total ?? filtered.length;
+  const totalFiles = data?.total_files ?? data?.files.length ?? 0;
+  const totalPages = data?.total_pages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = data?.page ?? Math.min(page, totalPages);
+  const pageFiles = data?.directory !== undefined ? filtered : filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - 6));
   const pages = Array.from({ length: Math.min(7, totalPages) }, (_, index) => firstPage + index);
   const diskPercent = Math.min(100, Math.max(0, disk?.disk_pct ?? 0));
@@ -205,18 +213,18 @@ export default function FilesPage() {
           <Select aria-label={t("文件排序")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); setConfirming(null); }}>
             {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select>
-          <span className="files-count">{folderCount > 0 ? t('browser.count', { folders: folderCount, files: filtered.length - folderCount }) : t('files.count', { count: filtered.length })}{searching && data ? t('files.total', { count: data.files.length }) : ''}</span>
+          <span className="files-count">{folderCount > 0 ? t('browser.count', { folders: folderCount, files: totalEntries - folderCount }) : t('files.count', { count: totalEntries })}{searching && data ? t('files.total', { count: totalFiles }) : ''}</span>
         </div>
         {searching && <p className="files-sync-note">{t('browser.searchHint')}</p>}
         {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={deleting !== null} onClick={manualRefresh} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
         {(backgroundError || diskBackgroundError) && <p className="files-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
-        {data && <section aria-label={t("文件列表")} aria-busy={loading}>
-          {filtered.length > 0 ? <div className="files-table-scroll"><table>
-            <thead><tr><th scope="col">{t("文件名")}</th><th scope="col">{t("大小")}</th><th scope="col">{t("修改时间")}</th><th scope="col">{t("操作")}</th></tr></thead>
-            <tbody>{pageFiles.map(file => <tr key={file.name}>
-              <td className="files-name">{file.folder ? <button type="button" className="files-folder-link" disabled={deleting !== null} aria-label={t('browser.open', { name: file.name })} onClick={() => openDirectory(file.name)}><Folder aria-hidden="true" /><span>{file.label}</span></button> : <span className="files-file-label"><File aria-hidden="true" /><span>{file.label}</span></span>}</td><td className="files-size">{file.size_display}</td><td className="files-time">{file.folder ? '—' : <Timestamp value={file.mtime} />}</td>
-              <td>{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadFolderUrl(file.name)} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
+        {data && (data.directory === undefined || acceptedRequestKey === requestKey) && <section aria-label={t("文件列表")} aria-busy={loading}>
+          {filtered.length > 0 ? <div className="files-table-scroll"><table role="table">
+            <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">{t("文件名")}</th><th role="columnheader" scope="col">{t("大小")}</th><th role="columnheader" scope="col">{t("修改时间")}</th><th role="columnheader" scope="col">{t("操作")}</th></tr></thead>
+            <tbody role="rowgroup">{pageFiles.map(file => <tr role="row" key={file.name}>
+              <td role="cell" className="files-name">{file.folder ? <button type="button" className="files-folder-link" disabled={deleting !== null} aria-label={t('browser.open', { name: file.name })} onClick={() => openDirectory(file.name)}><Folder aria-hidden="true" /><span>{file.label}</span></button> : <span className="files-file-label"><File aria-hidden="true" /><span>{file.label}</span></span>}</td><td role="cell" className="files-size" data-label={t('大小')}>{file.size_display}</td><td role="cell" className="files-time" data-label={t('修改时间')}>{file.folder ? '—' : <Timestamp value={file.mtime} />}</td>
+              <td role="cell">{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadFolderUrl(file.name)} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
                 <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} onClick={() => { stopBackground(); setPreviewing(file.name); }}>{t('preview.button')}</Button>
                 <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
                 <DeleteAction confirming={confirming === file.name} disabled={deleting !== null} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { stopBackground(); setConfirming(file.name); }} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
@@ -228,7 +236,7 @@ export default function FilesPage() {
               </div>
               </div>}</td>
             </tr>)}</tbody>
-          </table></div> : <div className="files-empty">{data.files.length === 0 ? <>{t("还没有上传文件，先去")}<Link to="/upload">{t("上传文件")}</Link>{t("吧。")}</> : <>{t("没有找到匹配的文件。")}<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>{t("清除搜索")}</Button></>}</div>}
+          </table></div> : <div className="files-empty">{totalFiles === 0 ? <>{t("还没有上传文件，先去")}<Link to="/upload">{t("上传文件")}</Link>{t("吧。")}</> : <>{t("没有找到匹配的文件。")}<Button type="button" onClick={() => { setQuery(''); setPage(1); }}>{t("清除搜索")}</Button></>}</div>}
           {totalPages > 1 && <nav className="files-pagination" aria-label={t("文件列表分页")}>
             <Button type="button" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); setConfirming(null); }}>{t("上一页")}</Button>
             {pages.map(number => <Button type="button" variant={number === currentPage ? "default" : "outline"} key={number} aria-label={t('files.page', { number })} aria-current={number === currentPage ? 'page' : undefined} onClick={() => { setPage(number); setConfirming(null); }}>{number}</Button>)}
