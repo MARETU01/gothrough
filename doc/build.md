@@ -80,6 +80,7 @@ The workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs o
 | --- | --- | --- |
 | Backend | Ubuntu and Windows, CGO disabled | Ordinary Go tests, vet, builds without embedded assets; Linux also tests image tag rules |
 | Frontend and embedded build | Ubuntu, CGO enabled | Frontend lint, tests, build; embedded Go build, tests, vet, and race detection |
+| Browser workflows | Ubuntu | Playwright with desktop/mobile Chromium and mobile-size WebKit against an isolated Go API and Vite; runs separately from `make test` |
 | Verify Docker image | Ubuntu, PRs, tags, and manual runs only | amd64 container pages, chunked uploads, download integrity, and restart persistence |
 | Publish versioned Docker image | Ubuntu, version tags after checks pass | Publish amd64/arm64 images |
 

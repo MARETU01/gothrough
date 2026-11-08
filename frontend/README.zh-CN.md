@@ -30,6 +30,7 @@ npm run lint
 | 路径 | 职责 |
 | --- | --- |
 | `src/pages/`、`src/router.tsx` | 页面及路由 |
+| `src/config/features.ts` | 懒加载路由、导航入口和首页卡片共用的功能定义 |
 | `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，支持站内切换页面后继续上传 |
 | `src/hooks/useUploadQueue.ts` | 队列调度、React 快照、计时与页面生命周期 |
 | `src/features/upload/engine.ts` | 不使用 React 的单文件协议、分块并发、重试和完成确认 |
@@ -38,6 +39,21 @@ npm run lint
 | `src/config/` | 上传参数及剪贴板刷新间隔 |
 | `src/i18n/` | 翻译资源、语言检测与消息描述 |
 | `src/components/`、`src/styles/` | 公共组件与样式 |
+
+新增功能先修改 `src/config/features.ts`，再同步 Go 的 `internal/router/web.go` 中 SPA 回退白名单。共用定义保存翻译 key，不保存译文。文件列表使用服务端目录、搜索和分页查询，并兼容旧服务端的完整快照；窄屏下同一组文件行呈现为卡片。退出前如有未完成上传，会先要求确认。
+
+## 浏览器流程测试
+
+安装 npm 依赖后，在 `frontend` 目录执行：
+
+```sh
+npm exec -- playwright install chromium webkit
+npm run test:e2e
+```
+
+Playwright 启动独立的 Go API（19815 端口）和 Vite（5183 端口），这两个端口不能已被占用。测试编译可执行文件，并在忽略的 `.e2e-runtime/` 下生成独立配置和数据，不读取本地部署配置，也不继承 `GOTHROUGH_*` 覆盖设置。测试输出和失败追踪放在忽略的 `test-results/`。删除这些生成目录前应先停止测试进程。
+
+测试覆盖桌面 Chromium、手机 Chromium 和手机尺寸 WebKit：导航与语言切换，上传、预览、编辑、下载，手动复制降级，上传中取消及确认退出，以及服务端分页和搜索。这些属于浏览器模拟，不等于真机认证。CI 使用 `--with-deps` 安装浏览器依赖，并在 Vitest 之外独立运行；`make test` 不包含浏览器测试。
 
 ## 国际化
 

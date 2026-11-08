@@ -41,6 +41,21 @@ const openPage = (initialEntries = ['/files']) => {
 const advancePoll = (milliseconds = FILES_REFRESH_INTERVAL_MS) =>
   act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
 
+it('renders server pages without paginating them again and requests the selected query', async () => {
+  const file = { name: 'doc/result.txt', label: 'result.txt', folder: false, size: 1, size_display: '1 B', mtime: '2026-11-06T13:00:00Z' };
+  vi.mocked(listFiles).mockResolvedValue({ files: [file], total_size_display: '25 B', directory: 'doc', total: 25,
+    total_files: 25, folder_count: 0, page: 2, page_size: 20, total_pages: 2 });
+  openPage(['/files?dir=doc']);
+  await screen.findByText('result.txt');
+  expect(screen.getByText('第 2 / 2 页')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '上一页' }));
+  await waitFor(() => expect(listFiles).toHaveBeenLastCalledWith(expect.any(AbortSignal), undefined,
+    expect.objectContaining({ directory: 'doc', page: 1 })));
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'result' } });
+  await waitFor(() => expect(listFiles).toHaveBeenLastCalledWith(expect.any(AbortSignal), undefined,
+    expect.objectContaining({ directory: 'doc', search: 'result', page: 1 })));
+});
+
 it('offers encoded ZIP downloads for folders and nested folders without duplicates', async () => {
   const data = makeData();
   data.files = ['照片/旅行/a.txt', '照片/旅行/b.txt', 'root.txt'].map(name => ({
@@ -207,6 +222,8 @@ it('updates files and storage silently, keeps search/sort/page, clamps deleted p
   fireEvent.click(screen.getByRole('button', { name: '下一页' }));
   const data = makeData();
   const added = { ...data.files[20], name: '文件 22.txt' };
+  // Query changes now trigger foreground requests; settle them before polling.
+  await act(async () => {});
   vi.mocked(listFiles).mockResolvedValue({ ...data, files: [...data.files, added], disk_pct: 42, disk_free_display: '58 GB' });
   vi.mocked(getDiskInfo).mockResolvedValue({ ...data, disk_pct: 42, disk_free_display: '58 GB' });
   await advancePoll();

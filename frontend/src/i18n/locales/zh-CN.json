@@ -1,4 +1,9 @@
 {
+  "auth.confirmLock": "确认锁定退出？",
+  "auth.uploadWarning": "队列中还有未完成的文件。退出会中断正在进行的上传并清空队列，重新解锁后需要重新选择文件。",
+  "auth.lockAnyway": "中断上传并退出",
+  "auth.keepUploading": "留在页面",
+  "errors.INVALID_FILE_QUERY": "文件查询参数无效，请刷新页面后重试。",
   "nav.menu": "菜单",
   "nav.open": "展开导航菜单",
   "nav.close": "收起导航菜单",
