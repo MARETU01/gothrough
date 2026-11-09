@@ -2,7 +2,7 @@ package model
 
 type ClipboardEntry struct {
 	ID        string         `json:"id"`
-	Type      string         `json:"type,omitempty"`
+	Type      string         `json:"type"`
 	Text      string         `json:"text"`
 	Image     ClipboardImage `json:"image,omitzero"`
 	CreatedAt string         `json:"created_at"`

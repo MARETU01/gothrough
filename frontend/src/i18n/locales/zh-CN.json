@@ -1,4 +1,6 @@
 {
+  "服务端返回的上传完成信息无效": "服务端返回的上传完成信息无效",
+  "errors.UNSUPPORTED_UPLOAD_TYPE": "分块上传仅支持 application/octet-stream。",
   "auth.confirmLock": "确认锁定退出？",
   "auth.uploadWarning": "队列中还有未完成的文件。退出会中断正在进行的上传并清空队列，重新解锁后需要重新选择文件。",
   "auth.lockAnyway": "中断上传并退出",
@@ -240,8 +242,6 @@
   "errors.INVALID_UPLOAD": "缺少 filename 或 total_size",
   "errors.CHUNK_TOO_LARGE": "分块超过大小限制",
   "errors.INVALID_CHUNK_INDEX": "无效的 chunk_index",
-  "errors.MISSING_CHUNK_DATA": "无分块数据",
-  "errors.CHUNK_READ_FAILED": "读取分块失败，请稍后重试",
   "errors.MISSING_CHUNKS": "缺少分块",
   "errors.MISSING_SESSION": "缺少 session_id",
   "errors.INVALID_SESSION": "无效或已结束的会话",

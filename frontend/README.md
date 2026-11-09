@@ -43,7 +43,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 
 Add features to `src/config/features.ts` and the Go SPA fallback allowlist in `internal/router/web.go`; shared definitions store translation keys. Update uploads through named `UploadTask` methods; the task and engine have no React or localization runtime dependencies. See [state ownership](../doc/architecture.md#frontend-state).
 
-File listings use the paginated browser structure. All ZIP links use `downloadSelectionUrl`; archives are named `files.zip` and retain upload-relative paths. All deletion calls `deleteSelection`: a single deletion sends one entry and must check the matching result's `deleted` flag, not just the HTTP status.
+Requests, responses, and recovery rules belong to [Transfer and APIs](../doc/transfer.md). Pages call `src/services/`; tests use server-paginated responses.
 
 ## Browser workflow tests
 
@@ -70,7 +70,7 @@ Use `useTranslation()` in components to obtain `t`. Static text uses the Chinese
 
 Do not translate at module initialization. Store upload status, API errors, and success notices with `message(key, values)`, then call `translateMessage()` when rendering so existing notices follow language changes.
 
-API errors retain `error` and provide a stable `code`. `apiErrorDescriptor()` prefers the `errors.<code>` translation and falls back to the original error for unknown codes or older servers. Add translations in both languages when introducing an error code.
+API errors retain `error` and provide a stable `code`. `apiErrorDescriptor()` prefers the `errors.<code>` translation and falls back to the original error for unknown codes. Add translations in both languages when introducing an error code.
 
 To add a language:
 

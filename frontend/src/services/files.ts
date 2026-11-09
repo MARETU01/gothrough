@@ -17,23 +17,21 @@ export interface DiskInfo {
 }
 
 export interface FileListData {
-  files: UploadedFile[];
+  files: FileBrowserEntry[];
   total_size_display: string;
-  directory?: string;
-  total?: number;
-  folder_count?: number;
-  total_files?: number;
-  page?: number;
-  page_size?: number;
-  total_pages?: number;
+  directory: string;
+  total: number;
+  folder_count: number;
+  total_files: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface FileBrowserQuery { directory: string; search: string; sort: string; page: number; pageSize: number }
 export interface FileBrowserEntry extends UploadedFile { folder: boolean; label: string }
 
-// Original combined response remains supported by the backend.
-export interface FileListResponse extends FileListData, DiskInfo {}
-export type FileListResult = (FileListData & Partial<DiskInfo> & { notModified?: false; etag?: string })
+export type FileListResult = (FileListData & { notModified?: false; etag?: string })
   | { notModified: true; etag?: string };
 
 export const listFiles = async (signal?: AbortSignal, etag?: string, query?: FileBrowserQuery): Promise<FileListResult> => {

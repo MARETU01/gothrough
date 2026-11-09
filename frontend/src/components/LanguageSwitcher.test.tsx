@@ -15,7 +15,7 @@ vi.mock('@/services/upload', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(initUpload).mockResolvedValue({ session_id: 'test', total_chunks: 1, chunk_size: 5, final_filename: 'test.txt' });
-  vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'test.txt' });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: 'test.txt' });
   vi.mocked(cancelUpload).mockResolvedValue({ status: 'cancelled' });
 });
 afterEach(cleanup);

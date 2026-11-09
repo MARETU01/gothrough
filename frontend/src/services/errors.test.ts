@@ -21,7 +21,7 @@ it('falls back to the original message for network and non-HTTP failures', () =>
   expect(isCanceledError(new Error('offline'))).toBe(false);
 });
 
-it('translates known error codes and retains messages for unknown or older servers', async () => {
+it('translates known error codes and retains messages for unknown error codes', async () => {
   const descriptor = apiErrorDescriptor({ isAxiosError: true, response: { data: { code: 'CHUNK_TOO_LARGE', error: '原始提示' } } });
   expect(translateMessage(descriptor)).toBe('分块超过大小限制');
   await changeLanguage('en');

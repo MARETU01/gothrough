@@ -16,8 +16,6 @@ func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard
 	r := gin.New()
 	r.Use(logging.HTTP(slog.Default(), logSettings), logging.Recovery())
 
-	r.MaxMultipartMemory = 50 * 1024 * 1024 // Parsing threshold; handlers enforce request body limits.
-
 	api := r.Group("/api")
 	settings := config.AuthSettings{}
 	if len(authSettings) > 0 {

@@ -18,6 +18,7 @@ func TestUploadInitRequiresExplicitSizeWithoutReservingName(t *testing.T) {
 		`{"filename":"empty.txt","total_size":"0"}`,
 		`{"filename":"empty.txt","total_size":0} {}`,
 		`{"filename":"empty.txt","total_size":0} garbage`,
+		`{"filename":"empty.txt","total_size":0,"future_field":true}`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			_, h := setup(t)
@@ -25,7 +26,7 @@ func TestUploadInitRequiresExplicitSizeWithoutReservingName(t *testing.T) {
 			if res.Code != 400 || !strings.Contains(res.Body.String(), `"code":"INVALID_UPLOAD"`) {
 				t.Fatalf("invalid request: %d %s", res.Code, res.Body.String())
 			}
-			res = post(t, h, "/api/upload/init", "application/json", strings.NewReader(`{"filename":"empty.txt","total_size":0,"future_field":true} `))
+			res = post(t, h, "/api/upload/init", "application/json", strings.NewReader(`{"filename":"empty.txt","total_size":0} `))
 			var response struct {
 				SessionID     string `json:"session_id"`
 				FinalFilename string `json:"final_filename"`
@@ -34,7 +35,7 @@ func TestUploadInitRequiresExplicitSizeWithoutReservingName(t *testing.T) {
 				t.Fatal(err)
 			}
 			if res.Code != 200 || response.FinalFilename != "empty.txt" {
-				t.Fatalf("empty file or compatibility broken/name reserved: %d %s", res.Code, res.Body.String())
+				t.Fatalf("empty file rejected/name reserved: %d %s", res.Code, res.Body.String())
 			}
 			res = post(t, h, "/api/upload/complete", "application/json", strings.NewReader(`{"session_id":"`+response.SessionID+`"}`))
 			if res.Code != 200 {

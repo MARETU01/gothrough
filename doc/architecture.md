@@ -38,11 +38,9 @@ Services return typed data and a listing generation. `ListingSnapshot` retains a
 
 `FileHandler` caches JSON and query-specific ETags. Hits skip data materialization; misses encode and hash outside the cache lock. Concurrent misses may duplicate encoding, but old generations cannot overwrite newer cached responses. Validators depend on query and content, so unchanged responses retain their ETag across cache invalidation.
 
-Handlers share storage-error mapping in `errors.go`, with operation-specific fallback codes/messages; full causes stay in logs. Fixed upload limits belong to `service/limits.go`, multipart parsing limits to the router, and deployment settings to `config/`.
+Handlers share storage-error mapping in `errors.go`, with operation-specific fallback codes/messages; full causes stay in logs. Fixed upload limits belong to `service/limits.go`, request body limits to HTTP handlers, and deployment settings to `config/`.
 
-Folder and selection ZIP downloads share the endpoint in `handler/selection.go`; file and folder deletion use the batch endpoint and the same service mutation implementation. File listings return only the paginated browser structure; disk information is queried separately.
-
-Frontend ZIP links share `downloadSelectionUrl`; all deletion calls `deleteSelection` and checks per-item results. Former HTTP routes are not retained.
+See [Transfer and APIs](transfer.md) for wire formats, limits, and recovery rules.
 
 ## Frontend State
 

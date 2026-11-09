@@ -4,9 +4,9 @@ import (
 	"errors"
 	"io"
 	"math"
+	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 	"uuid"
 
@@ -29,7 +29,7 @@ func NewUploadHandler(files *service.FileService) *UploadHandler {
 // 初始化分块上传
 func (h *UploadHandler) UploadInit(c *gin.Context) {
 	var req model.UploadInitRequest
-	if err := bindLimitedJSON(c, &req, 64*1024, jsonCompatible); err != nil {
+	if err := BindLimitedJSON(c, &req, 64*1024); err != nil {
 		invalidJSON(c, err, "INVALID_UPLOAD", "无效的上传请求")
 		return
 	}
@@ -49,18 +49,20 @@ func (h *UploadHandler) UploadInit(c *gin.Context) {
 	logging.FromContext(c.Request.Context()).Info("上传会话已创建", "event", "upload.started", "size_bytes", session.TotalSize, "total_chunks", session.TotalChunks)
 
 	c.JSON(http.StatusOK, gin.H{
-		"session_id":       session.SessionID,
-		"chunk_size":       session.ChunkSize,
-		"total_chunks":     session.TotalChunks,
-		"final_filename":   session.FinalFilename,
-		"upload_transport": "raw",
+		"session_id":     session.SessionID,
+		"chunk_size":     session.ChunkSize,
+		"total_chunks":   session.TotalChunks,
+		"final_filename": session.FinalFilename,
 	})
 }
 
 // 上传单个分块
 func (h *UploadHandler) UploadChunk(c *gin.Context) {
-	// Bound compatibility parsing as well as direct streams; multipart allocates
-	// memory before reaching the service's independent disk-write limiter.
+	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if err != nil || mediaType != "application/octet-stream" {
+		respondError(c, nil, http.StatusUnsupportedMediaType, "UNSUPPORTED_UPLOAD_TYPE", "分块上传仅支持 application/octet-stream")
+		return
+	}
 	select {
 	case h.streams <- struct{}{}:
 		defer func() { <-h.streams }()
@@ -68,46 +70,17 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 		uploadError(c, service.ErrBusy)
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.ChunkSize+1024*1024)
-	if strings.HasPrefix(c.GetHeader("Content-Type"), "application/octet-stream") {
-		if c.Request.ContentLength > service.ChunkSize {
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "CHUNK_TOO_LARGE", "error": "分块超过大小限制"})
-			return
-		}
-		index, err := strconv.Atoi(c.Query("chunk_index"))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_CHUNK_INDEX", "error": "无效的 chunk_index"})
-			return
-		}
-		h.writeChunk(c, c.Query("session_id"), index, c.Request.Body)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.ChunkSize)
+	if c.Request.ContentLength > service.ChunkSize {
+		respondError(c, nil, http.StatusRequestEntityTooLarge, "CHUNK_TOO_LARGE", "分块超过大小限制")
 		return
 	}
-	// Compatibility for existing multipart clients; new clients stream raw bodies.
-	sessionID := c.PostForm("session_id")
-	if c.Request.MultipartForm != nil {
-		defer c.Request.MultipartForm.RemoveAll()
-	}
-	chunkIndexStr := c.PostForm("chunk_index")
-
-	chunkIndex, err := strconv.Atoi(chunkIndexStr)
+	index, err := strconv.Atoi(c.Query("chunk_index"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_CHUNK_INDEX", "error": "无效的 chunk_index"})
+		respondError(c, nil, http.StatusBadRequest, "INVALID_CHUNK_INDEX", "无效的 chunk_index")
 		return
 	}
-
-	chunkFile, err := c.FormFile("chunk")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": "MISSING_CHUNK_DATA", "error": "无分块数据"})
-		return
-	}
-
-	file, err := chunkFile.Open()
-	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "CHUNK_READ_FAILED", "读取分块失败，请稍后重试")
-		return
-	}
-	defer file.Close()
-	h.writeChunk(c, sessionID, chunkIndex, file)
+	h.writeChunk(c, c.Query("session_id"), index, c.Request.Body)
 }
 
 func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io.Reader) {
@@ -240,7 +213,7 @@ func (h *UploadHandler) UploadCancel(c *gin.Context) {
 
 func sessionIDFromRequest(c *gin.Context) (string, bool) {
 	var req model.SessionRequest
-	if err := bindLimitedJSON(c, &req, 1024, jsonCompatible); err != nil {
+	if err := BindLimitedJSON(c, &req, 1024); err != nil {
 		invalidJSON(c, err, "MISSING_SESSION", "缺少 session_id")
 		return "", false
 	}

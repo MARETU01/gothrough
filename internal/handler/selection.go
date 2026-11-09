@@ -15,7 +15,7 @@ func (h *FileHandler) DeleteSelection(c *gin.Context) {
 	var request struct {
 		Entries []service.SelectionEntry `json:"entries"`
 	}
-	if err := bindLimitedJSON(c, &request, 512*1024, jsonStrict); err != nil {
+	if err := BindLimitedJSON(c, &request, 512*1024); err != nil {
 		invalidJSON(c, err, "INVALID_FILE_SELECTION", "请选择有效的文件或文件夹")
 		return
 	}

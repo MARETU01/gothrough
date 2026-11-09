@@ -23,9 +23,9 @@ vi.mock('@/services/clipboard', async importOriginal => ({
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(initUpload).mockResolvedValue({ session_id: 'test', total_chunks: 1, chunk_size: 5, final_filename: 'test.txt' });
-  vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'test.txt' });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: 'test.txt' });
   vi.mocked(cancelUpload).mockResolvedValue({ status: 'cancelled' });
-  vi.mocked(listFiles).mockResolvedValue({ files: [], total_size_display: '0 B', disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB', disk_pct: 0, disk_pct_warning: false });
+  vi.mocked(listFiles).mockResolvedValue({ files: [], total_size_display: '0 B', directory: '', total: 0, folder_count: 0, total_files: 0, page: 1, page_size: 20, total_pages: 1 });
   vi.mocked(getDiskInfo).mockResolvedValue({ disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB', disk_pct: 0, disk_pct_warning: false });
   vi.mocked(listClipboard).mockResolvedValue({ entries: [] });
   vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: false, max_size_mb: 10, max_pixels: 20000000, max_total_size_mb: 200 });

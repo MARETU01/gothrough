@@ -115,7 +115,7 @@ func TestAccessDisabledAndRateLimit(t *testing.T) {
 			}
 			continue
 		}
-		if w := authRequest(r, "POST", "/login", `{"password":"`+strings.Repeat("a", 3000)+`"}`, nil, "", false); w.Code != 400 {
+		if w := authRequest(r, "POST", "/login", `{"password":"`+strings.Repeat("a", 3000)+`"}`, nil, "", false); w.Code != 413 {
 			t.Fatal("oversized login accepted")
 		}
 		a.sources["192.0.2.1"] = loginBucket{tokens: 0, refilled: time.Now()}

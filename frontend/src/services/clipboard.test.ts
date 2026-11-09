@@ -28,7 +28,7 @@ it('reads data and validator from a full response and sends a conditional header
 });
 
 it('accepts a changed representation and tolerates servers without validators', async () => {
-  respond(200, { entries: [{ id: 'new', text: 'text', created_at: 'date' }] }, '"v2"');
+  respond(200, { entries: [{ id: 'new', type: 'text', text: 'text', created_at: 'date' }] }, '"v2"');
   expect(await listClipboard(undefined, '"v1"')).toMatchObject({ etag: '"v2"', entries: [{ id: 'new' }] });
   respond(200, { entries: [] });
   expect(await listClipboard()).toEqual({ entries: [], etag: undefined });

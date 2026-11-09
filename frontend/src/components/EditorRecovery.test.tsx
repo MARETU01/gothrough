@@ -10,7 +10,7 @@ import { AxiosError } from 'axios';
 
 vi.mock('@/services/http', () => ({ responseApi: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('@/services/files', () => ({
-  listFiles: vi.fn(async () => ({ files: [{ name: 'edit.txt', size: 3, size_display: '3 B', mtime: '2026-11-07T00:00:00Z' }], total_size_display: '3 B' })),
+  listFiles: vi.fn(async () => ({ files: [{ name: 'edit.txt', folder: false, label: 'edit.txt', size: 3, size_display: '3 B', mtime: '2026-11-07T00:00:00Z' }], total_size_display: '3 B', directory: '', total: 1, folder_count: 0, total_files: 1, page: 1, page_size: 20, total_pages: 1 })),
   getDiskInfo: vi.fn(async () => ({ disk_pct: 0, disk_pct_warning: false, disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB' })),
   getFilePreview: vi.fn(), saveFileText: vi.fn(), deleteSelection: vi.fn(),
   downloadFileUrl: (name: string) => '/api/files/' + name,

@@ -19,7 +19,7 @@ func (h *FileHandler) EditText(c *gin.Context) {
 		Text    *string `json:"text"`
 		Version string  `json:"version"`
 	}
-	if err := bindLimitedJSON(c, &req, service.MaxTextBytes*6+4096, jsonCompatible); err != nil || req.Text == nil {
+	if err := BindLimitedJSON(c, &req, service.MaxTextBytes*6+4096); err != nil || req.Text == nil {
 		if requestTooLarge(err) {
 			respondError(c, err, 413, "TEXT_TOO_LARGE", "文本最大支持 1 MiB")
 			return

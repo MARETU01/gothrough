@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"sync"
 	"time"
 
+	"github.com/MARETU01/gothrough/internal/handler"
 	"github.com/gin-gonic/gin"
 )
 
@@ -148,11 +150,15 @@ func (a *accessAuth) login(c *gin.Context) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"code": "AUTH_RATE_LIMITED", "error": "尝试过于频繁，请稍后再试"})
 		return
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 2048)
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := handler.BindLimitedJSON(c, &req, 2048); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "REQUEST_TOO_LARGE", "error": "请求体过大"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_AUTH_REQUEST", "error": "无效的口令请求"})
 		return
 	}

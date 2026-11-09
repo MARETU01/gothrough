@@ -1,8 +1,8 @@
 import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { deleteSelection, downloadFileUrl, downloadSelectionUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile, type FileBrowserEntry, type DeleteSelectionResult } from '@/services/files';
+import { deleteSelection, downloadFileUrl, downloadSelectionUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type FileBrowserEntry, type DeleteSelectionResult } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -14,7 +14,6 @@ import { ArrowUp, ChevronRight, Download, File, Folder, Upload } from 'lucide-re
 import { DeleteAction } from '@/components/DeleteButton';
 import { RefreshButton } from '@/components/RefreshButton';
 import { Timestamp } from '@/components/Timestamp';
-import { timestampValue } from '@/utils/dateTime';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { DISK_REFRESH_INTERVAL_MS, FILES_REFRESH_INTERVAL_MS } from '@/config/files';
 import { useEditorDraft } from '@/contexts/EditorDraftContext';
@@ -22,11 +21,10 @@ import { FileSelectionBar } from './FileSelectionBar';
 import './FilesPage.css';
 
 const PAGE_SIZE = 20;
-type BrowserEntry = UploadedFile & { folder: boolean; label: string };
+type BrowserEntry = FileBrowserEntry;
 
 export default function FilesPage() {
   const { t, i18n } = useTranslation();
-  const language = i18n.resolvedLanguage;
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('mtime_desc');
@@ -116,23 +114,7 @@ export default function FilesPage() {
     void refreshAll();
   }
 
-  const folders = useMemo(() => {
-    const paths = new Set<string>();
-    for (const file of data?.files ?? []) {
-      const parts = file.name.split('/');
-      for (let index = 1; index < parts.length; index++) paths.add(parts.slice(0, index).join('/'));
-    }
-    return paths;
-  }, [data]);
-
-  // If the last file in a directory disappears, show the nearest surviving
-  // parent. The URL retains the requested path while the initial list loads.
-  const directory = useMemo(() => {
-    if (data?.directory !== undefined) return data.directory;
-    let current = requestedDirectory;
-    while (current && !folders.has(current)) current = current.split('/').slice(0, -1).join('/');
-    return current;
-  }, [requestedDirectory, folders, data]);
+  const directory = data?.directory ?? requestedDirectory;
   const searching = query.trim().length > 0;
   const breadcrumbs = directory ? directory.split('/') : [];
 
@@ -150,37 +132,12 @@ export default function FilesPage() {
     });
   }
 
-  const filtered = useMemo(() => {
-    if (data?.directory !== undefined) return data.files as FileBrowserEntry[];
-    const keyword = query.trim().toLocaleLowerCase();
-    const prefix = directory ? directory + '/' : '';
-    const files: BrowserEntry[] = (data?.files ?? [])
-      .filter(file => keyword ? file.name.toLocaleLowerCase().includes(keyword)
-        : file.name.startsWith(prefix) && !file.name.slice(prefix.length).includes('/'))
-      .map(file => ({ ...file, folder: false, label: keyword ? file.name : file.name.slice(prefix.length) }));
-    if (!keyword) {
-      for (const name of folders) {
-        if (name.startsWith(prefix) && !name.slice(prefix.length).includes('/')) {
-          files.push({ name, label: name.slice(prefix.length), folder: true, size: 0, size_display: '—', mtime: '' });
-        }
-      }
-    }
-    const [field, direction] = sort.split('_');
-    return files.sort((a, b) => {
-      if (a.folder !== b.folder) return a.folder ? -1 : 1;
-      if (a.folder && field !== 'name') return a.label.localeCompare(b.label, language, { numeric: true });
-      const comparison = field === 'size' ? a.size - b.size
-        : field === 'name' ? a.label.localeCompare(b.label, language, { numeric: true })
-        : timestampValue(a.mtime) - timestampValue(b.mtime);
-      return (direction === 'asc' ? comparison : -comparison) || a.name.localeCompare(b.name);
-    });
-  }, [data, folders, directory, query, sort, language]);
-  const folderCount = data?.folder_count ?? filtered.filter(entry => entry.folder).length;
-  const totalEntries = data?.total ?? filtered.length;
-  const totalFiles = data?.total_files ?? data?.files.length ?? 0;
-  const totalPages = data?.total_pages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = data?.page ?? Math.min(page, totalPages);
-  const pageFiles = data?.directory !== undefined ? filtered : filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const folderCount = data?.folder_count ?? 0;
+  const totalEntries = data?.total ?? 0;
+  const totalFiles = data?.total_files ?? 0;
+  const totalPages = data?.total_pages ?? 1;
+  const currentPage = data?.page ?? 1;
+  const pageFiles = data?.files ?? [];
   const firstPage = Math.max(1, Math.min(currentPage - 3, totalPages - 6));
   const pages = Array.from({ length: Math.min(7, totalPages) }, (_, index) => firstPage + index);
   const diskPercent = Math.min(100, Math.max(0, disk?.disk_pct ?? 0));
@@ -298,13 +255,13 @@ export default function FilesPage() {
         {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={mutationBusy} onClick={manualRefresh} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
         {(backgroundError || diskBackgroundError) && <p className="files-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
-        {data && (data.directory === undefined || acceptedRequestKey === requestKey) && <section aria-label={t("文件列表")} aria-busy={loading}>
+        {data && acceptedRequestKey === requestKey && <section aria-label={t("文件列表")} aria-busy={loading}>
           <FileSelectionBar names={selected.map(entry => entry.name)} pageNames={pageFiles.map(entry => entry.name)} disabled={loading || mutationBusy} confirming={bulkConfirming} busy={bulkDeleting}
             onSelectAll={() => { stopBackground(); setConfirming(null); setBulkFailures([]); if (bulkFailures.length) setError(''); setSelection({ scope: selectionScope, entries: [...pageFiles] }); }}
             onClear={clearSelection} onRequest={() => { stopBackground(); setConfirming(null); setBulkConfirming(true); }}
             onCancel={() => setBulkConfirming(false)} onConfirm={() => void handleBulkDelete()} />
           {bulkFailures.length > 0 && <ul className="files-selection-failures">{bulkFailures.map(failure => <li key={failure.name}>{failure.name}: {translateMessage(failure.error)}</li>)}</ul>}
-          {filtered.length > 0 ? <div className="files-table-scroll"><table role="table">
+          {pageFiles.length > 0 ? <div className="files-table-scroll"><table role="table">
             <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col" className="files-select">{t("batch.selection")}</th><th role="columnheader" scope="col">{t("文件名")}</th><th role="columnheader" scope="col">{t("大小")}</th><th role="columnheader" scope="col">{t("修改时间")}</th><th role="columnheader" scope="col">{t("操作")}</th></tr></thead>
             <tbody role="rowgroup">{pageFiles.map(file => <tr role="row" key={file.name}>
               <td role="cell" className="files-select"><label><input type="checkbox" aria-label={t('batch.select', { name: file.name })}

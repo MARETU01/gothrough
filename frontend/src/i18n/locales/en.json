@@ -1,4 +1,6 @@
 {
+  "服务端返回的上传完成信息无效": "The server returned an invalid upload completion receipt",
+  "errors.UNSUPPORTED_UPLOAD_TYPE": "Chunk uploads require application/octet-stream.",
   "auth.confirmLock": "Lock and sign out?",
   "auth.uploadWarning": "There are unfinished files in the queue. Signing out interrupts active uploads and clears the queue. You will need to select the files again after unlocking.",
   "auth.lockAnyway": "Stop uploads and sign out",
@@ -240,8 +242,6 @@
   "errors.INVALID_UPLOAD": "Missing or invalid filename or total_size",
   "errors.CHUNK_TOO_LARGE": "Chunk exceeds the size limit",
   "errors.INVALID_CHUNK_INDEX": "Invalid chunk_index",
-  "errors.MISSING_CHUNK_DATA": "No chunk data provided",
-  "errors.CHUNK_READ_FAILED": "Failed to read chunk. Please try again.",
   "errors.MISSING_CHUNKS": "Some chunks are missing",
   "errors.MISSING_SESSION": "Missing session_id",
   "errors.INVALID_SESSION": "Invalid or expired upload session",

@@ -7,24 +7,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
 )
 
-type jsonMode uint8
-
-const (
-	jsonCompatible jsonMode = iota
-	jsonStrict
-)
-
-// Both modes require exactly one JSON value within the body limit. Compatibility
-// mode allows unknown fields and retains Gin validation; strict mode rejects them.
-func bindLimitedJSON(c *gin.Context, target any, limit int64, mode jsonMode) error {
+// BindLimitedJSON accepts one JSON value, rejects unknown fields, and bounds
+// the entire request including trailing whitespace before callers mutate state.
+func BindLimitedJSON(c *gin.Context, target any, limit int64) error {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	decoder := json.NewDecoder(c.Request.Body)
-	if mode == jsonStrict {
-		decoder.DisallowUnknownFields()
-	}
+	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
@@ -34,9 +24,6 @@ func bindLimitedJSON(c *gin.Context, target any, limit int64, mode jsonMode) err
 			return err
 		}
 		return errors.New("只允许一个 JSON 对象")
-	}
-	if mode == jsonCompatible {
-		return binding.Validator.ValidateStruct(target)
 	}
 	return nil
 }
