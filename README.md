@@ -21,13 +21,7 @@ A file transfer and shared clipboard tool built with Go + Gin and React + TypeSc
 
 ## Use Cases
 
-- Transfer files and folders between devices over a local network or the internet.
-- Share text, links, and screenshots between a phone and a computer.
-- Run a file sharing service on a home or cloud server for trusted visitors.
-
-The service uses shared access with an optional site-wide password. Unlocked visitors share all content; use it where those visitors are trusted.
-
-For public deployments, enable an [access password](doc/configuration.md#access-password) and use HTTPS. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for network requirements.
+Transfer files across LAN or internet-connected devices, share text and screenshots between phones and computers, or host a sharing service for trusted visitors. For public deployments, enable an [access password](doc/configuration.md#access-password) and use HTTPS.
 
 ## Quick Start
 
@@ -68,20 +62,11 @@ Open `http://localhost:9815`. The frontend is included in the executable; Node.j
 
 ### Access from Other Devices
 
-Devices can access the same service over a LAN or the internet:
-
-- **LAN**: Connect to the same network and open `http://<server-LAN-IP>:9815`, for example `http://192.168.1.100:9815`. Replace the example IP with the server's address and allow the port through its firewall.
-- **Internet**: Deploy on a server with a public endpoint and use its public address or a configured domain, such as `https://files.example.com` (requires your own domain and HTTPS configuration). Configure security groups and firewalls on cloud servers. Home networks require router port forwarding, or a tunnel if no public endpoint is available.
-
-The default listener, `0.0.0.0:9815`, accepts connections on all IPv4 interfaces; public reachability depends on network and port configuration. `localhost` only works on the computer running the service. See [LAN and internet access](doc/configuration.md#lan-and-internet-access) for details.
+On the same LAN, open `http://<server-IP>:9815`. Internet access requires a public endpoint or tunnel and firewall access; a domain is optional. `localhost` works only on the server itself. See [LAN and internet access](doc/configuration.md#lan-and-internet-access).
 
 ## Shared Clipboard
 
-Open the clipboard page, enter text, paste a screenshot, or select a PNG/JPEG, then click publish. Other devices accessing the same server can view the entry. The app does not automatically read or publish the system clipboard.
-
-The latest 100 entries across text and images are retained. Text entries support up to 64 KiB. Images default to limits of 10 MiB each, 20 million pixels, and 200 MiB total, and are stored as PNG. See [configuration](doc/configuration.md#image-clipboard) for image limits and backup rules.
-
-One-click copying requires HTTPS or localhost and browser clipboard permission. Otherwise, copy text manually or open/download images.
+Publish text, paste screenshots, or select PNG/JPEG files on the clipboard page for other devices using the same service. The app never automatically reads or publishes the system clipboard. One-click copying requires HTTPS or localhost and browser permission; otherwise copy text manually or download images. See [image limits and backups](doc/configuration.md#image-clipboard) and [clipboard APIs](doc/transfer.md#clipboard-api).
 
 ## Limitations
 

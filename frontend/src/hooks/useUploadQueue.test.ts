@@ -55,8 +55,8 @@ beforeEach(() => {
     session(filename),
   );
   vi.mocked(uploadChunk).mockResolvedValue({ received: 1 });
-  vi.mocked(completeUpload).mockResolvedValue({ saved_filename: "saved" });
-  vi.mocked(cancelUpload).mockResolvedValue({ status: "ok" });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: "saved" });
+  vi.mocked(cancelUpload).mockResolvedValue({ status: "cancelled" });
 });
 afterEach(() => {
   cleanup();
@@ -156,7 +156,7 @@ describe("upload queue lifecycle", () => {
     vi.useFakeTimers();
     const init = deferred<ReturnType<typeof session>>();
     const chunk = deferred<{ received: number }>();
-    const complete = deferred<{ saved_filename: string }>();
+    const complete = deferred<{ status: 'success'; saved_filename: string }>();
     vi.mocked(initUpload).mockReturnValue(init.promise);
     vi.mocked(uploadChunk).mockReturnValue(chunk.promise);
     vi.mocked(completeUpload).mockReturnValue(complete.promise);
@@ -175,7 +175,7 @@ describe("upload queue lifecycle", () => {
     expect(hook.result.current.items[0].state).toBe("completing");
     act(() => { vi.advanceTimersByTime(500); hook.result.current.pauseAll(); });
     act(() => { vi.advanceTimersByTime(5000); hook.result.current.resumeAll(); vi.advanceTimersByTime(100); });
-    await act(async () => { complete.resolve({ saved_filename: "saved" }); await run; });
+    await act(async () => { complete.resolve({ status: 'success', saved_filename: "saved" }); await run; });
     expect(hook.result.current.items[0].elapsedMs).toBe(3600);
     expect(hook.result.current.queueElapsedMs).toBe(3600);
     act(() => { vi.advanceTimersByTime(10000); });
@@ -312,7 +312,7 @@ describe("upload queue lifecycle", () => {
   });
   it("shows preparation and merge phases, including successful empty files", async () => {
     const init = deferred<ReturnType<typeof session>>();
-    const complete = deferred<{ saved_filename: string }>();
+    const complete = deferred<{ status: 'success'; saved_filename: string }>();
     vi.mocked(initUpload).mockReturnValue(init.promise);
     vi.mocked(completeUpload).mockReturnValue(complete.promise);
     const hook = renderHook(useUploadQueue);
@@ -327,7 +327,7 @@ describe("upload queue lifecycle", () => {
     });
     expect(hook.result.current.items[0].state).toBe("completing");
     await act(async () => {
-      complete.resolve({ saved_filename: "empty" });
+      complete.resolve({ status: 'success', saved_filename: "empty" });
       await run;
     });
     expect(hook.result.current.items[0].state).toBe("success");

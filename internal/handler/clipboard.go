@@ -27,7 +27,7 @@ func (h *ClipboardHandler) List(c *gin.Context) {
 func (h *ClipboardHandler) Create(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var req model.ClipboardRequest
-	if err := bindLimitedJSON(c, &req, service.ClipboardMaxBytes*6+1024, jsonStrict); err != nil {
+	if err := BindLimitedJSON(c, &req, service.ClipboardMaxBytes*6+1024); err != nil {
 		invalidJSON(c, err, "INVALID_TEXT_REQUEST", "无效的文本请求")
 		return
 	}

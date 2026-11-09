@@ -31,25 +31,19 @@ export interface InitUploadResponse {
   total_chunks: number;
   chunk_size: number;
   final_filename: string;
-  upload_transport?: 'raw';
-  error?: string;
 }
 
 export interface UploadChunkResponse {
   received: number;
-  error?: string;
 }
 
 export interface CompleteUploadResponse {
-  status?: 'success';
-  saved_filename?: string;
-  missing_chunks?: number[];
-  error?: string;
+  status: 'success';
+  saved_filename: string;
 }
 
 export interface CancelUploadResponse {
-  status?: string;
-  error?: string;
+  status: 'cancelled';
 }
 
 /* ==================== 接口封装 ==================== */
@@ -64,40 +58,26 @@ export interface UploadChunkOptions {
   chunkIndex: number;
   /** 分块二进制内容（File.slice 的结果） */
   chunk: Blob;
-  /** Negotiated at initialization; omitted for older multipart-only servers. */
-  transport?: 'raw';
   /** 取消信号：abort 后立即中断该分块请求（axios 原生支持） */
   signal?: AbortSignal;
   /**
    * axios 上传进度回调：本分块已发送字节 / 本分块总字节。
-   * 注意 multipart 请求体含边界开销，loaded 可能略大于 chunk.size，调用方需自行裁剪。
+   * 进度总量以当前分块大小为准。
    */
   onProgress?: (loaded: number, total: number) => void;
 }
 
-/** 上传单个分块：优先使用 raw，兼容旧服务端的 multipart。 */
+/** 上传单个分块，直接发送二进制请求体。 */
 export function uploadChunk({
   sessionId,
   chunkIndex,
   chunk,
-  transport,
   signal,
   onProgress,
 }: UploadChunkOptions) {
-  let body: Blob | FormData = chunk;
-  if (transport !== 'raw') {
-    const form = new FormData();
-    form.append('session_id', sessionId);
-    form.append('chunk_index', String(chunkIndex));
-    form.append('chunk', chunk);
-    body = form;
-  }
-
-  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, body, {
-    ...(transport === 'raw' ? {
-      params: { session_id: sessionId, chunk_index: chunkIndex },
-      headers: { 'Content-Type': 'application/octet-stream' },
-    } : {}),
+  return api.post<UploadChunkResponse, UploadChunkResponse>(UPLOAD_ENDPOINTS.chunk, chunk, {
+    params: { session_id: sessionId, chunk_index: chunkIndex },
+    headers: { 'Content-Type': 'application/octet-stream' },
     // 分块可能很大，覆盖实例默认的 30s 超时，避免中途被 abort
     timeout: 0,
     signal,
@@ -121,7 +101,7 @@ export async function completeUpload(sessionId: string, signal?: AbortSignal): P
       if (abort.aborted || uploadRetryDelay(error, 0) === null) throw error;
       // The publication may have succeeded even though its response was lost.
       try {
-        const result = await api.get<CompleteUploadResponse & { status?: string }, CompleteUploadResponse & { status?: string }>(
+        const result = await api.get<CompleteUploadResponse | { status: 'uploading' }, CompleteUploadResponse | { status: 'uploading' }>(
           '/upload/status/' + encodeURIComponent(sessionId), { signal: abort });
         if (result.status === 'success') return result;
       } catch { /* Preserve the original failure if confirmation also fails. */ }

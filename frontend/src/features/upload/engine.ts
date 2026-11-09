@@ -1,6 +1,6 @@
 import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
 import type { UploadController, UploadItem } from '@/types/upload';
-import { CHUNK_SIZE, MAX_CONCURRENT_UPLOADS, PROGRESS_REFRESH_INTERVAL } from '@/config/upload';
+import { MAX_CONCURRENT_UPLOADS, PROGRESS_REFRESH_INTERVAL } from '@/config/upload';
 import { UploadTask } from './task';
 import { uploadRetryDelay, waitForRetry } from '@/utils/uploadRetry';
 import { getUploadPath } from '@/utils/droppedFiles';
@@ -48,6 +48,9 @@ export async function transferFile(item: UploadTask, controller: UploadControlle
     item.beginCompletion();
     const complete = await completeUpload(item.session!.sessionId, controller.abort.signal);
     checkActive();
+    if (complete.status !== 'success' || typeof complete.saved_filename !== 'string' || !complete.saved_filename) {
+      throw new Error("服务端返回的上传完成信息无效");
+    }
     item.complete(complete.saved_filename);
   };
   if (item.beginAttempt()) { await finishSession(); return; }
@@ -61,7 +64,7 @@ export async function transferFile(item: UploadTask, controller: UploadControlle
   const session = {
     sessionId: data.session_id,
     totalChunks: data.total_chunks,
-    chunkSize: data.chunk_size || CHUNK_SIZE,
+    chunkSize: data.chunk_size,
     receivedChunks: 0,
     finalFilename: data.final_filename,
   };
@@ -104,7 +107,6 @@ export async function transferFile(item: UploadTask, controller: UploadControlle
             sessionId: session.sessionId,
             chunkIndex: index,
             chunk,
-            transport: data.upload_transport,
             signal: controller.abort.signal,
             onProgress: (loaded, total) => {
               if (control.isStopped() || controller.abort.signal.aborted) return;

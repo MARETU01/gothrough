@@ -18,7 +18,7 @@ function item(onChange?: () => void): UploadTask {
 it('runs a file transfer without mounting React and publishes progress through callbacks', async () => {
   vi.mocked(initUpload).mockResolvedValue({ session_id: 'session', total_chunks: 1, chunk_size: 5, final_filename: 'file.txt' });
   vi.mocked(uploadChunk).mockResolvedValue({ received: 1 });
-  vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'published.txt' });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: 'published.txt' });
   const snapshots: UploadViewItem[] = [];
   const onChange = vi.fn(() => snapshots.push(createUploadSnapshot(upload)));
   const upload = item(onChange);
@@ -54,4 +54,27 @@ it('preserves a late initialization receipt so the lifecycle owner can clean up 
   await cleanupSession(upload);
   expect(cancelUpload).toHaveBeenCalledWith('late');
   expect(uploadChunk).not.toHaveBeenCalled();
+});
+
+it('rejects a missing server chunk size instead of using a legacy fallback', async () => {
+  vi.mocked(initUpload).mockResolvedValue({ session_id: 'invalid', total_chunks: 1, chunk_size: undefined, final_filename: 'file.txt' } as unknown as Awaited<ReturnType<typeof initUpload>>);
+  const upload = item();
+  const controller: UploadController = { cancelled: false, abort: new AbortController() };
+  await expect(transferFile(upload, controller, { isStopped: () => false, isPaused: () => false, waitForChange: async () => {} })).rejects.toThrow();
+  expect(upload.session?.sessionId).toBe('invalid');
+  expect(uploadChunk).not.toHaveBeenCalled();
+  await cleanupSession(upload);
+  expect(cancelUpload).toHaveBeenCalledWith('invalid');
+});
+
+it.each([undefined, ''])('does not substitute a filename when the completion receipt is missing it: %s', async savedFilename => {
+  vi.mocked(initUpload).mockResolvedValue({ session_id: 'session', total_chunks: 1, chunk_size: 5, final_filename: 'file.txt' });
+  vi.mocked(uploadChunk).mockResolvedValue({ received: 1 });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: savedFilename } as Awaited<ReturnType<typeof completeUpload>>);
+  const upload = item();
+  const controller: UploadController = { cancelled: false, abort: new AbortController() };
+  await expect(transferFile(upload, controller, { isStopped: () => false, isPaused: () => false, waitForChange: async () => {} })).rejects.toThrow('服务端返回的上传完成信息无效');
+  expect(upload.state).not.toBe('success');
+  expect(upload.completionPending).toBe(true);
+  expect(upload.session?.sessionId).toBe('session');
 });

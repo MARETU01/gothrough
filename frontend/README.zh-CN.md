@@ -43,7 +43,7 @@ npm run lint
 
 新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。
 
-文件列表统一使用分页结构。所有 ZIP 链接共用 `downloadSelectionUrl`，压缩包名为 `files.zip`，保留上传相对路径。所有删除共用 `deleteSelection`：单项传一项，也必须检查对应结果的 `deleted`，不能只判断 HTTP 状态。
+请求、响应和恢复规则统一见[传输与接口](../doc/transfer.zh-CN.md)；页面通过 `src/services/` 调用接口，测试使用服务端分页响应。
 
 ## 浏览器流程测试
 
@@ -70,7 +70,7 @@ Playwright 启动独立的 Go API（19815 端口）和 Vite（5183 端口），�
 
 不要在模块初始化时生成译文。上传状态、接口错误和成功提示通过 `message(key, values)` 保存描述，渲染时调用 `translateMessage()`，使已有提示跟随语言切换。
 
-接口错误保留 `error` 并提供稳定的 `code`。`apiErrorDescriptor()` 优先使用 `errors.<code>` 翻译；未知错误码或旧服务端响应回退到原始错误信息。新增错误码时同步补齐两种语言资源。
+接口错误保留 `error` 并提供稳定的 `code`。`apiErrorDescriptor()` 优先使用 `errors.<code>` 翻译；未知错误码回退到原始错误信息。新增错误码时同步补齐两种语言资源。
 
 新增语言时：
 

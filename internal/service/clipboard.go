@@ -87,9 +87,14 @@ func NewClipboardService(dir string, options ...config.ClipboardImageSettings) (
 		return nil, fmt.Errorf("剪贴板历史记录过多")
 	}
 	seen := make(map[string]bool)
-	for _, entry := range s.entries {
+	for i, entry := range s.entries {
+		// Normalize stored text records at the persistence boundary, never in clients.
+		if entry.Type == "" {
+			entry.Type = "text"
+			s.entries[i].Type = "text"
+		}
 		_, dateErr := time.Parse(time.RFC3339Nano, entry.CreatedAt)
-		valid := (entry.Type == "" || entry.Type == "text") && validClipboardText(entry.Text) && entry.Image == (model.ClipboardImage{})
+		valid := entry.Type == "text" && validClipboardText(entry.Text) && entry.Image == (model.ClipboardImage{})
 		if entry.Type == "image" {
 			valid = s.validStoredImage(entry)
 		}
@@ -139,7 +144,7 @@ func (s *ClipboardService) Create(text string) (model.ClipboardEntry, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry := model.ClipboardEntry{ID: uuid.NewV7().String(), Text: text, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	entry := model.ClipboardEntry{ID: uuid.NewV7().String(), Type: "text", Text: text, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	next := make([]model.ClipboardEntry, 1, ClipboardMaxEntries)
 	next[0] = entry
 	next = append(next, s.entries[:min(len(s.entries), ClipboardMaxEntries-1)]...)

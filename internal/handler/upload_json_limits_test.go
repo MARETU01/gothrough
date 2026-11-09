@@ -8,7 +8,11 @@ import (
 func TestUploadJSONBodyLimits(t *testing.T) {
 	s, h := setup(t)
 	for _, endpoint := range []string{"init", "complete", "cancel"} {
-		body := `{"filename":"` + strings.Repeat("a", 128*1024) + `","total_size":0,"session_id":"ignored"}`
+		key := "session_id"
+		if endpoint == "init" {
+			key = "filename"
+		}
+		body := "{\"" + key + "\":\"" + strings.Repeat("a", 128*1024) + "\"}"
 		res := post(t, h, "/api/upload/"+endpoint, "application/json", strings.NewReader(body))
 		if res.Code != 413 {
 			t.Fatalf("%s accepted oversized JSON: %d %s", endpoint, res.Code, res.Body.String())

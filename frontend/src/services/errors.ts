@@ -21,6 +21,6 @@ export function apiErrorDescriptor(error: unknown): Message {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return message('errors.timeout');
   }
   const original = apiErrorMessage(error);
-  // Preserve unknown server messages, including responses from older servers.
+  // Preserve deliberate public messages for unrecognized error codes.
   return i18n.exists(original) ? message(original) : original;
 }

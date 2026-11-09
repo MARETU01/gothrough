@@ -13,7 +13,7 @@ vi.mock('@/services/clipboard', async importOriginal => ({
 }));
 
 const record = (text = '第一行\n<script>alert(1)</script>', id = 'entry-1'): ClipboardEntry => ({
-  id, text, created_at: '2026-11-05T12:00:00Z',
+  id, text, type: 'text', created_at: '2026-11-05T12:00:00Z',
 });
 const imageRecord = (): ClipboardEntry => ({ id: 'image-1', text: '', type: 'image', created_at: '2026-11-05T12:00:00Z',
   image: { url: '/api/clipboard/image-1/image', mime_type: 'image/png', size: 123, width: 2, height: 2 } });

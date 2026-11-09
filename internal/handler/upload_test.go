@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -64,33 +63,20 @@ func initHTTP(t *testing.T, h http.Handler, name string, size int) model.UploadS
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(res.Body.Bytes(), []byte(`"upload_transport":"raw"`)) {
-		t.Fatalf("missing negotiation: %s", res.Body.String())
-	}
 	return result
 }
 
-func TestRawMultipartAndRangeDownload(t *testing.T) {
+func TestRawChunksAndRangeDownload(t *testing.T) {
 	_, h := setup(t)
 	payload := bytes.Repeat([]byte("a"), service.ChunkSize+7)
 	info := initHTTP(t, h, "测试文件.txt", len(payload))
-	// Last block first, then multipart compatibility for the initial full block.
+	// Upload the tail first to verify out-of-order raw chunks.
 	path := fmt.Sprintf("/api/upload/chunk?session_id=%s&chunk_index=1", info.SessionID)
 	if res := post(t, h, path, "application/octet-stream", bytes.NewReader(payload[service.ChunkSize:])); res.Code != 200 {
 		t.Fatalf("raw: %d %s", res.Code, res.Body.String())
 	}
-	var form bytes.Buffer
-	writer := multipart.NewWriter(&form)
-	_ = writer.WriteField("session_id", info.SessionID)
-	_ = writer.WriteField("chunk_index", "0")
-	part, err := writer.CreateFormFile("chunk", "part")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = part.Write(payload[:service.ChunkSize])
-	_ = writer.Close()
-	if res := post(t, h, "/api/upload/chunk", writer.FormDataContentType(), &form); res.Code != 200 {
-		t.Fatalf("multipart: %d %s", res.Code, res.Body.String())
+	if res := post(t, h, "/api/upload/chunk?session_id="+info.SessionID+"&chunk_index=0", "application/octet-stream", bytes.NewReader(payload[:service.ChunkSize])); res.Code != 200 {
+		t.Fatalf("raw: %d %s", res.Code, res.Body.String())
 	}
 	req := httptest.NewRequest("GET", "/api/upload/status/"+info.SessionID, nil)
 	status := httptest.NewRecorder()

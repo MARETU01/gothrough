@@ -38,11 +38,9 @@
 
 `FileHandler` 缓存 JSON 和查询专属 ETag。命中时跳过数据副本创建，未命中时在缓存锁外编码和计算哈希。并发未命中可重复编码，但旧版本不能覆盖新缓存。校验值由查询与内容决定，相同响应在缓存失效后仍保留相同 ETag。
 
-处理器共用 `errors.go` 的存储错误映射，各操作提供独立的兜底错误码和消息，完整原因保留在日志中。固定上传限制归 `service/limits.go`，multipart 解析限制归路由，部署设置归 `config/`。
+处理器共用 `errors.go` 的存储错误映射，各操作提供独立的兜底错误码和消息，完整原因保留在日志中。固定上传限制归 `service/limits.go`，请求体限制归 HTTP 处理器，部署设置归 `config/`。
 
-文件夹与多选 ZIP 下载统一由 `handler/selection.go` 处理；文件和文件夹删除统一使用批量接口及服务层修改逻辑。文件列表只返回分页浏览结构，磁盘信息独立查询。
-
-前端单项与多项 ZIP 下载共用 `downloadSelectionUrl`；所有删除共用 `deleteSelection` 并检查逐项结果，不保留旧 HTTP 路由。
+接口字段、传输限制和恢复规则见[传输与接口](transfer.zh-CN.md)。
 
 ## 前端状态
 

@@ -15,7 +15,7 @@ beforeEach(() => {
     total_chunks: 1, chunk_size: 5, final_filename: request.relative_path || request.filename,
   }));
   vi.mocked(uploadChunk).mockResolvedValue({ received: 1 });
-  vi.mocked(completeUpload).mockResolvedValue({ saved_filename: 'saved' });
+  vi.mocked(completeUpload).mockResolvedValue({ status: 'success', saved_filename: 'saved' });
   vi.mocked(cancelUpload).mockResolvedValue({ status: 'cancelled' });
 });
 afterEach(cleanup);

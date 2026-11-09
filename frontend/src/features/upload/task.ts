@@ -77,11 +77,11 @@ export class UploadTask implements UploadItem {
     this.changed();
   }
 
-  complete(savedFilename?: string) {
+  complete(savedFilename: string) {
     this.data.completionPending = false;
     this.data.state = 'success';
     this.data.speed = 0;
-    this.data.savedFilename = savedFilename || this.savedFilename;
+    this.data.savedFilename = savedFilename;
     this.data.inflightBytes.clear();
     this.data.loadedBytes = this.file.size;
     this.changed();

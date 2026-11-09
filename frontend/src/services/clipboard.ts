@@ -7,7 +7,7 @@ export const CLIPBOARD_MAX_ENTRIES = 100;
 export interface ClipboardEntry {
   id: string;
   text: string;
-  type?: 'text' | 'image';
+  type: 'text' | 'image';
   image?: { url: string; mime_type: string; size: number; width: number; height: number };
   created_at: string;
 }
