@@ -35,8 +35,6 @@ All endpoints use `/api`. With password protection enabled, file, upload, disk, 
 | GET | `/api/files` | List files |
 | GET | `/api/files/*filename` | Download or preview; supports Range |
 | PUT | `/api/files/*filename` | Save text with a version check |
-| DELETE | `/api/files/*filename` | Delete a file |
-| GET | `/api/folder-download?path=relative-folder` | Stream a folder ZIP |
 | GET | `/api/disk-info` | Get disk information |
 | GET | `/api/batch-download?path=a&path=docs` | Stream selected files/folders as ZIP |
 | POST | `/api/batch-delete` | Delete a selection with per-item results |
@@ -44,6 +42,8 @@ All endpoints use `/api`. With password protection enabled, file, upload, disk, 
 URL-encode relative file paths and folder query parameters.
 
 ### File queries
+
+File listings always return server-paginated data; fetch disk usage separately through `/api/disk-info`. Omitting `view` and specifying `view=browser` return the same structure. The old `view=list` mode has been removed and returns `400 INVALID_FILE_QUERY`, as do other unsupported views.
 
 `GET /api/files?view=browser` filters and paginates on the server. Parameters are `dir` (relative directory, default root), `q` (case-insensitive full-path search, up to 1024 bytes), `sort` (default `mtime_desc`), `page` (positive integer, default 1), and `page_size` (1–100, default 20). Sort options are `mtime_asc`, `mtime_desc`, `size_asc`, `size_desc`, `name_asc`, and `name_desc`; invalid queries return `400 INVALID_FILE_QUERY`.
 
@@ -54,21 +54,23 @@ Responses contain `files` (name, size, size display, `mtime`, `folder`, `label`)
 | Request | Response and caching |
 | --- | --- |
 | `GET /api/files?view=browser` | Paged data with a query-specific ETag |
-| `GET /api/files?view=list` | Full file list, total bytes/display, and `has_files`, with an ETag |
-| `GET /api/files` | Legacy combined file/disk response, without a listing ETag |
 | `GET /api/disk-info` | Disk total/used/free values and displays, `disk_pct`, `disk_pct_warning`, and upload totals |
 
-Responses use `Cache-Control: no-store`. Conditional reads send `If-None-Match`; unchanged content returns an empty `304`. Reuse validators only for the same query and accepted responses; manual refresh fetches full data. Uploads, edits, and deletions invalidate listing caches; external changes appear after the 2-second scan cache expires. Disk changes do not affect listing ETags. The frontend also supports older full-list responses. Cache implementation belongs in [architecture](architecture.md#queries-and-http-responses).
+Responses use `Cache-Control: no-store`. Conditional reads send `If-None-Match`; unchanged content returns an empty `304`. Reuse validators only for the same query and accepted responses; manual refresh fetches full data. Uploads, edits, and deletions invalidate listing caches; external changes appear after the 2-second scan cache expires. Disk changes do not affect listing ETags. Cache implementation belongs in [architecture](architecture.md#queries-and-http-responses).
 
 ### Bulk operations
 
-Download 1–100 files/folders with repeated `path` query parameters. ZIP entries keep full upload-relative paths; selecting both a parent folder and its child includes content once. All top-level paths are checked before starting the response. Streaming, cancellation, and failure behavior follows folder ZIPs; both archive routes share two archive slots and the 32-response download limit. Query strings are limited to 64 KiB; reduce the selection for long paths.
+Download 1–100 files/folders with repeated `path` query parameters. ZIP entries keep full upload-relative paths; selecting both a parent folder and its child includes content once. All top-level paths are checked before starting the response. Streaming, cancellation, and failure behavior follows folder ZIPs; archive requests share two archive slots and the 32-response download limit. Query strings are limited to 64 KiB; reduce the selection for long paths.
 
 Example deletion body: `{"entries":[{"path":"docs","folder":true},{"path":"note.txt","folder":false}]}`. Limit: 100 entries and a 512 KiB body. Invalid paths or duplicate selections return `400 INVALID_FILE_SELECTION` before any deletion. Valid requests return `200` with a `results` array: each item contains `path` and `deleted`; failed items add `code` and `error`. Folders with unfinished uploads fail with `FOLDER_BUSY`, changed entry types with `SELECTION_CHANGED`; other items continue.
 
 Folder deletion includes all descendants. Symlinks and special entries fail that item and are never followed. Neither batches nor individual recursive deletions are atomic; deleted content is not rolled back. Refresh to inspect failures before retrying. Batch deletion retains session/same-origin checks and shares mutation coordination with upload publication.
 
 ### Folder ZIP downloads
+
+ZIP downloads use `/api/batch-download` for a single folder or multiple selections. Archives are named `files.zip` and retain full upload-relative entry paths. The former `/api/folder-download` route has been removed.
+
+Folder-row and multi-selection buttons call the same endpoint and stream downloads directly without buffering the whole ZIP in the browser.
 
 The `path` must select a folder inside uploads; downloading the upload root is unsupported. ZIPs contain the whole selected folder and hierarchy, independent of file pagination/search, and skip symlinks and special files. Existing empty subdirectories are included, although uploads do not preserve them.
 
@@ -125,6 +127,8 @@ After a transient completion failure, the frontend checks status before retrying
 
 ## Limits and Errors
 
+Upload and text-edit JSON bodies must contain exactly one value; trailing whitespace is allowed, but extra JSON or malformed trailing content is rejected before mutation. Unknown fields remain accepted by these endpoints for compatibility; clipboard and batch-delete bodies reject unknown fields. Upload initialization requires an explicit integer `total_size` from 0 to 1 TiB: missing or `null` is invalid, while `0` uploads an empty file. The body limit includes trailing content and whitespace.
+
 | Item | Limit or behavior |
 | --- | --- |
 | Default transport | 8 MiB chunks; frontend runs 3 chunks/file and 2 files concurrently |
@@ -141,3 +145,7 @@ After a transient completion failure, the frontend checks status before retrying
 | Downloads | Files/previews/clipboard images share 32 slots (429 when full); 30-second write-idle deadline, refreshed on progress, without a fixed total duration |
 
 Error responses provide stable `code` and public `error` fields. Use `X-Request-ID` to find the full cause in [server logs](logging.md#troubleshooting).
+
+Single and batch deletion classify storage failures consistently: permission errors use `STORAGE_PERMISSION` (403), read-only storage `STORAGE_READ_ONLY` (503), and space/quota exhaustion `STORAGE_FULL` (507). Batch failures carry codes inside their per-item results while the valid batch request still returns 200. Unknown failures retain operation-specific fallback codes and never expose filesystem details.
+
+All deletion uses `POST /api/batch-delete`: send one entry with `folder: false` for a file or `folder: true` for recursive folder deletion. The former `DELETE /api/files/*filename` route has been removed. HTTP 200 only means the batch was processed; even a single-item caller must check its matching result's `deleted` flag. Type mismatches return per-item `SELECTION_CHANGED`, missing entries per-item `FILE_INACCESSIBLE`.

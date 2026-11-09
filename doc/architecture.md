@@ -12,7 +12,7 @@ English | [简体中文](architecture.zh-CN.md)
 | `internal/config/`, `internal/app/storage.go` | Validate settings, then prepare instance-local storage |
 | `internal/router/` | Routes, authentication, and middleware |
 | `internal/handler/upload.go` | Upload HTTP protocol and request admission |
-| `internal/handler/file_handler.go`, `files.go`, `edit.go`, `folder_download.go`, `selection.go` | File HTTP responses, previews, streaming, and JSON/ETag caching |
+| `internal/handler/file_handler.go`, `files.go`, `edit.go`, `selection.go` | File HTTP responses, previews, streaming, and JSON/ETag caching |
 | `internal/service/file_service.go` | Coordinate file mutations and shared state |
 | `internal/service/upload_session.go`, `completion.go` | Upload sessions, chunks, receipts, and resource release |
 | `internal/service/files.go`, `text.go`, `folder*.go`, `selection*.go` | Confined file operations, editing, directory management, and ZIP generation |
@@ -39,6 +39,10 @@ Services return typed data and a listing generation. `ListingSnapshot` retains a
 `FileHandler` caches JSON and query-specific ETags. Hits skip data materialization; misses encode and hash outside the cache lock. Concurrent misses may duplicate encoding, but old generations cannot overwrite newer cached responses. Validators depend on query and content, so unchanged responses retain their ETag across cache invalidation.
 
 Handlers share storage-error mapping in `errors.go`, with operation-specific fallback codes/messages; full causes stay in logs. Fixed upload limits belong to `service/limits.go`, multipart parsing limits to the router, and deployment settings to `config/`.
+
+Folder and selection ZIP downloads share the endpoint in `handler/selection.go`; file and folder deletion use the batch endpoint and the same service mutation implementation. File listings return only the paginated browser structure; disk information is queried separately.
+
+Frontend ZIP links share `downloadSelectionUrl`; all deletion calls `deleteSelection` and checks per-item results. Former HTTP routes are not retained.
 
 ## Frontend State
 

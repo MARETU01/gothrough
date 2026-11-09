@@ -76,6 +76,11 @@ test('uploads, previews, edits, and downloads a file, then publishes clipboard t
   await downloadButton.click();
   const download = await downloading;
   expect(await readFile((await download.path())!, 'utf8')).toBe('edited text');
+  const deletion = page.waitForResponse(response => response.url().endsWith('/api/batch-delete') && response.request().method() === 'POST');
+  await row.getByRole('button', { name: '删除 ' + name, exact: true }).click();
+  await row.getByRole('button', { name: '确认删除 ' + name, exact: true }).click();
+  expect((await (await deletion).json()).results).toEqual([{ path: name, deleted: true }]);
+  await expect(row).toHaveCount(0);
   await navigate(page, '/clipboard');
   const text = `Shared from ${testInfo.project.name} ${Date.now()}`;
   await page.getByLabel('输入或粘贴文本', { exact: true }).fill(text);
@@ -147,6 +152,15 @@ test('selects files and folders, downloads a ZIP, and confirms bulk deletion', a
     expect((await page.request.post('/api/upload/complete', { data: { session_id } })).ok()).toBe(true);
   }
   await navigate(page, '/files');
+  const folderLink = page.getByRole('link', { name: `下载文件夹 ${directory}`, exact: true });
+  await expect(folderLink).toHaveAttribute('href', '/api/batch-download?path=' + directory);
+  const folderDownloading = page.waitForEvent('download');
+  await folderLink.click();
+  const folderDownload = await folderDownloading;
+  expect(folderDownload.suggestedFilename()).toBe('files.zip');
+  const folderZip = await readFile((await folderDownload.path())!);
+  expect(folderZip.includes(Buffer.from(directory + '/inside.txt'))).toBe(true);
+  expect(folderZip.includes(Buffer.from(loose))).toBe(false);
   await page.getByRole('checkbox', { name: `选择 ${directory}`, exact: true }).check();
   await page.getByRole('checkbox', { name: `选择 ${loose}`, exact: true }).check();
   await expect(page.getByText('已选 2 项', { exact: true })).toBeVisible();

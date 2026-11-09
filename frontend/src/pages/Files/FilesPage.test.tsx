@@ -3,12 +3,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FilesPage from './FilesPage';
-import { deleteSelection, deleteFile, getDiskInfo, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
+import { deleteSelection, getDiskInfo, getFilePreview, listFiles, type FileListResponse } from '@/services/files';
 import { DISK_REFRESH_INTERVAL_MS, FILES_REFRESH_INTERVAL_MS } from '@/config/files';
 
 vi.mock('@/services/files', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/files')>(),
-  listFiles: vi.fn(), deleteFile: vi.fn(), deleteSelection: vi.fn(), getFilePreview: vi.fn(), getDiskInfo: vi.fn(),
+  listFiles: vi.fn(), deleteSelection: vi.fn(), getFilePreview: vi.fn(), getDiskInfo: vi.fn(),
 }));
 
 const makeData = (): FileListResponse => ({
@@ -25,7 +25,7 @@ beforeEach(() => {
   window.getSelection()?.removeAllRanges();
   vi.mocked(listFiles).mockResolvedValue(makeData());
   vi.mocked(getDiskInfo).mockResolvedValue(makeData());
-  vi.mocked(deleteFile).mockResolvedValue({ status: 'deleted' });
+  vi.mocked(deleteSelection).mockImplementation(async entries => ({ results: entries.map(entry => ({ path: entry.path, deleted: true })) }));
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'preview', version: 'v1' });
 });
 afterEach(() => {
@@ -177,12 +177,15 @@ it('offers encoded ZIP downloads for folders and nested folders without duplicat
   vi.mocked(listFiles).mockResolvedValue(data);
   openPage();
   const folder = await screen.findByRole('link', { name: '下载文件夹 照片' });
-  expect(folder.getAttribute('href')).toBe('/api/folder-download?path=' + encodeURIComponent('照片'));
+  expect(new URL(folder.getAttribute('href')!, 'http://localhost').pathname).toBe('/api/batch-download');
+  expect(new URL(folder.getAttribute('href')!, 'http://localhost').searchParams.getAll('path')).toEqual(['照片']);
   expect(screen.queryByText('a.txt')).toBeNull();
   expect(screen.queryByRole('link', { name: '下载文件夹 照片/旅行' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '打开文件夹 照片' }));
   expect(screen.getAllByRole('link', { name: '下载文件夹 照片/旅行' })).toHaveLength(1);
-  expect(screen.getByRole('link', { name: '下载文件夹 照片/旅行' }).getAttribute('href')).toBe('/api/folder-download?path=' + encodeURIComponent('照片/旅行'));
+  const nested = new URL(screen.getByRole('link', { name: '下载文件夹 照片/旅行' }).getAttribute('href')!, 'http://localhost');
+  expect(nested.pathname).toBe('/api/batch-download');
+  expect(nested.searchParams.getAll('path')).toEqual(['照片/旅行']);
   fireEvent.click(screen.getByRole('button', { name: '打开文件夹 照片/旅行' }));
   expect(screen.getByText('a.txt')).toBeTruthy();
   expect(screen.getByText('b.txt')).toBeTruthy();
@@ -233,7 +236,7 @@ it('opens a linked folder and returns to its surviving parent when its last file
   fireEvent.click(screen.getByRole('button', { name: '删除 doc/sub/last.txt' }));
   fireEvent.click(screen.getByRole('button', { name: '确认删除 doc/sub/last.txt' }));
   await screen.findByText('keep.txt');
-  expect(deleteFile).toHaveBeenCalledWith('doc/sub/last.txt');
+  expect(deleteSelection).toHaveBeenCalledWith([{ path: 'doc/sub/last.txt', folder: false }]);
   expect(screen.getByRole('button', { name: 'doc' }).getAttribute('aria-current')).toBe('page');
   expect(screen.queryByText('last.txt')).toBeNull();
 });
@@ -267,10 +270,10 @@ it('requires confirmation, encodes download paths, and clamps the page after del
   fireEvent.click(screen.getByRole('button', { name: '下一页' }));
   expect(screen.getByRole('link', { name: '下载 文件 21.txt' }).getAttribute('href')).toBe('/api/files/' + encodeURIComponent('文件 21.txt'));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 21.txt' }));
-  expect(deleteFile).not.toHaveBeenCalled();
+  expect(deleteSelection).not.toHaveBeenCalled();
   expect(screen.queryByRole('alertdialog')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 21.txt' }));
-  await waitFor(() => expect(deleteFile).toHaveBeenCalledWith('文件 21.txt'));
+  await waitFor(() => expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 21.txt', folder: false }]));
   await screen.findByText('文件 01.txt');
   expect(screen.queryByText('文件 21.txt')).toBeNull();
   expect(screen.queryByRole('navigation', { name: '文件列表分页' })).toBeNull();
@@ -288,7 +291,7 @@ it('cancels inline confirmation without deleting and only confirms one file at a
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 02.txt' }));
   expect(screen.getByRole('button', { name: '删除 文件 01.txt' })).toBeTruthy();
   expect(screen.getByRole('button', { name: '确认删除 文件 02.txt' })).toBeTruthy();
-  expect(deleteFile).not.toHaveBeenCalled();
+  expect(deleteSelection).not.toHaveBeenCalled();
 });
 
 it('shows load errors with a working retry and distinguishes empty search results', async () => {
@@ -304,14 +307,14 @@ it('shows load errors with a working retry and distinguishes empty search result
 });
 
 it('keeps deletion confirmation after failure so the same action can be retried', async () => {
-  vi.mocked(deleteFile).mockRejectedValueOnce(new Error('offline'));
+  vi.mocked(deleteSelection).mockRejectedValueOnce(new Error('offline'));
   openPage();
   await screen.findByText('文件 01.txt');
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
   fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' }));
   expect((await screen.findByRole('alert')).textContent).toContain('offline');
   fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' }));
-  await waitFor(() => expect(deleteFile).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(deleteSelection).toHaveBeenCalledTimes(2));
 });
 
 it('sorts timezone-aware modification times by instant rather than their string order', async () => {
@@ -389,15 +392,15 @@ it('waits for a slow poll to finish before scheduling another request', async ()
 
 it('pauses for the whole deletion request and resumes after the foreground resync', async () => {
   await openPollingPage();
-  let finish!: (value: { status: string }) => void;
-  vi.mocked(deleteFile).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let finish!: (value: { results: { path: string; deleted: boolean }[] }) => void;
+  vi.mocked(deleteSelection).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
   fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' }));
   await advancePoll(FILES_REFRESH_INTERVAL_MS * 3);
   expect(listFiles).toHaveBeenCalledTimes(1);
   const data = makeData();
   vi.mocked(listFiles).mockResolvedValue({ ...data, files: data.files.slice(1) });
-  await act(async () => { finish({ status: 'deleted' }); });
+  await act(async () => { finish({ results: [{ path: '文件 01.txt', deleted: true }] }); });
   expect(listFiles).toHaveBeenCalledTimes(2);
   expect(screen.queryByText('文件 01.txt')).toBeNull();
   await advancePoll();
@@ -406,7 +409,7 @@ it('pauses for the whole deletion request and resumes after the foreground resyn
 
 it('keeps content and deletion errors when a poll fails and recovers on the next poll', async () => {
   await openPollingPage();
-  vi.mocked(deleteFile).mockRejectedValueOnce(new Error('delete failed'));
+  vi.mocked(deleteSelection).mockRejectedValueOnce(new Error('delete failed'));
   fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
   fireEvent.click(screen.getByRole('button', { name: '取消' }));
@@ -524,3 +527,24 @@ it('cancels disk polling during preview and rejects its stale response', async (
   await advancePoll(DISK_REFRESH_INTERVAL_MS);
   expect(getDiskInfo).toHaveBeenCalledTimes(3);
 });
+
+for (const results of [
+  [{ path: '文件 01.txt', deleted: false, code: 'STORAGE_PERMISSION', error: 'private fallback' }],
+  [],
+  [{ path: 'wrong.txt', deleted: true }],
+]) {
+  it('keeps a single file when its batch response does not confirm deletion: ' + JSON.stringify(results), async () => {
+    vi.mocked(deleteSelection).mockResolvedValueOnce({ results });
+    openPage();
+    await screen.findByText('文件 01.txt');
+    fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('删除');
+    expect(alert.textContent).not.toContain('private fallback');
+    expect(screen.getByText('文件 01.txt')).toBeTruthy();
+    expect(screen.queryByText('已删除 文件 01.txt')).toBeNull();
+    expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 01.txt', folder: false }]);
+    expect(listFiles).toHaveBeenCalledTimes(1);
+  });
+}

@@ -43,6 +43,8 @@ npm run lint
 
 新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。
 
+文件列表统一使用分页结构。所有 ZIP 链接共用 `downloadSelectionUrl`，压缩包名为 `files.zip`，保留上传相对路径。所有删除共用 `deleteSelection`：单项传一项，也必须检查对应结果的 `deleted`，不能只判断 HTTP 状态。
+
 ## 浏览器流程测试
 
 安装 npm 依赖后，在 `frontend` 目录执行：

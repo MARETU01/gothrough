@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"mime"
 	"net/http"
 	"os"
 
@@ -76,9 +77,9 @@ func (h *FileHandler) DownloadSelection(c *gin.Context) {
 	defer archive.Close()
 	c.Header("Cache-Control", "no-store")
 	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", `attachment; filename="files.zip"`)
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": "files.zip"}))
 	if err := archive.WriteZIP(c.Request.Context(), c.Writer); err != nil {
-		logging.FromContext(c.Request.Context()).Error("批量下载中断", "event", "files.batch_download_failed", "error", err)
+		logging.FromContext(c.Request.Context()).Error("ZIP download interrupted", "event", "files.batch_download_failed", "error", err)
 		panic(http.ErrAbortHandler)
 	}
 }

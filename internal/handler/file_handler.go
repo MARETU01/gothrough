@@ -57,7 +57,7 @@ func (h *FileHandler) encodeListing(key string, version uint64, value func() any
 		if cached, ok := h.responses[key]; ok {
 			return cached, nil
 		}
-		if len(h.responses) >= 33 {
+		if len(h.responses) >= 32 {
 			for key := range h.responses {
 				delete(h.responses, key)
 				break

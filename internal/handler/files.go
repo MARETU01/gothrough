@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/MARETU01/gothrough/internal/logging"
 	"github.com/MARETU01/gothrough/internal/service"
 	"github.com/MARETU01/gothrough/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -20,76 +18,49 @@ import (
 // 已上传文件列表
 func (h *FileHandler) ListFiles(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	if c.Query("view") == "browser" {
-		query := service.BrowserQuery{Directory: c.Query("dir"), Search: c.Query("q"), Sort: c.DefaultQuery("sort", "mtime_desc"), Page: 1, PageSize: 20}
-		valid := len(query.Directory) <= 4096 && len(query.Search) <= 1024 && !strings.ContainsAny(query.Directory, "\\\x00") &&
-			(query.Directory == "" || (path.Clean(query.Directory) == query.Directory && query.Directory != "." && query.Directory != ".." && !strings.HasPrefix(query.Directory, "../") && !strings.HasPrefix(query.Directory, "/")))
-		for key, target := range map[string]*int{"page": &query.Page, "page_size": &query.PageSize} {
-			if value, exists := c.GetQuery(key); exists {
-				number, err := strconv.Atoi(value)
-				if err != nil || number < 1 || (key == "page_size" && number > 100) {
-					valid = false
-				} else {
-					*target = number
-				}
+	switch c.Query("view") {
+	case "", "browser":
+	default:
+		respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
+		return
+	}
+	query := service.BrowserQuery{Directory: c.Query("dir"), Search: c.Query("q"), Sort: c.DefaultQuery("sort", "mtime_desc"), Page: 1, PageSize: 20}
+	valid := len(query.Directory) <= 4096 && len(query.Search) <= 1024 && !strings.ContainsAny(query.Directory, "\\\x00") &&
+		(query.Directory == "" || (path.Clean(query.Directory) == query.Directory && query.Directory != "." && query.Directory != ".." && !strings.HasPrefix(query.Directory, "../") && !strings.HasPrefix(query.Directory, "/")))
+	for key, target := range map[string]*int{"page": &query.Page, "page_size": &query.PageSize} {
+		if value, exists := c.GetQuery(key); exists {
+			number, err := strconv.Atoi(value)
+			if err != nil || number < 1 || (key == "page_size" && number > 100) {
+				valid = false
+			} else {
+				*target = number
 			}
 		}
-		switch query.Sort {
-		case "name_asc", "name_desc", "size_asc", "size_desc", "mtime_asc", "mtime_desc":
-		default:
-			valid = false
-		}
-		if !valid {
-			respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
-			return
-		}
-		page, version, err := h.files.FileBrowserSnapshot(query)
-		if err != nil {
-			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
-			return
-		}
-		response, err := h.encodeListing(fmt.Sprintf("browser:%#v", query), version, func() any { return page })
-		if err != nil {
-			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
-			return
-		}
-		if respondNotModified(c, response.etag) {
-			return
-		}
-		c.Data(http.StatusOK, "application/json; charset=utf-8", response.body)
+	}
+	switch query.Sort {
+	case "name_asc", "name_desc", "size_asc", "size_desc", "mtime_asc", "mtime_desc":
+	default:
+		valid = false
+	}
+	if !valid {
+		respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
 		return
 	}
-	// Keep the original combined response for existing clients. The compact view
-	// is independently versioned and does not perform a disk-space query.
-	if c.Query("view") == "list" {
-		listing, version, err := h.files.FileListSnapshot()
-		if err != nil {
-			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
-			return
-		}
-		response, err := h.encodeListing("list", version, func() any { return listing.Data() })
-		if err != nil {
-			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
-			return
-		}
-		if respondNotModified(c, response.etag) {
-			return
-		}
-		c.Data(http.StatusOK, "application/json; charset=utf-8", response.body)
-		return
-	}
-	storage, err := h.files.StorageInfo()
+	page, version, err := h.files.FileBrowserSnapshot(query)
 	if err != nil {
-		respondError(c, err, http.StatusInternalServerError, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
+		respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
 		return
 	}
-
-	response := diskFields(storage.Disk)
-	response["files"] = storage.Files
-	response["total_size"] = storage.TotalSize
-	response["total_size_display"] = utils.FormatFileSize(storage.TotalSize)
-	response["has_files"] = len(storage.Files) > 0
-	c.JSON(http.StatusOK, response)
+	response, err := h.encodeListing(fmt.Sprintf("browser:%#v", query), version, func() any { return page })
+	if err != nil {
+		respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
+		return
+	}
+	if respondNotModified(c, response.etag) {
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", response.body)
+	return
 }
 
 // 文件下载
@@ -119,29 +90,6 @@ func (h *FileHandler) DownloadUpload(c *gin.Context) {
 	c.Header("Accept-Ranges", "bytes")
 
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
-}
-
-// 文件删除
-func (h *FileHandler) DeleteFile(c *gin.Context) {
-	rel := h.uploadRelativePath(c)
-	if rel == "" {
-		return
-	}
-
-	if err := h.files.DeleteFile(rel); err != nil {
-		if os.IsNotExist(err) {
-			respondError(c, err, http.StatusNotFound, "FILE_NOT_FOUND", "文件不存在")
-			return
-		}
-		respondError(c, err, http.StatusInternalServerError, "FILE_DELETE_FAILED", "删除文件失败，请稍后重试")
-		return
-	}
-
-	logging.FromContext(c.Request.Context()).Info("文件已删除", "event", "file.deleted", "relative_path", rel)
-	c.JSON(http.StatusOK, gin.H{
-		"status":   "deleted",
-		"filename": rel,
-	})
 }
 
 // 磁盘信息 API

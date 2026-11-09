@@ -38,16 +38,14 @@ export type FileListResult = (FileListData & Partial<DiskInfo> & { notModified?:
 
 export const listFiles = async (signal?: AbortSignal, etag?: string, query?: FileBrowserQuery): Promise<FileListResult> => {
   const params = query ? new URLSearchParams({ view: 'browser', dir: query.directory, q: query.search,
-    sort: query.sort, page: String(query.page), page_size: String(query.pageSize) }) : new URLSearchParams({ view: 'list' });
+    sort: query.sort, page: String(query.page), page_size: String(query.pageSize) }) : new URLSearchParams({ view: 'browser' });
   const result = await conditionalGet<FileListData>('/files?' + params, signal, etag);
   return result.notModified ? result : { ...result.data, etag: result.etag };
 };
 
 export const getDiskInfo = (signal?: AbortSignal) => api.get<DiskInfo, DiskInfo>('/disk-info', { signal });
 
-export const deleteFile = (name: string) => api.delete<{ status: string }, { status: string }>('/files/' + encodeURIComponent(name));
 export const downloadFileUrl = (name: string) => '/api/files/' + encodeURIComponent(name);
-export const downloadFolderUrl = (name: string) => '/api/folder-download?path=' + encodeURIComponent(name);
 
 export interface FileSelection { path: string; folder: boolean }
 export interface DeleteSelectionResult { path: string; deleted: boolean; code?: string; error?: string }

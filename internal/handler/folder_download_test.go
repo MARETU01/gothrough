@@ -30,12 +30,12 @@ func TestFolderDownloadZIP(t *testing.T) {
 	}
 	for _, folder := range []string{"照片", "照片/旅行"} {
 		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/folder-download?path="+url.QueryEscape(folder), nil))
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/batch-download?path="+url.QueryEscape(folder), nil))
 		if response.Code != 200 || response.Header().Get("Content-Type") != "application/zip" {
 			t.Fatalf("download: %d %s", response.Code, response.Body.String())
 		}
 		_, params, err := mime.ParseMediaType(response.Header().Get("Content-Disposition"))
-		if err != nil || params["filename"] != filepath.Base(folder)+".zip" {
+		if err != nil || params["filename"] != "files.zip" {
 			t.Fatalf("filename: %v %v", params, err)
 		}
 		archive, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
@@ -55,7 +55,7 @@ func TestFolderDownloadZIP(t *testing.T) {
 			}
 			got[entry.Name] = string(body)
 		}
-		prefix := filepath.Base(folder)
+		prefix := folder
 		expected := map[string]string{prefix + "/": "", prefix + "/a.txt": "hello"}
 		if folder == "照片" {
 			expected = map[string]string{"照片/": "", "照片/旅行/": "", "照片/旅行/a.txt": "hello", "照片/空文件.txt": "", "照片/空目录/": ""}
@@ -69,10 +69,10 @@ func TestFolderDownloadZIP(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"", ".", "..", "../outside", "/照片", "missing", "other.txt", `..\outside`} {
+	for _, name := range []string{"", ".", "..", "../outside", "/照片", "missing", `..\outside`} {
 		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/folder-download?path="+url.QueryEscape(name), nil))
-		if response.Code != http.StatusNotFound {
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/batch-download?path="+url.QueryEscape(name), nil))
+		if response.Code != http.StatusNotFound && response.Code != http.StatusBadRequest {
 			t.Errorf("%q: %d", name, response.Code)
 		}
 	}
@@ -95,7 +95,7 @@ func TestFolderDownloadSkipsSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/folder-download?path=folder", nil))
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/batch-download?path=folder", nil))
 	archive, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestFolderDownloadSkipsSymlinks(t *testing.T) {
 		t.Fatalf("unexpected entries: %+v", archive.File)
 	}
 	response = httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/folder-download?path=folder/link", nil))
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/batch-download?path=folder/link", nil))
 	if response.Code != 404 {
 		t.Fatalf("symlink accepted: %d", response.Code)
 	}

@@ -2,7 +2,7 @@ import { message, translateMessage, type Message } from '@/i18n/messages';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { deleteSelection, deleteFile, downloadFileUrl, downloadFolderUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile, type FileBrowserEntry } from '@/services/files';
+import { deleteSelection, downloadFileUrl, downloadSelectionUrl, getDiskInfo, listFiles, type DiskInfo, type FileListData, type UploadedFile, type FileBrowserEntry, type DeleteSelectionResult } from '@/services/files';
 import { apiErrorDescriptor } from '@/services/errors';
 import { NOT_MODIFIED, useRemoteData, type RemoteLoadContext } from '@/hooks/useRemoteData';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -185,6 +185,11 @@ export default function FilesPage() {
   const pages = Array.from({ length: Math.min(7, totalPages) }, (_, index) => firstPage + index);
   const diskPercent = Math.min(100, Math.max(0, disk?.disk_pct ?? 0));
 
+  function deletionFailure(result?: DeleteSelectionResult): Message {
+    return result?.code && i18n.exists('errors.' + result.code)
+      ? message('errors.' + result.code) : result?.error ?? message('errors.FILE_DELETE_FAILED');
+  }
+
   async function handleDelete(name: string) {
     if (deleteInProgress.current || confirming !== name) return;
     clearSelection();
@@ -195,7 +200,12 @@ export default function FilesPage() {
     cancel();
     cancelDisk();
     try {
-      await deleteFile(name);
+      const response = await deleteSelection([{ path: name, folder: false }]);
+      const result = response.results.find(entry => entry.path === name);
+      if (!result?.deleted) {
+        if (mounted.current) setError(message('files.deleteFailed', { name, error: deletionFailure(result) }));
+        return;
+      }
       if (!mounted.current) return;
       etag.current = undefined;
       setData(previous => previous ? { ...previous, files: previous.files.filter(file => file.name !== name) } : previous);
@@ -227,8 +237,7 @@ export default function FilesPage() {
       setBulkConfirming(false);
       setBulkFailures(failed.map(entry => {
         const result = results.get(entry.name);
-        return { name: entry.name, error: result?.code && i18n.exists('errors.' + result.code)
-          ? message('errors.' + result.code) : result?.error ?? message('errors.FILE_DELETE_FAILED') };
+        return { name: entry.name, error: deletionFailure(result) };
       }));
       setData(previous => previous ? { ...previous, files: previous.files.filter(file => !deleted.some(entry =>
         file.name === entry.name || (entry.folder && file.name.startsWith(entry.name + '/')))) } : previous);
@@ -301,7 +310,7 @@ export default function FilesPage() {
               <td role="cell" className="files-select"><label><input type="checkbox" aria-label={t('batch.select', { name: file.name })}
                 checked={selected.some(entry => entry.name === file.name)} disabled={mutationBusy || bulkConfirming || loading} onChange={() => toggleSelection(file)} /></label></td>
               <td role="cell" className="files-name">{file.folder ? <button type="button" className="files-folder-link" disabled={mutationBusy} aria-label={t('browser.open', { name: file.name })} onClick={() => openDirectory(file.name)}><Folder aria-hidden="true" /><span>{file.label}</span></button> : <span className="files-file-label"><File aria-hidden="true" /><span>{file.label}</span></span>}</td><td role="cell" className="files-size" data-label={t('大小')}>{file.size_display}</td><td role="cell" className="files-time" data-label={t('修改时间')}>{file.folder ? '—' : <Timestamp value={file.mtime} />}</td>
-              <td role="cell">{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadFolderUrl(file.name)} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
+              <td role="cell">{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadSelectionUrl([file.name])} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
                 <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} disabled={mutationBusy} onClick={() => { stopBackground(); setBulkConfirming(false); setPreviewing(file.name); }}>{t('preview.button')}</Button>
                 <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
                 <DeleteAction confirming={confirming === file.name} disabled={mutationBusy} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { stopBackground(); clearSelection(); setConfirming(file.name); }} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />

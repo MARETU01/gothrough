@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -98,29 +99,9 @@ func (s *FileService) ListFiles() ([]model.FileInfo, int64, error) {
 
 // 删除已上传的文件
 func (s *FileService) DeleteFile(filename string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	rel := s.RelativePath(filename)
 	if rel == "" {
-		return fmt.Errorf("无效文件名")
+		return ErrFileInaccessible
 	}
-
-	root, err := os.OpenRoot(s.uploadDir)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	info, err := root.Lstat(rel)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("只能删除文件")
-	}
-	if err := root.Remove(rel); err != nil {
-		return err
-	}
-	s.cleanupParents(rel)
-	s.invalidateFiles()
-	return nil
+	return s.deleteSelected(context.Background(), SelectionEntry{Path: filepath.ToSlash(rel)})
 }

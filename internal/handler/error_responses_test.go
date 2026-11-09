@@ -37,7 +37,6 @@ func TestFileAPIsHideStorageFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, test := range []struct{ method, path, message string }{
-		{http.MethodGet, "/api/files", "获取文件列表失败，请稍后重试"},
 		{http.MethodGet, "/api/disk-info", "获取磁盘信息失败，请稍后重试"},
 		{http.MethodGet, "/api/files/example.txt", "读取文件失败，请稍后重试"},
 	} {
@@ -45,13 +44,18 @@ func TestFileAPIsHideStorageFailures(t *testing.T) {
 		h.ServeHTTP(res, httptest.NewRequest(test.method, test.path, nil))
 		assertPublicFailure(t, res, test.message, h)
 	}
-	// Deleting a directory is rejected by the service with an internal error.
+	// The single-file endpoint must reject a folder without exposing storage details.
 	if err := os.MkdirAll(filepath.Join(h.uploadDir, "folder"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	res := httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/files/folder", nil))
-	assertPublicFailure(t, res, "删除文件失败，请稍后重试", h)
+	res = post(t, h, "/api/batch-delete", "application/json", strings.NewReader(`{"entries":[{"path":"folder","folder":false}]}`))
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), `"code":"SELECTION_CHANGED"`) || strings.Contains(res.Body.String(), h.uploadDir) {
+		t.Fatalf("unexpected folder deletion result: %d %s", res.Code, res.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(h.uploadDir, "folder")); err != nil {
+		t.Fatalf("rejected folder was removed: %v", err)
+	}
 }
 
 func TestUploadCompleteHidesCauseInBothErrorFields(t *testing.T) {

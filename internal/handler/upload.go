@@ -28,17 +28,19 @@ func NewUploadHandler(files *service.FileService) *UploadHandler {
 
 // 初始化分块上传
 func (h *UploadHandler) UploadInit(c *gin.Context) {
-	var req model.InitRequest
+	var req model.UploadInitRequest
 	if err := bindLimitedJSON(c, &req, 64*1024, jsonCompatible); err != nil {
 		invalidJSON(c, err, "INVALID_UPLOAD", "无效的上传请求")
 		return
 	}
-	if req.Filename == "" || req.TotalSize < 0 || req.TotalSize > service.MaxUploadSize {
+	if req.Filename == "" || req.TotalSize == nil || *req.TotalSize < 0 || *req.TotalSize > service.MaxUploadSize {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_UPLOAD", "error": "缺少 filename 或 total_size"})
 		return
 	}
 
-	session, err := h.files.InitSession(req)
+	session, err := h.files.InitSession(model.InitRequest{
+		Filename: req.Filename, RelativePath: req.RelativePath, TotalSize: *req.TotalSize,
+	})
 	if err != nil {
 		uploadError(c, err)
 		return

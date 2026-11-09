@@ -28,11 +28,11 @@ function respond(status: number, data: unknown, etag?: string) {
   return adapter;
 }
 
-it('requests a compact snapshot and sends validators only when provided', async () => {
+it('defaults to the browser snapshot and sends validators only when provided', async () => {
   const signal = new AbortController().signal;
   const adapter = respond(200, { files: [], total_size_display: '0 B' }, '"v1"');
   expect(await listFiles(signal)).toEqual({ files: [], total_size_display: '0 B', etag: '"v1"' });
-  expect(adapter.mock.calls[0][0].url).toBe('/files?view=list');
+  expect(adapter.mock.calls[0][0].url).toBe('/files?view=browser');
   expect(adapter.mock.calls[0][0].signal).toBe(signal);
   expect(adapter.mock.calls[0][0].headers.get('If-None-Match')).toBeUndefined();
   const unchanged = respond(304, '');

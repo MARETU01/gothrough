@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 type jsonMode uint8
@@ -16,16 +17,14 @@ const (
 	jsonStrict
 )
 
-// bindLimitedJSON preserves each endpoint's decoding policy. Compatibility mode
-// keeps Gin's binding/validation; strict mode requires exactly one JSON value and
-// rejects unknown fields, as the clipboard API has always done.
+// Both modes require exactly one JSON value within the body limit. Compatibility
+// mode allows unknown fields and retains Gin validation; strict mode rejects them.
 func bindLimitedJSON(c *gin.Context, target any, limit int64, mode jsonMode) error {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
-	if mode == jsonCompatible {
-		return c.ShouldBindJSON(target)
-	}
 	decoder := json.NewDecoder(c.Request.Body)
-	decoder.DisallowUnknownFields()
+	if mode == jsonStrict {
+		decoder.DisallowUnknownFields()
+	}
 	if err := decoder.Decode(target); err != nil {
 		return err
 	}
@@ -35,6 +34,9 @@ func bindLimitedJSON(c *gin.Context, target any, limit int64, mode jsonMode) err
 			return err
 		}
 		return errors.New("只允许一个 JSON 对象")
+	}
+	if mode == jsonCompatible {
+		return binding.Validator.ValidateStruct(target)
 	}
 	return nil
 }
