@@ -18,7 +18,6 @@ func TestPublicErrorsIncludeStableCodesAndOriginalMessages(t *testing.T) {
 		{http.MethodPost, "/api/upload/cancel", `{}`, "MISSING_SESSION", "缺少 session_id", http.StatusBadRequest},
 		{http.MethodPost, "/api/clipboard", `{"text":""}`, "INVALID_TEXT", "文本不能为空，且不能超过 64 KiB", http.StatusBadRequest},
 		{http.MethodPost, "/api/clipboard", `{`, "INVALID_TEXT_REQUEST", "无效的文本请求", http.StatusBadRequest},
-		{http.MethodDelete, "/api/files/missing.txt", "", "FILE_NOT_FOUND", "文件不存在", http.StatusNotFound},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))

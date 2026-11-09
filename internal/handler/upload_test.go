@@ -114,7 +114,7 @@ func TestRawMultipartAndRangeDownload(t *testing.T) {
 		t.Fatalf("range: %d %q", res.Code, res.Body.String())
 	}
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/files/"+info.FinalFilename, nil))
+	res = deleteHTTP(t, h, info.FinalFilename)
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 	}
@@ -146,7 +146,7 @@ func TestFileOperationsPreserveLiteralFilename(t *testing.T) {
 				t.Fatalf("download: %d %q", res.Code, res.Body.String())
 			}
 			res = httptest.NewRecorder()
-			h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, path, nil))
+			res = deleteHTTP(t, h, tc.name)
 			if res.Code != http.StatusOK {
 				t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 			}
@@ -196,12 +196,12 @@ func TestFolderUploadHTTP(t *testing.T) {
 		t.Fatalf("complete: %d %s", res.Code, res.Body.String())
 	}
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/files", nil))
+	h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/files?dir="+url.QueryEscape("文件夹/子目录"), nil))
 	var list struct {
 		Files     []model.FileInfo `json:"files"`
 		TotalSize int64            `json:"total_size"`
 	}
-	if err := json.Unmarshal(res.Body.Bytes(), &list); err != nil || res.Code != http.StatusOK || len(list.Files) != 1 || list.Files[0].Name != path || list.TotalSize != 5 {
+	if err := json.Unmarshal(res.Body.Bytes(), &list); err != nil || res.Code != http.StatusOK || len(list.Files) != 1 || list.Files[0].Name != path {
 		t.Fatalf("list: %d %s %v", res.Code, res.Body.String(), err)
 	}
 	urlPath := "/api/files/" + url.PathEscape(path)
@@ -213,7 +213,7 @@ func TestFolderUploadHTTP(t *testing.T) {
 		t.Fatalf("download: %d %q", res.Code, res.Body.String())
 	}
 	res = httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, urlPath, nil))
+	res = deleteHTTP(t, h, path)
 	if res.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 	}

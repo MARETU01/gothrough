@@ -49,7 +49,7 @@ func TestDotPrefixedUploadedFilesCanBeReadEditedAndDeleted(t *testing.T) {
 				t.Fatalf("edit: %d %s", res.Code, res.Body.String())
 			}
 			res = httptest.NewRecorder()
-			h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, path, nil))
+			res = deleteHTTP(t, h, name)
 			if res.Code != 200 {
 				t.Fatalf("delete: %d %s", res.Code, res.Body.String())
 			}
@@ -69,7 +69,7 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 		h.ServeHTTP(res, req)
 		return res
 	}
-	initial := read("/api/files?view=list", "")
+	initial := read("/api/files?view=browser", "")
 	etag := initial.Header().Get("ETag")
 	if initial.Code != 200 || etag == "" || initial.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("initial: %d %v", initial.Code, initial.Header())
@@ -82,7 +82,7 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 		t.Fatal("volatile disk state must not be in the list snapshot")
 	}
 	for _, condition := range []string{etag, "W/" + etag, `"other", W/` + etag, "*"} {
-		res := read("/api/files?view=list", condition)
+		res := read("/api/files?view=browser", condition)
 		if res.Code != 304 || res.Body.Len() != 0 || res.Header().Get("ETag") != etag {
 			t.Fatalf("conditional %s: %d %s", condition, res.Code, res.Body.String())
 		}
@@ -97,7 +97,7 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 	if _, exists := body["disk_pct"]; !exists {
 		t.Fatal("missing independent disk percentage")
 	}
-	if res := read("/api/files?view=list", etag); res.Code != 304 {
+	if res := read("/api/files?view=browser", etag); res.Code != 304 {
 		t.Fatal("disk reads changed list version")
 	}
 	// In-service publication, editing and deletion invalidate the cached snapshot.
@@ -109,7 +109,7 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	added := read("/api/files?view=list", etag)
+	added := read("/api/files?view=browser", etag)
 	if added.Code != 200 || added.Header().Get("ETag") == etag {
 		t.Fatal("upload did not change validator")
 	}
@@ -121,14 +121,14 @@ func TestConditionalFileListAndIndependentDiskInfo(t *testing.T) {
 	if _, err := s.SaveText(name, info.Version, "updated"); err != nil {
 		t.Fatal(err)
 	}
-	edited := read("/api/files?view=list", added.Header().Get("ETag"))
+	edited := read("/api/files?view=browser", added.Header().Get("ETag"))
 	if edited.Code != 200 || edited.Header().Get("ETag") == added.Header().Get("ETag") {
 		t.Fatal("edit did not change validator")
 	}
 	if err := s.DeleteFile(name); err != nil {
 		t.Fatal(err)
 	}
-	if res := read("/api/files?view=list", edited.Header().Get("ETag")); res.Code != 200 {
+	if res := read("/api/files?view=browser", edited.Header().Get("ETag")); res.Code != 200 {
 		t.Fatal("delete did not change validator")
 	}
 }
@@ -149,6 +149,9 @@ func TestStorageEndpointsAndMissingDelete(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, key := range []string{"disk_total", "disk_used", "disk_free", "disk_total_display", "disk_used_display", "disk_free_display"} {
+			if path == "/api/files" {
+				break
+			}
 			if _, ok := body[key]; !ok {
 				t.Fatalf("%s missing %s", path, key)
 			}
@@ -158,7 +161,7 @@ func TestStorageEndpointsAndMissingDelete(t *testing.T) {
 			if _, err := time.Parse(time.RFC3339Nano, file["mtime"].(string)); err != nil {
 				t.Fatalf("mtime must include timezone: %v", file["mtime"])
 			}
-			if body["total_size"] != float64(5) || body["has_files"] != true {
+			if body["total_files"] != float64(1) {
 				t.Fatalf("files: %v", body)
 			}
 		} else if body["uploads_size"] != float64(5) || body["uploads_count"] != float64(1) {
@@ -166,8 +169,8 @@ func TestStorageEndpointsAndMissingDelete(t *testing.T) {
 		}
 	}
 	res := httptest.NewRecorder()
-	h.ServeHTTP(res, httptest.NewRequest(http.MethodDelete, "/api/files/missing.txt", nil))
-	if res.Code != http.StatusNotFound {
+	res = post(t, h, "/api/batch-delete", "application/json", bytes.NewBufferString(`{"entries":[{"path":"missing.txt","folder":false}]}`))
+	if res.Code != http.StatusOK || !bytes.Contains(res.Body.Bytes(), []byte(`"code":"FILE_INACCESSIBLE"`)) {
 		t.Fatalf("missing delete: %d", res.Code)
 	}
 }

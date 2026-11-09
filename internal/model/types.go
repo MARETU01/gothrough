@@ -50,6 +50,13 @@ func (s *UploadSession) ReceivedCount() int {
 }
 
 // 请求类型
+// UploadInitRequest distinguishes a missing size from a valid empty file.
+type UploadInitRequest struct {
+	Filename     string `json:"filename"`
+	RelativePath string `json:"relative_path,omitempty"`
+	TotalSize    *int64 `json:"total_size"`
+}
+
 type InitRequest struct {
 	Filename     string `json:"filename"`
 	RelativePath string `json:"relative_path,omitempty"`

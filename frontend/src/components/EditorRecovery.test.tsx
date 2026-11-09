@@ -12,9 +12,10 @@ vi.mock('@/services/http', () => ({ responseApi: { get: vi.fn(), post: vi.fn() }
 vi.mock('@/services/files', () => ({
   listFiles: vi.fn(async () => ({ files: [{ name: 'edit.txt', size: 3, size_display: '3 B', mtime: '2026-11-07T00:00:00Z' }], total_size_display: '3 B' })),
   getDiskInfo: vi.fn(async () => ({ disk_pct: 0, disk_pct_warning: false, disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB' })),
-  getFilePreview: vi.fn(), saveFileText: vi.fn(), deleteFile: vi.fn(),
+  getFilePreview: vi.fn(), saveFileText: vi.fn(), deleteSelection: vi.fn(),
   downloadFileUrl: (name: string) => '/api/files/' + name,
   previewFileUrl: (name: string) => '/api/files/' + name + '?preview=1',
+  downloadSelectionUrl: vi.fn(() => '/api/batch-download'),
 }));
 
 beforeEach(() => {

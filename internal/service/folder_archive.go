@@ -50,6 +50,13 @@ func (a *FolderArchive) Close() error { return a.root.Close() }
 // archive deliberately has no central directory, so it cannot look complete.
 func (a *FolderArchive) WriteZIP(ctx context.Context, dst io.Writer) error {
 	archive := zip.NewWriter(dst)
+	if err := a.writeZIP(ctx, archive); err != nil {
+		return err
+	}
+	return archive.Close()
+}
+
+func (a *FolderArchive) writeZIP(ctx context.Context, archive *zip.Writer) error {
 	err := fs.WalkDir(a.root.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -108,7 +115,7 @@ func (a *FolderArchive) WriteZIP(ctx context.Context, dst io.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return archive.Close()
+	return nil
 }
 
 type contextReader struct {

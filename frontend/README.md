@@ -43,6 +43,8 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 
 Add features to `src/config/features.ts` and the Go SPA fallback allowlist in `internal/router/web.go`; shared definitions store translation keys. Update uploads through named `UploadTask` methods; the task and engine have no React or localization runtime dependencies. See [state ownership](../doc/architecture.md#frontend-state).
 
+File listings use the paginated browser structure. All ZIP links use `downloadSelectionUrl`; archives are named `files.zip` and retain upload-relative paths. All deletion calls `deleteSelection`: a single deletion sends one entry and must check the matching result's `deleted` flag, not just the HTTP status.
+
 ## Browser workflow tests
 
 After installing npm dependencies, run:
@@ -54,7 +56,7 @@ npm run test:e2e
 
 Run these commands in `frontend`. Playwright starts an isolated Go API on port 19815 and Vite on 5183; neither port may already be in use. It builds a test executable and writes disposable configuration and data under ignored `.e2e-runtime/`, without loading local deployment configuration or inheriting `GOTHROUGH_*` overrides. Test output and failure traces go to ignored `test-results/`. Stop test processes before removing these generated directories.
 
-The suite covers desktop Chromium, mobile Chromium, and mobile-size WebKit: navigation and language switching, upload/preview/edit/download, manual clipboard fallback, cancelling and confirming logout during a transfer, and server-side pagination/search. These are browser emulations, not native-device certification. CI installs browser dependencies with `--with-deps` and runs the suite separately from Vitest; `make test` does not run browser tests.
+The suite covers desktop Chromium, mobile Chromium, and mobile-size WebKit: navigation and language switching, upload/preview/edit/download, multi-select ZIP downloads and deletion, manual clipboard fallback, cancelling and confirming logout during a transfer, and server-side pagination/search. These are browser emulations, not native-device certification. CI installs browser dependencies with `--with-deps` and runs the suite separately from Vitest; `make test` does not run browser tests.
 
 ## Internationalization
 

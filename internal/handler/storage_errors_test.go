@@ -21,13 +21,19 @@ func TestStorageErrorsKeepCodesAcrossOperationsAndRedactCauses(t *testing.T) {
 		{utils.ErrStoragePermission, 403, "STORAGE_PERMISSION"},
 		{utils.ErrStorageReadOnly, 503, "STORAGE_READ_ONLY"},
 		{utils.ErrHardlinkUnsupported, 500, "HARDLINK_UNSUPPORTED"},
+		{os.ErrPermission, 403, "STORAGE_PERMISSION"},
 	} {
 		for _, operation := range []struct{ code, message string }{
 			{"UPLOAD_FAILED", "upload fallback"}, {"TEXT_SAVE_FAILED", "edit fallback"},
+			{"FILE_DELETE_FAILED", "delete fallback"},
 		} {
 			cause := &os.PathError{Op: "write", Path: "/private/data", Err: tc.err}
 			status, code, message := storageErrorDetails(cause, operation.code, operation.message)
-			if status != tc.status || code != tc.code || message != tc.err.Error() {
+			wantMessage := tc.err.Error()
+			if errors.Is(tc.err, os.ErrPermission) {
+				wantMessage = utils.ErrStoragePermission.Error()
+			}
+			if status != tc.status || code != tc.code || message != wantMessage {
 				t.Fatalf("%s: %d %s %s", operation.code, status, code, message)
 			}
 			res := httptest.NewRecorder()
@@ -38,7 +44,7 @@ func TestStorageErrorsKeepCodesAcrossOperationsAndRedactCauses(t *testing.T) {
 			}
 		}
 	}
-	for _, fallback := range []string{"UPLOAD_FAILED", "TEXT_SAVE_FAILED"} {
+	for _, fallback := range []string{"UPLOAD_FAILED", "TEXT_SAVE_FAILED", "FILE_DELETE_FAILED"} {
 		status, code, message := storageErrorDetails(errors.New("private failure"), fallback, "public fallback")
 		if status != 500 || code != fallback || message != "public fallback" {
 			t.Fatalf("unexpected fallback: %d %s %s", status, code, message)

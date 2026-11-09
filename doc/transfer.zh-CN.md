@@ -11,6 +11,8 @@
 - 预览支持图片、UTF-8 文本、PDF 和浏览器支持的音视频，无法显示时可下载。Esc 关闭弹窗，手机使用全屏视图；剪贴板图片共用弹窗，查看期间暂停自动更新。
 - 有未完成上传时，锁定退出须确认：确认后中断传输并清空队列，取消则继续运行。刷新浏览器或重启服务后不能续传。
 
+- 勾选文件或文件夹后，可下载 ZIP 或删除所选；“全选当前页”最多选中当前 20 项。切换目录、搜索、排序、页码或手动刷新会清空选择；勾选期间暂停自动刷新。删除前显示数量、名称及递归范围，取消会保留选择，部分失败时保留失败项供重试。
+
 ## 认证接口
 
 接口统一使用 `/api`。开启口令后，文件、上传、磁盘和剪贴板接口均需会话，浏览器修改请求还需通过同源检查。Cookie、代理配置和登录限流见[访问口令](configuration.zh-CN.md#访问口令)。
@@ -33,13 +35,15 @@
 | GET | `/api/files` | 获取文件列表 |
 | GET | `/api/files/*filename` | 下载或预览，支持 Range |
 | PUT | `/api/files/*filename` | 携带版本保存文本 |
-| DELETE | `/api/files/*filename` | 删除文件 |
-| GET | `/api/folder-download?path=目录相对路径` | 流式下载文件夹 ZIP |
 | GET | `/api/disk-info` | 获取磁盘信息 |
+| GET | `/api/batch-download?path=a&path=docs` | 流式下载所选文件及文件夹 ZIP |
+| POST | `/api/batch-delete` | 批量删除，逐项返回结果 |
 
 文件相对路径及文件夹查询参数需要 URL 编码。
 
 ### 文件查询
+
+文件列表统一返回服务端分页结果，通过 `/api/disk-info` 独立读取磁盘占用。不传 `view` 或传 `view=browser` 均使用相同结构；原 `view=list` 已移除，传入它或其他模式返回 `400 INVALID_FILE_QUERY`。
 
 `GET /api/files?view=browser` 在服务端筛选和分页。参数为 `dir`（相对目录，默认根目录）、`q`（不区分大小写的完整路径搜索，最多 1024 字节）、`sort`（默认 `mtime_desc`）、`page`（正整数，默认 1）、`page_size`（1–100，默认 20）。排序支持 `mtime_asc`、`mtime_desc`、`size_asc`、`size_desc`、`name_asc`、`name_desc`；无效参数返回 `400 INVALID_FILE_QUERY`。
 
@@ -50,13 +54,23 @@
 | 请求 | 响应与缓存 |
 | --- | --- |
 | `GET /api/files?view=browser` | 分页数据及查询专属 ETag |
-| `GET /api/files?view=list` | 完整文件清单、总字节数及显示值、`has_files`，提供 ETag |
-| `GET /api/files` | 兼容旧客户端的文件与磁盘组合响应，不提供清单 ETag |
 | `GET /api/disk-info` | 磁盘总量、已用、可用值及显示值，`disk_pct`、`disk_pct_warning` 和上传总量 |
 
-响应使用 `Cache-Control: no-store`。条件请求发送 `If-None-Match`，未变化返回无正文的 `304`；仅复用同一查询已接受的版本，手动刷新获取完整数据。上传、编辑和删除使清单缓存失效，外部变更在 2 秒扫描缓存过期后反映；磁盘变化不影响清单 ETag。前端兼容旧服务端完整列表；缓存实现见[架构说明](architecture.zh-CN.md#查询与-http-响应)。
+响应使用 `Cache-Control: no-store`。条件请求发送 `If-None-Match`，未变化返回无正文的 `304`；仅复用同一查询已接受的版本，手动刷新获取完整数据。上传、编辑和删除使清单缓存失效，外部变更在 2 秒扫描缓存过期后反映；磁盘变化不影响清单 ETag。缓存实现见[架构说明](architecture.zh-CN.md#查询与-http-响应)。
+
+### 批量操作
+
+下载通过重复的 `path` 查询参数指定 1–100 个文件或文件夹。ZIP 保留相对于上传根目录的完整路径；父文件夹与子项同时选择时去除重复内容。全部顶层路径校验成功后才开始响应，流式传输、取消和失败规则与文件夹 ZIP 相同；两类 ZIP 共用 2 个打包名额，并计入 32 个共享下载名额。查询字符串最多 64 KiB，路径过长时减少选择。
+
+删除请求示例：`{"entries":[{"path":"docs","folder":true},{"path":"note.txt","folder":false}]}`。最多 100 项、请求体 512 KiB；非法路径或重复选择在任何删除前返回 `400 INVALID_FILE_SELECTION`。合法请求返回 `200` 和 `results` 数组，每项含 `path`、`deleted`，失败项另含 `code`、`error`。未完成上传占用的文件夹返回 `FOLDER_BUSY`，类型变化返回 `SELECTION_CHANGED`；不影响其他项继续处理。
+
+文件夹删除包含全部后代；符号链接和特殊文件会使该项失败，不跟随链接。整批及单个文件夹删除均不保证原子性，不回滚已删内容；出现失败时先刷新检查，再重试。批量删除沿用会话及同源校验，目录回收与上传发布共用协调锁。
 
 ### 文件夹 ZIP 下载
+
+ZIP 下载统一使用 `/api/batch-download`，支持单个文件夹或多项选择。压缩包名为 `files.zip`，保留完整上传相对路径；原 `/api/folder-download` 路由已移除。
+
+前端文件夹行下载按钮和多选下载调用同一接口，直接流式下载，不在浏览器内缓冲整个压缩包。
 
 `path` 必须指定上传目录内的文件夹，不支持下载上传根目录。ZIP 包含所选文件夹及内部层级，不受分页或搜索范围限制，跳过符号链接和特殊文件。磁盘上已有的空子目录也会打包，但上传不保留空目录。
 
@@ -113,6 +127,8 @@ JSON 请求及响应关键字段示例（`<UUID>` 替换为返回的会话 ID）
 
 ## 限制与错误
 
+上传与文本编辑的 JSON 请求体必须恰好包含一个值；允许尾随空白，但会在执行变更前拒绝额外 JSON 或错误的尾随内容。这些接口继续兼容未知字段；剪贴板与批量删除会拒绝未知字段。上传初始化必须显式提供 0 至 1 TiB 的整数 `total_size`：缺失或 `null` 无效，`0` 表示上传空文件。请求体大小限制也包含尾随内容与空白。
+
 | 项目 | 限制或行为 |
 | --- | --- |
 | 默认传输 | 8 MiB 分块；前端每文件 3 路、同时 2 个文件 |
@@ -129,3 +145,7 @@ JSON 请求及响应关键字段示例（`<UUID>` 替换为返回的会话 ID）
 | 下载 | 文件、预览、剪贴板图片共用 32 个名额，满额返回 429；写入空闲超时 30 秒，随进度刷新，不限制总时长 |
 
 错误响应提供稳定的 `code` 和面向用户的 `error`。通过 `X-Request-ID` 在[服务日志](logging.zh-CN.md#排错步骤)中查找完整原因。
+
+单文件与批量删除统一识别存储错误：权限错误为 `STORAGE_PERMISSION`（403），只读存储为 `STORAGE_READ_ONLY`（503），空间或配额耗尽为 `STORAGE_FULL`（507）。批量失败在各项结果中返回错误码，有效批量请求的 HTTP 状态仍为 200。未知错误保留操作对应的兜底错误码，不暴露文件系统细节。
+
+所有删除统一调用 `POST /api/batch-delete`：单文件传一项 `folder: false`，递归删除文件夹传 `folder: true`。原 `DELETE /api/files/*filename` 路由已移除。HTTP 200 仅表示批量请求已处理，单项也必须检查对应 `results` 的 `deleted`；类型不符返回项内 `SELECTION_CHANGED`，不存在返回项内 `FILE_INACCESSIBLE`。

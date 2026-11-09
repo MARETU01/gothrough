@@ -1,11 +1,22 @@
 import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { afterEach, expect, it, vi } from 'vitest';
 import api, { responseApi } from './http';
-import { getDiskInfo, listFiles } from './files';
+import { deleteSelection, downloadSelectionUrl, getDiskInfo, listFiles } from './files';
 
 const originalResponseAdapter = responseApi.defaults.adapter;
 const originalAdapter = api.defaults.adapter;
 afterEach(() => { responseApi.defaults.adapter = originalResponseAdapter; api.defaults.adapter = originalAdapter; });
+
+it('encodes literal bulk paths and sends typed deletion entries', async () => {
+  const paths = ['文件 & ?.txt', 'folder/a.txt'];
+  expect(new URL(downloadSelectionUrl(paths), 'http://localhost').searchParams.getAll('path')).toEqual(paths);
+  const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => ({ status: 200, statusText: '', data: { results: [] }, headers: new AxiosHeaders(), config }));
+  api.defaults.adapter = adapter;
+  const entries = [{ path: '文件 & ?.txt', folder: false }, { path: 'folder', folder: true }];
+  await deleteSelection(entries);
+  expect(adapter.mock.calls[0][0].url).toBe('/batch-delete');
+  expect(JSON.parse(adapter.mock.calls[0][0].data)).toEqual({ entries });
+});
 
 function respond(status: number, data: unknown, etag?: string) {
   const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => {
@@ -17,11 +28,11 @@ function respond(status: number, data: unknown, etag?: string) {
   return adapter;
 }
 
-it('requests a compact snapshot and sends validators only when provided', async () => {
+it('defaults to the browser snapshot and sends validators only when provided', async () => {
   const signal = new AbortController().signal;
   const adapter = respond(200, { files: [], total_size_display: '0 B' }, '"v1"');
   expect(await listFiles(signal)).toEqual({ files: [], total_size_display: '0 B', etag: '"v1"' });
-  expect(adapter.mock.calls[0][0].url).toBe('/files?view=list');
+  expect(adapter.mock.calls[0][0].url).toBe('/files?view=browser');
   expect(adapter.mock.calls[0][0].signal).toBe(signal);
   expect(adapter.mock.calls[0][0].headers.get('If-None-Match')).toBeUndefined();
   const unchanged = respond(304, '');

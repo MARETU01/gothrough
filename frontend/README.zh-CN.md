@@ -43,6 +43,8 @@ npm run lint
 
 新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。
 
+文件列表统一使用分页结构。所有 ZIP 链接共用 `downloadSelectionUrl`，压缩包名为 `files.zip`，保留上传相对路径。所有删除共用 `deleteSelection`：单项传一项，也必须检查对应结果的 `deleted`，不能只判断 HTTP 状态。
+
 ## 浏览器流程测试
 
 安装 npm 依赖后，在 `frontend` 目录执行：
@@ -54,7 +56,7 @@ npm run test:e2e
 
 Playwright 启动独立的 Go API（19815 端口）和 Vite（5183 端口），这两个端口不能已被占用。测试编译可执行文件，并在忽略的 `.e2e-runtime/` 下生成独立配置和数据，不读取本地部署配置，也不继承 `GOTHROUGH_*` 覆盖设置。测试输出和失败追踪放在忽略的 `test-results/`。删除这些生成目录前应先停止测试进程。
 
-测试覆盖桌面 Chromium、手机 Chromium 和手机尺寸 WebKit：导航与语言切换，上传、预览、编辑、下载，手动复制降级，上传中取消及确认退出，以及服务端分页和搜索。这些属于浏览器模拟，不等于真机认证。CI 使用 `--with-deps` 安装浏览器依赖，并在 Vitest 之外独立运行；`make test` 不包含浏览器测试。
+测试覆盖桌面 Chromium、手机 Chromium 和手机尺寸 WebKit：导航与语言切换，上传、预览、编辑、下载，多选 ZIP 下载与删除，手动复制降级，上传中取消及确认退出，以及服务端分页和搜索。这些属于浏览器模拟，不等于真机认证。CI 使用 `--with-deps` 安装浏览器依赖，并在 Vitest 之外独立运行；`make test` 不包含浏览器测试。
 
 ## 国际化
 

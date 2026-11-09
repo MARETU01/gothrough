@@ -12,10 +12,10 @@
 | `internal/config/`、`internal/app/storage.go` | 校验配置，再准备实例级存储 |
 | `internal/router/` | 路由、认证和中间件 |
 | `internal/handler/upload.go` | 上传 HTTP 协议及请求并发限制 |
-| `internal/handler/file_handler.go`、`files.go`、`edit.go`、`folder_download.go` | 文件 HTTP 响应、预览、流式传输及 JSON/ETag 缓存 |
+| `internal/handler/file_handler.go`、`files.go`、`edit.go`、`selection.go` | 文件 HTTP 响应、预览、流式传输及 JSON/ETag 缓存 |
 | `internal/service/file_service.go` | 协调文件修改和共享状态 |
 | `internal/service/upload_session.go`、`completion.go` | 上传会话、分块、完成结果和资源释放 |
-| `internal/service/files.go`、`text.go`、`folder*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
+| `internal/service/files.go`、`text.go`、`folder*.go`、`selection*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
 | `internal/service/file_listing.go`、`file_browser.go` | 列表版本、目录查询和磁盘信息 |
 | `internal/service/clipboard*.go` | 剪贴板历史、图片和持久化 |
 | `internal/utils/` | 文件名、磁盘及平台文件系统操作 |
@@ -39,6 +39,10 @@
 `FileHandler` 缓存 JSON 和查询专属 ETag。命中时跳过数据副本创建，未命中时在缓存锁外编码和计算哈希。并发未命中可重复编码，但旧版本不能覆盖新缓存。校验值由查询与内容决定，相同响应在缓存失效后仍保留相同 ETag。
 
 处理器共用 `errors.go` 的存储错误映射，各操作提供独立的兜底错误码和消息，完整原因保留在日志中。固定上传限制归 `service/limits.go`，multipart 解析限制归路由，部署设置归 `config/`。
+
+文件夹与多选 ZIP 下载统一由 `handler/selection.go` 处理；文件和文件夹删除统一使用批量接口及服务层修改逻辑。文件列表只返回分页浏览结构，磁盘信息独立查询。
+
+前端单项与多项 ZIP 下载共用 `downloadSelectionUrl`；所有删除共用 `deleteSelection` 并检查逐项结果，不保留旧 HTTP 路由。
 
 ## 前端状态
 

@@ -76,6 +76,11 @@ test('uploads, previews, edits, and downloads a file, then publishes clipboard t
   await downloadButton.click();
   const download = await downloading;
   expect(await readFile((await download.path())!, 'utf8')).toBe('edited text');
+  const deletion = page.waitForResponse(response => response.url().endsWith('/api/batch-delete') && response.request().method() === 'POST');
+  await row.getByRole('button', { name: '删除 ' + name, exact: true }).click();
+  await row.getByRole('button', { name: '确认删除 ' + name, exact: true }).click();
+  expect((await (await deletion).json()).results).toEqual([{ path: name, deleted: true }]);
+  await expect(row).toHaveCount(0);
   await navigate(page, '/clipboard');
   const text = `Shared from ${testInfo.project.name} ${Date.now()}`;
   await page.getByLabel('输入或粘贴文本', { exact: true }).fill(text);
@@ -135,4 +140,61 @@ test('browses server-side directory pages and searches full paths', async ({ pag
   await expect(page.locator('tbody tr').filter({ hasText: `${directory}/file-24.txt` })).toBeVisible();
   await page.getByRole('searchbox').fill('');
   await expect(page.locator('tbody tr')).toHaveCount(20);
+});
+
+test('selects files and folders, downloads a ZIP, and confirms bulk deletion', async ({ page }, testInfo) => {
+  const directory = `bulk-${testInfo.project.name}-${Date.now()}`;
+  const loose = directory + '-loose.txt';
+  for (const relative_path of [`${directory}/inside.txt`, loose]) {
+    const init = await page.request.post('/api/upload/init', { data: { filename: relative_path.split('/').at(-1), relative_path, total_size: 0 } });
+    expect(init.ok()).toBe(true);
+    const { session_id } = await init.json();
+    expect((await page.request.post('/api/upload/complete', { data: { session_id } })).ok()).toBe(true);
+  }
+  await navigate(page, '/files');
+  const folderLink = page.getByRole('link', { name: `下载文件夹 ${directory}`, exact: true });
+  await expect(folderLink).toHaveAttribute('href', '/api/batch-download?path=' + directory);
+  const folderDownloading = page.waitForEvent('download');
+  await folderLink.click();
+  const folderDownload = await folderDownloading;
+  expect(folderDownload.suggestedFilename()).toBe('files.zip');
+  const folderZip = await readFile((await folderDownload.path())!);
+  expect(folderZip.includes(Buffer.from(directory + '/inside.txt'))).toBe(true);
+  expect(folderZip.includes(Buffer.from(loose))).toBe(false);
+  await page.getByRole('checkbox', { name: `选择 ${directory}`, exact: true }).check();
+  await page.getByRole('checkbox', { name: `选择 ${loose}`, exact: true }).check();
+  await expect(page.getByText('已选 2 项', { exact: true })).toBeVisible();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('link', { name: '下载 ZIP', exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('files.zip');
+  const zip = await readFile((await download.path())!);
+  expect(zip.subarray(0, 2).toString()).toBe('PK');
+  expect(zip.includes(Buffer.from(directory + '/inside.txt'))).toBe(true);
+  expect(zip.includes(Buffer.from(loose))).toBe(true);
+  await page.getByRole('button', { name: '删除所选', exact: true }).click();
+  await expect(page.getByRole('group', { name: '确认删除所选的 2 项？' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '删除所选', exact: true })).toBeFocused();
+  await showTools(page);
+  await page.getByRole('combobox', { name: '界面语言' }).selectOption('en');
+  const toggle = page.getByRole('button', { name: 'Close navigation menu' });
+  if (await toggle.isVisible()) await page.keyboard.press('Escape');
+  await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
+  for (const [width, height] of [[320, 480], [768, 640], [1280, 800], [844, 390]]) {
+    await page.setViewportSize({ width, height });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 320 || width === 1280) await page.screenshot({ path: testInfo.outputPath(`bulk-${width}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 320, height: 480 });
+  await page.getByRole('button', { name: 'Delete selected', exact: true }).click();
+  const confirmation = page.getByRole('group', { name: 'Delete the 2 selected items?' });
+  await expect(confirmation).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const deleted = page.waitForResponse(response => response.url().endsWith('/api/batch-delete') && response.request().method() === 'POST');
+  await confirmation.getByRole('button').first().click();
+  expect((await (await deleted).json()).results.every((result: { deleted: boolean }) => result.deleted)).toBe(true);
+  await expect(page.getByText('Deleted 2 items', { exact: true })).toBeVisible();
+  await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: `Select ${directory}`, exact: true })).toHaveCount(0);
 });

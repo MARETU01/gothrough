@@ -12,6 +12,8 @@ import (
 // File operations share public storage failures, but supply their own fallback.
 // Unknown causes are retained by respondError and never become client messages.
 func storageErrorDetails(err error, fallbackCode, fallbackMessage string) (int, string, string) {
+	// Deletion can return raw OS errors; uploads and edits may already classify them.
+	err = utils.StorageError("storage operation", err)
 	switch {
 	case errors.Is(err, utils.ErrStorageFull):
 		return http.StatusInsufficientStorage, "STORAGE_FULL", utils.ErrStorageFull.Error()
