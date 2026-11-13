@@ -147,41 +147,14 @@ export default function FilesPage() {
       ? message('errors.' + result.code) : result?.error ?? message('errors.FILE_DELETE_FAILED');
   }
 
-  async function handleDelete(name: string) {
-    if (deleteInProgress.current || confirming !== name) return;
-    clearSelection();
+  async function handleDelete(requested: FileBrowserEntry[], bulk = false) {
+    if (deleteInProgress.current || !requested.length || (bulk ? !bulkConfirming : confirming !== requested[0].name)) return;
+    const entries = [...requested];
+    const name = entries[0].name;
+    if (!bulk) clearSelection();
     deleteInProgress.current = true;
-    setDeleting(name);
-    setError('');
-    setNotice('');
-    cancel();
-    cancelDisk();
-    try {
-      const response = await deleteSelection([{ path: name, folder: false }]);
-      const result = response.results.find(entry => entry.path === name);
-      if (!result?.deleted) {
-        if (mounted.current) setError(message('files.deleteFailed', { name, error: deletionFailure(result) }));
-        return;
-      }
-      if (!mounted.current) return;
-      etag.current = undefined;
-      setData(previous => previous ? { ...previous, files: previous.files.filter(file => file.name !== name) } : previous);
-      setConfirming(null);
-      setNotice(message('files.deleted', { name }));
-      await refreshAll();
-    } catch (err) {
-      if (mounted.current) setError(message('files.deleteFailed', { name, error: apiErrorDescriptor(err) }));
-    } finally {
-      deleteInProgress.current = false;
-      if (mounted.current) setDeleting(null);
-    }
-  }
-
-  async function handleBulkDelete() {
-    if (deleteInProgress.current || !bulkConfirming || !selected.length) return;
-    const entries = [...selected];
-    deleteInProgress.current = true;
-    setBulkDeleting(true);
+    setDeleting(bulk ? null : name);
+    setBulkDeleting(bulk);
     setError(''); setNotice(''); setBulkFailures([]);
     cancel(); cancelDisk();
     try {
@@ -190,24 +163,33 @@ export default function FilesPage() {
       const results = new Map(response.results.map(result => [result.path, result]));
       const failed = entries.filter(entry => !results.get(entry.name)?.deleted);
       const deleted = entries.filter(entry => results.get(entry.name)?.deleted);
-      setSelection({ scope: selectionScope, entries: failed });
-      setBulkConfirming(false);
-      setBulkFailures(failed.map(entry => {
-        const result = results.get(entry.name);
-        return { name: entry.name, error: deletionFailure(result) };
-      }));
+      if (bulk) {
+        setSelection({ scope: selectionScope, entries: failed });
+        setBulkConfirming(false);
+        setBulkFailures(failed.map(entry => ({ name: entry.name, error: deletionFailure(results.get(entry.name)) })));
+        if (deleted.length) setNotice(message('batch.deleted', { count: deleted.length }));
+        if (failed.length) setError(message('batch.failed', { count: failed.length }));
+      } else {
+        if (failed.length) {
+          setError(message('files.deleteFailed', { name, error: deletionFailure(results.get(name)) }));
+          return;
+        }
+        setConfirming(null);
+        setNotice(message('files.deleted', { name }));
+      }
       setData(previous => previous ? { ...previous, files: previous.files.filter(file => !deleted.some(entry =>
         file.name === entry.name || (entry.folder && file.name.startsWith(entry.name + '/')))) } : previous);
       etag.current = undefined;
-      if (deleted.length) setNotice(message('batch.deleted', { count: deleted.length }));
-      if (failed.length) setError(message('batch.failed', { count: failed.length }));
-      // Background refresh preserves the partial-failure notice and retry selection.
+      // Both actions resync without clearing their success or per-item feedback.
       await Promise.all([refresh({ background: true }), refreshDisk({ background: true })]);
     } catch (err) {
-      if (mounted.current) { setError(apiErrorDescriptor(err)); setBulkConfirming(false); }
+      if (mounted.current) {
+        setError(bulk ? apiErrorDescriptor(err) : message('files.deleteFailed', { name, error: apiErrorDescriptor(err) }));
+        if (bulk) setBulkConfirming(false);
+      }
     } finally {
       deleteInProgress.current = false;
-      if (mounted.current) setBulkDeleting(false);
+      if (mounted.current) { setDeleting(null); setBulkDeleting(false); }
     }
   }
 
@@ -259,7 +241,7 @@ export default function FilesPage() {
           <FileSelectionBar names={selected.map(entry => entry.name)} pageNames={pageFiles.map(entry => entry.name)} disabled={loading || mutationBusy} confirming={bulkConfirming} busy={bulkDeleting}
             onSelectAll={() => { stopBackground(); setConfirming(null); setBulkFailures([]); if (bulkFailures.length) setError(''); setSelection({ scope: selectionScope, entries: [...pageFiles] }); }}
             onClear={clearSelection} onRequest={() => { stopBackground(); setConfirming(null); setBulkConfirming(true); }}
-            onCancel={() => setBulkConfirming(false)} onConfirm={() => void handleBulkDelete()} />
+            onCancel={() => setBulkConfirming(false)} onConfirm={() => void handleDelete(selected, true)} />
           {bulkFailures.length > 0 && <ul className="files-selection-failures">{bulkFailures.map(failure => <li key={failure.name}>{failure.name}: {translateMessage(failure.error)}</li>)}</ul>}
           {pageFiles.length > 0 ? <div className="files-table-scroll"><table role="table">
             <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col" className="files-select">{t("batch.selection")}</th><th role="columnheader" scope="col">{t("文件名")}</th><th role="columnheader" scope="col">{t("大小")}</th><th role="columnheader" scope="col">{t("修改时间")}</th><th role="columnheader" scope="col">{t("操作")}</th></tr></thead>
@@ -270,7 +252,7 @@ export default function FilesPage() {
               <td role="cell">{file.folder ? <div className="files-action-controls"><Button asChild variant="outline"><a href={downloadSelectionUrl([file.name])} download aria-label={t('folders.download', { name: file.name })}><Download aria-hidden="true" />{t('folders.zip')}</a></Button></div> : <div className="files-row-actions"><div className="files-action-controls">
                 <Button type="button" variant="outline" aria-label={t('preview.open', { name: file.name })} disabled={mutationBusy} onClick={() => { stopBackground(); setBulkConfirming(false); setPreviewing(file.name); }}>{t('preview.button')}</Button>
                 <Button asChild variant="outline"><a href={downloadFileUrl(file.name)} download aria-label={t('files.download', { name: file.name })}><Download aria-hidden="true" />{t("下载")}</a></Button>
-                <DeleteAction confirming={confirming === file.name} disabled={mutationBusy} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { stopBackground(); clearSelection(); setConfirming(file.name); }} onConfirm={() => void handleDelete(file.name)} onCancel={() => setConfirming(null)} />
+                <DeleteAction confirming={confirming === file.name} disabled={mutationBusy} busy={deleting === file.name} label={t('files.delete', { name: file.name })} confirmLabel={t('files.confirmDelete', { name: file.name })} onRequest={() => { stopBackground(); clearSelection(); setConfirming(file.name); }} onConfirm={() => void handleDelete([file])} onCancel={() => setConfirming(null)} />
               </div><div className="files-actions-sizing" aria-hidden="true">
                 <Button asChild variant="outline"><span>{t('preview.button')}</span></Button>
                 <Button asChild variant="outline"><span><Download aria-hidden="true" />{t('下载')}</span></Button>

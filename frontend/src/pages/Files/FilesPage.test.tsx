@@ -589,3 +589,14 @@ for (const results of [
     expect(listFiles).toHaveBeenCalledTimes(1);
   });
 }
+
+it('keeps successful single-deletion feedback when the background resync fails', async () => {
+  openPage(); await screen.findByText('文件 01.txt');
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' })); });
+  listSource.mockRejectedValueOnce(new Error('resync unavailable'));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
+  expect(screen.queryByRole('checkbox', { name: '选择 文件 01.txt' })).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByText(/自动更新暂不可用/)).toBeTruthy();
+  expect(screen.getByText(/文件 01.txt 已删除|已删除.*文件 01.txt/)).toBeTruthy();
+});

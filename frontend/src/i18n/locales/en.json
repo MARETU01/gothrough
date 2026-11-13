@@ -1,4 +1,6 @@
 {
+  "errors.DELETION_BUSY": "Folder deletion capacity is full. Please try again shortly.",
+  "errors.PATH_BUSY": "The folder is being deleted. Please try again shortly.",
   "服务端返回的上传完成信息无效": "The server returned an invalid upload completion receipt",
   "errors.UNSUPPORTED_UPLOAD_TYPE": "Chunk uploads require application/octet-stream.",
   "auth.confirmLock": "Lock and sign out?",

@@ -17,6 +17,8 @@ var (
 	ErrSelection        = errors.New("文件选择无效")
 	ErrSelectionChanged = errors.New("文件或文件夹类型已变化，请刷新后重试")
 	ErrFolderBusy       = errors.New("文件夹内有未完成上传，请完成或取消后重试")
+	ErrPathDeleting     = errors.New("文件夹正在删除，请稍后重试")
+	ErrDeletionBusy     = errors.New("文件夹删除任务已满，请稍后重试")
 )
 
 type SelectionEntry struct {
@@ -66,8 +68,8 @@ func selectionInfo(root *os.Root, name string) (os.FileInfo, error) {
 }
 
 // DeleteSelection reports each requested outcome. Children precede selected
-// parents; unrelated failures never erase successful outcomes. A folder mutation
-// uses the same lock as publication/reservations, editing, and single deletion.
+// parents; unrelated failures never erase successful outcomes. Folder admission
+// and path reservations share the mutation lock; recursive I/O runs outside it.
 func (s *FileService) DeleteSelection(ctx context.Context, entries []SelectionEntry) ([]DeletionResult, error) {
 	if err := s.validateSelection(entries); err != nil {
 		return nil, err
@@ -87,11 +89,35 @@ func (s *FileService) DeleteSelection(ctx context.Context, entries []SelectionEn
 	return results, nil
 }
 
+// Called with mu held; paths use the same conservative case policy as uploads.
+func (s *FileService) deletionOverlaps(name string) bool {
+	key := nameKey(filepath.ToSlash(name))
+	for reserved := range s.deleting {
+		if key == reserved || strings.HasPrefix(key, reserved+"/") || strings.HasPrefix(reserved, key+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *FileService) deleteSelected(ctx context.Context, entry SelectionEntry) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	held := true
+	reserved := ""
+	defer func() {
+		if !held {
+			s.mu.Lock()
+		}
+		if reserved != "" {
+			delete(s.deleting, reserved)
+		}
+		s.mu.Unlock()
+	}()
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if s.deletionOverlaps(entry.Path) {
+		return ErrPathDeleting
 	}
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
@@ -112,10 +138,18 @@ func (s *FileService) deleteSelected(ctx context.Context, entry SelectionEntry) 
 				return ErrFolderBusy
 			}
 		}
+		if len(s.deleting) >= MaxConcurrentFolderDeletions {
+			return ErrDeletionBusy
+		}
 		folder, err := root.OpenRoot(entry.Path)
 		if err != nil {
 			return err
 		}
+		defer folder.Close()
+		reserved = key
+		s.deleting[reserved] = true
+		s.mu.Unlock()
+		held = false
 		// Preflight special entries before removing any content. External changes
 		// can still interrupt a deletion; callers must not treat it as atomic.
 		err = fs.WalkDir(folder.FS(), ".", func(_ string, entry fs.DirEntry, err error) error {
@@ -135,6 +169,13 @@ func (s *FileService) deleteSelected(ctx context.Context, entry SelectionEntry) 
 			err = removeSelectedContents(ctx, folder)
 		}
 		closeErr := folder.Close()
+		s.mu.Lock()
+		held = true
+		delete(s.deleting, reserved)
+		reserved = ""
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err != nil {
 			return err
 		}

@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type ClipboardEntry struct {
 	ID        string         `json:"id"`
 	Type      string         `json:"type"`
@@ -78,8 +80,9 @@ type UploadCompletion struct {
 
 // 文件信息
 type FileInfo struct {
-	Name        string `json:"name"`
-	Size        int64  `json:"size"`
-	SizeDisplay string `json:"size_display"`
-	Mtime       string `json:"mtime"`
+	Name        string    `json:"name"`
+	Size        int64     `json:"size"`
+	SizeDisplay string    `json:"size_display"`
+	Mtime       string    `json:"mtime"`
+	ModifiedAt  time.Time `json:"-"`
 }

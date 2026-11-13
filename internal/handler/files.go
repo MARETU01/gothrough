@@ -95,7 +95,7 @@ func (h *FileHandler) DownloadUpload(c *gin.Context) {
 // 磁盘信息 API
 func (h *FileHandler) DiskInfo(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	storage, err := h.files.StorageInfo()
+	storage, err := h.files.StorageStats()
 	if err != nil {
 		respondError(c, err, http.StatusInternalServerError, "DISK_INFO_FAILED", "获取磁盘信息失败，请稍后重试")
 		return
@@ -103,7 +103,7 @@ func (h *FileHandler) DiskInfo(c *gin.Context) {
 
 	response := diskFields(storage.Disk)
 	response["uploads_size"] = storage.TotalSize
-	response["uploads_count"] = len(storage.Files)
+	response["uploads_count"] = storage.TotalFiles
 	response["uploads_size_display"] = utils.FormatFileSize(storage.TotalSize)
 	c.JSON(http.StatusOK, response)
 }

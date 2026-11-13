@@ -88,6 +88,26 @@ type StorageInfo struct {
 	Disk      utils.DiskUsage
 }
 
+type StorageStats struct {
+	TotalFiles int
+	TotalSize  int64
+	Disk       utils.DiskUsage
+}
+
+// StorageStats reads only aggregate metadata, without copying the file list.
+func (s *FileService) StorageStats() (StorageStats, error) {
+	s.listingMu.Lock()
+	if err := s.refreshListingLocked(); err != nil {
+		s.listingMu.Unlock()
+		return StorageStats{}, err
+	}
+	stats := StorageStats{TotalFiles: len(s.listing.files), TotalSize: s.listing.totalSize}
+	s.listingMu.Unlock()
+	disk, err := utils.GetDiskUsage(s.uploadDir)
+	stats.Disk = disk
+	return stats, err
+}
+
 func (s *FileService) StorageInfo() (StorageInfo, error) {
 	files, totalSize, err := s.cachedFiles()
 	if err != nil {
