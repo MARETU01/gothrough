@@ -52,9 +52,9 @@
 .files-size, .files-time { white-space: nowrap; color: #546e6a; }
 .files-page th:last-child, .files-page td:last-child { width: 1%; white-space: nowrap; }
 .files-page th:last-child { text-align: right; }
-.files-row-actions { display: grid; justify-content: end; white-space: nowrap; }
-/* Reserve the full confirmation row while keeping visible buttons together at the right edge. */
-.files-action-controls, .files-actions-sizing { grid-area: 1 / 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.files-row-actions { display: grid; justify-content: end; width: 320px; max-width: 100%; min-width: 0; white-space: nowrap; }
+/* Reserve confirmation space within the action column, allowing long labels to wrap as a group. */
+.files-action-controls, .files-actions-sizing { grid-area: 1 / 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .files-actions-sizing { visibility: hidden; pointer-events: none; }
 .files-page a:not([data-slot='button']) { color: #00796b; font-weight: 600; }
 .files-empty { padding: 36px 16px; text-align: center; color: #546e6a; border: 1px dashed #a7d8d2; border-radius: 10px; }
@@ -62,7 +62,8 @@
 .files-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .files-pagination button[aria-current='page'] { background: #00796b; border-color: #00796b; color: white; }
 .files-pagination span { font-size: 12px; color: #546e6a; }
-@media (max-width: 600px) {
+/* Use cards while five table columns and confirmation actions cannot fit. */
+@media (max-width: 1024px) {
   .files-table-scroll { border: 0; overflow: visible; }
   .files-page table, .files-page tbody { display: block; }
   .files-page thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -77,10 +78,12 @@
   .files-page .files-size, .files-page .files-time { white-space: normal; font-size: 12px; overflow-wrap: anywhere; }
   .files-size::before, .files-time::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #78938d; }
   .files-page tbody td:last-child { grid-column: 1 / -1; width: auto; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dcece9; white-space: normal; }
-  .files-row-actions { display: block; white-space: normal; }
+  .files-row-actions { display: block; width: auto; max-width: none; white-space: normal; }
   .files-page .files-action-controls { flex-wrap: wrap; justify-content: flex-start; }
   .files-actions-sizing { display: none; }
   .files-action-controls [data-slot='button'] { min-height: 44px; }
+}
+@media (max-width: 600px) {
   .files-header h1 { font-size: 24px; }
   .files-disk { padding: 14px; gap: 18px; }
   .files-disk dl { gap: 18px; }

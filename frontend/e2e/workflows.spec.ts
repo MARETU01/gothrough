@@ -54,14 +54,34 @@ test('uploads, previews, edits, and downloads a file, then publishes clipboard t
   await expect(row).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const downloadButton = row.getByRole('link', { name: `下载 ${name}`, exact: true });
-  for (const width of [320, 600, 768, 1280]) {
-    await page.setViewportSize({ width, height: 844 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const bounds = await downloadButton.boundingBox();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
-    expect(await row.evaluate(element => getComputedStyle(element).display)).toBe(width <= 600 ? 'grid' : 'table-row');
+  for (const language of ['zh-CN', 'en']) {
+    await showTools(page);
+    await page.getByRole('combobox', { name: /界面语言|Interface language/ }).selectOption(language);
+    const toggle = page.getByRole('button', { name: language === 'en' ? 'Close navigation menu' : '收起导航菜单', exact: true });
+    if (await toggle.isVisible()) await page.keyboard.press('Escape');
+    for (const width of [320, 600, 768, 1024, 1025, 1280]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await row.evaluate(element => getComputedStyle(element).display)).toBe(width <= 1024 ? 'grid' : 'table-row');
+      for (const action of await row.locator('[data-slot="button"]').all()) {
+        if (!(await action.isVisible())) continue;
+        const bounds = await action.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      }
+      await row.getByRole('button', { name: (language === 'en' ? 'Delete ' : '删除 ') + name, exact: true }).click();
+      const confirmation = row.getByRole('button', { name: (language === 'en' ? 'Confirm deletion of ' : '确认删除 ') + name, exact: true });
+      await expect(confirmation).toBeVisible();
+      const bounds = await confirmation.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      if ((language === 'zh-CN' && width === 768) || (language === 'en' && [320, 1025, 1280].includes(width))) {
+        await page.screenshot({ path: testInfo.outputPath('file-layout-' + language + '-' + width + '.png'), fullPage: true });
+      }
+      await row.getByRole('button', { name: language === 'en' ? 'Cancel' : '取消', exact: true }).click();
+    }
   }
+  await page.getByRole('combobox', { name: /界面语言|Interface language/ }).selectOption('zh-CN');
   await downloadButton.scrollIntoViewIfNeeded();
   await expect(downloadButton).toBeInViewport();
   await row.getByRole('button', { name: `预览 ${name}`, exact: true }).click();

@@ -45,6 +45,8 @@ Add features to `src/config/features.ts` and the Go SPA fallback allowlist in `i
 
 Requests, responses, and recovery rules belong to [Transfer and APIs](../doc/transfer.md). Pages call `src/services/`; tests use server-paginated responses.
 
+File lists use cards at widths up to 1024px and tables on wider screens. Desktop action columns have bounded widths and wrapping confirmation controls. Browser tests cover both sides of the breakpoint, Chinese/English labels, and deletion confirmation, checking that action buttons stay inside the viewport.
+
 ## Browser workflow tests
 
 After installing npm dependencies, run:
