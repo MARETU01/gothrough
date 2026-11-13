@@ -81,7 +81,7 @@ func (s *FileService) prepareParent(name string) error {
 }
 
 // Called with s.mu held. Remove only empty ancestors created by this service,
-// and preserve directories reserved by any other active upload.
+// and preserve directories reserved by active uploads or recursive deletions.
 func (s *FileService) cleanupParents(name string) {
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
@@ -93,6 +93,9 @@ func (s *FileService) cleanupParents(name string) {
 		created, owned := s.createdDirs[key]
 		if !owned {
 			break
+		}
+		if s.deletionOverlaps(filepath.ToSlash(dir)) {
+			return
 		}
 		for reserved := range s.names {
 			if strings.HasPrefix(reserved, nameKey(key)+"/") {

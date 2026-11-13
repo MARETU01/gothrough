@@ -80,6 +80,7 @@ func (s *FileService) ListFiles() ([]model.FileInfo, int64, error) {
 			Size:        info.Size(),
 			SizeDisplay: utils.FormatFileSize(info.Size()),
 			Mtime:       info.ModTime().Format(time.RFC3339Nano),
+			ModifiedAt:  info.ModTime().UTC(),
 		})
 		totalSize += info.Size()
 		return nil
@@ -89,9 +90,10 @@ func (s *FileService) ListFiles() ([]model.FileInfo, int64, error) {
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
-		left, _ := time.Parse(time.RFC3339Nano, entries[i].Mtime)
-		right, _ := time.Parse(time.RFC3339Nano, entries[j].Mtime)
-		return left.After(right)
+		if order := entries[i].ModifiedAt.Compare(entries[j].ModifiedAt); order != 0 {
+			return order > 0
+		}
+		return entries[i].Name < entries[j].Name
 	})
 
 	return entries, totalSize, nil

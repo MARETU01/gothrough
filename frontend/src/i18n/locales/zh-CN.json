@@ -1,4 +1,6 @@
 {
+  "errors.DELETION_BUSY": "文件夹删除任务已满，请稍后重试。",
+  "errors.PATH_BUSY": "文件夹正在删除，请稍后重试。",
   "服务端返回的上传完成信息无效": "服务端返回的上传完成信息无效",
   "errors.UNSUPPORTED_UPLOAD_TYPE": "分块上传仅支持 application/octet-stream。",
   "auth.confirmLock": "确认锁定退出？",

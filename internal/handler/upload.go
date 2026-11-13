@@ -239,6 +239,8 @@ func withUploadSession(c *gin.Context, id string) {
 
 func uploadErrorDetails(c *gin.Context, err error) (int, string, string) {
 	switch {
+	case errors.Is(err, service.ErrPathDeleting):
+		return http.StatusConflict, "PATH_BUSY", service.ErrPathDeleting.Error()
 	case errors.Is(err, service.ErrSession):
 		return http.StatusNotFound, "INVALID_SESSION", service.ErrSession.Error()
 	case errors.Is(err, service.ErrChunk):

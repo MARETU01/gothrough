@@ -34,6 +34,7 @@ func TestUploadStorageFailureResponses(t *testing.T) {
 		{service.ErrChunk, 400, service.ErrChunk.Error()},
 		{service.ErrSession, 404, service.ErrSession.Error()},
 		{service.ErrBusy, 429, service.ErrBusy.Error()},
+		{service.ErrPathDeleting, 409, service.ErrPathDeleting.Error()},
 		{&http.MaxBytesError{Limit: 8}, 413, "请求体过大"},
 		{errors.New("unexpected failure"), 500, "上传失败，请稍后重试"},
 	} {

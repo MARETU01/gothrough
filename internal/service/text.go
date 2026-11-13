@@ -86,6 +86,9 @@ func (s *FileService) SaveText(filename, version, text string) (string, error) {
 	// Serialize version comparison and replacement with other edits and deletes.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deletionOverlaps(filepath.ToSlash(rel)) {
+		return "", ErrPathDeleting
+	}
 	root, err := os.OpenRoot(s.uploadDir)
 	if err != nil {
 		return "", utils.StorageError("打开上传目录失败", err)

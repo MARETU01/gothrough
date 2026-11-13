@@ -34,6 +34,8 @@ func (h *FileHandler) EditText(c *gin.Context) {
 	version, err := h.files.SaveText(rel, req.Version, *req.Text)
 	if err != nil {
 		switch {
+		case errors.Is(err, service.ErrPathDeleting):
+			respondError(c, err, 409, "PATH_BUSY", service.ErrPathDeleting.Error())
 		case errors.Is(err, service.ErrTextConflict):
 			respondError(c, err, 409, "TEXT_CONFLICT", "文件已被修改，请重新加载后再编辑")
 		case errors.Is(err, service.ErrTextSize):

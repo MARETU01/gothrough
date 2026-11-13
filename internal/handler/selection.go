@@ -48,6 +48,10 @@ func (h *FileHandler) DeleteSelection(c *gin.Context) {
 
 func selectionErrorDetails(err error) (int, string, string) {
 	switch {
+	case errors.Is(err, service.ErrDeletionBusy):
+		return 429, "DELETION_BUSY", service.ErrDeletionBusy.Error()
+	case errors.Is(err, service.ErrPathDeleting):
+		return 409, "PATH_BUSY", service.ErrPathDeleting.Error()
 	case errors.Is(err, service.ErrSelection):
 		return 400, "INVALID_FILE_SELECTION", "请选择有效的文件或文件夹"
 	case errors.Is(err, service.ErrFolderBusy):

@@ -97,6 +97,13 @@ func TestFileBrowserSortsTimesByInstant(t *testing.T) {
 	}
 	s.listing.files[0].Mtime = "2026-11-06T20:00:00+08:00"
 	s.listing.files[1].Mtime = "2026-11-06T13:00:00Z"
+	for i := range s.listing.files {
+		modified, err := time.Parse(time.RFC3339Nano, s.listing.files[i].Mtime)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.listing.files[i].ModifiedAt = modified.UTC()
+	}
 	s.listing.browser = nil
 	result, _, err := s.FileBrowserSnapshot(BrowserQuery{Sort: "mtime_desc", Page: 1, PageSize: 20})
 	if err != nil {

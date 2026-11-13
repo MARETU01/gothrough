@@ -64,6 +64,9 @@ func (s *FileService) InitSession(req model.InitRequest) (*model.UploadSession, 
 	// cannot reserve a file as another session's parent directory.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.deletionOverlaps(safeName) {
+		return nil, ErrPathDeleting
+	}
 	committed := false
 	defer func() {
 		if !committed {

@@ -60,6 +60,8 @@ Valid requests return HTTP `200` with a `results` array. Each item contains `pat
 
 `folder: true` recursively deletes descendants. Symlinks and special entries fail that item and are never followed. Neither batches nor individual recursive deletions are atomic; deleted content is not rolled back. Refresh to inspect failures before retrying.
 
+At most two recursive folder deletions run concurrently; excess items return `DELETION_BUSY` while the batch HTTP status remains 200. Deleting paths are reserved: overlapping upload initialization or text saves return `409 PATH_BUSY`, and deletion items return `PATH_BUSY`. Unrelated paths remain usable; cancellation or failure releases reservations.
+
 ### Folder ZIP downloads
 
 `GET /api/batch-download?path=a.txt&path=docs` selects 1–100 files or folders inside uploads; use the same endpoint for one folder. Query strings are limited to 64 KiB; selecting the upload root is unsupported. All top-level paths are validated before the response starts.

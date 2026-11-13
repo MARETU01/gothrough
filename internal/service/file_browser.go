@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/MARETU01/gothrough/internal/model"
 	"github.com/MARETU01/gothrough/internal/utils"
@@ -126,9 +125,7 @@ func (s *FileService) FileBrowserSnapshot(query BrowserQuery) (BrowserPage, uint
 		case field == "size":
 			comparison = cmp.Compare(a.Size, b.Size)
 		default:
-			left, _ := time.Parse(time.RFC3339Nano, a.Mtime)
-			right, _ := time.Parse(time.RFC3339Nano, b.Mtime)
-			comparison = left.Compare(right)
+			comparison = a.ModifiedAt.Compare(b.ModifiedAt)
 		}
 		if direction == "desc" && (!a.Folder || field == "name") {
 			comparison = -comparison
