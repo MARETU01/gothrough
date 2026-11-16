@@ -9,6 +9,7 @@ English | [简体中文](transfer.zh-CN.md)
 - Browse folders with breadcrumbs, search, sorting, and pagination. Search covers all files and shows full paths; clearing it restores the current directory. The URL's `dir` preserves location through reloads and history. Empty directories disappear from the browser, which falls back to a surviving parent. Phones and tablets show file cards.
 - File lists refresh 3 seconds after each request; disk information refreshes independently every 15 seconds. Updates retain data and filters, pause during deletion confirmation/requests and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh when visible. Failures retain data and action feedback; manual refresh and successful edits/deletions refresh both resources.
 - Previews support images, UTF-8 text, PDFs, and browser-supported media, with download fallback. Escape closes the dialog; phones use a full-screen view. Clipboard images share the dialog and pause automatic updates while open.
+- File and clipboard images support zoom buttons, wheel/pinch zoom, dragging, fit-to-window and actual size. Double-click toggles fit and actual size; focus the image area to use +/−, arrow keys, 0 (fit), or 1 (actual size). Media failures check for expired authentication; PDF availability is checked before opening the browser viewer. PDF rendering and media codecs still depend on the browser.
 - Signing out with unfinished uploads requires confirmation. Confirming interrupts transfers and clears the queue; cancelling keeps it running. Refreshing the browser or restarting the server cannot resume uploads.
 - Select files/folders to download a ZIP or delete them. Select current page covers at most 20 entries; directory, search, sort, page changes, and manual refresh clear selection. Selection pauses polling. Deletion confirms count, names, and recursive scope; cancellation keeps the selection, and partial failures retain failed items for retry.
 
@@ -75,6 +76,8 @@ ZIPs stream directly without temporary archives, Range support, or source snapsh
 `GET /api/files/*filename?preview=info` returns `kind` (`text`, `image`, `pdf`, `audio`, or `video`), `mime_type`, and `text`; text results also include `version`. Text is limited to 1 MiB (413 when exceeded); unsupported types/encodings return 415. HTML, SVG, and code render as plain text without execution.
 
 `?preview=1` serves supported content inline with Range. Both modes reuse download authentication/path checks and disable caching.
+
+Audio detection includes MP3 frame headers without ID3 tags and M4A audio brands; extensions alone never authorize inline content. Playback still requires a browser-supported codec.
 
 ### Text editing
 

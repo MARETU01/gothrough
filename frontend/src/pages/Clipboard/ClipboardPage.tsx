@@ -193,7 +193,7 @@ export default function ClipboardPage() {
           {manualCopy.type === 'image' ? <>
             <p>{t("无法直接复制图片，请使用 HTTPS 或 localhost 并允许剪贴板权限；也可以打开或下载图片后手动复制。")}</p>
             <div className="clipboard-entry-actions">
-              <Button variant="outline" onClick={() => { cancelBackground(); setPreviewing(manualCopy); }}>{t("打开图片")}</Button>
+              <Button variant="outline" onClick={event => { event.currentTarget.focus(); cancelBackground(); setPreviewing(manualCopy); }}>{t("打开图片")}</Button>
               <Button asChild variant="outline"><a href={`${manualCopy.image?.url}?download=1`} download><Download aria-hidden="true" />{t("下载图片")}</a></Button>
             </div>
           </> : <>
@@ -223,7 +223,7 @@ export default function ClipboardPage() {
           <ul className="clipboard-list">
             {entries.map((entry, index) => <li key={entry.id}>
               <article className="clipboard-entry" aria-label={t('clipboard.entry', { number: index + 1 })}>
-                {entry.type === 'image' && entry.image ? <button type="button" className="clipboard-image-preview" aria-label={t('preview.open', { name: t('clipboard.image', { number: index + 1 }) })} onClick={() => { cancelBackground(); setPreviewing(entry); }}>
+                {entry.type === 'image' && entry.image ? <button type="button" className="clipboard-image-preview" aria-label={t('preview.open', { name: t('clipboard.image', { number: index + 1 }) })} onClick={event => { event.currentTarget.focus(); cancelBackground(); setPreviewing(entry); }}>
                   <img className="clipboard-history-image" src={`${entry.image.url}?thumbnail=1`} alt={t('clipboard.image', { number: index + 1 })} loading="lazy" decoding="async"
                     onError={event => {
                       if (event.currentTarget.getAttribute('src') !== entry.image?.url) event.currentTarget.src = entry.image!.url;
