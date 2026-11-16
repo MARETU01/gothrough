@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { EditorDraftProvider } from '@/contexts/EditorDraftProvider';
@@ -40,7 +40,13 @@ it('previews sheets safely, pages rows and saves typed changes across worksheets
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await screen.findByText('文件已保存');
   expect(saveSpreadsheetOperation).toHaveBeenCalledWith('book.xlsx', expect.objectContaining({ id: expect.any(String), version: 'v1', changes: [{ sheet: 'Sheet1', cell: 'B1', type: 'number', value: '23' }, { sheet: '预算', cell: 'A1', type: 'text', value: '00123' }] }));
-  const leaving = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(leaving); expect(leaving.defaultPrevented).toBe(false);
+  // The success message can commit before the provider's passive effect removes
+  // unload protection. Observe cleanup, using a fresh event for each probe.
+  await waitFor(() => {
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(false);
+  });
 });
 
 it('keeps invalid values and conflicts without losing drafts, and confirms discards', async () => {
