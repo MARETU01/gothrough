@@ -15,6 +15,7 @@ A file transfer and shared clipboard tool built with Go + Gin and React + TypeSc
 
 - Concurrent chunked uploads for large files, file and folder drag-and-drop, multi-file queues, pause, resume, cancellation, and retries.
 - Folder uploads preserve directory structure. Browse files with search, sorting, pagination, multi-select ZIP downloads/deletion, and disk space information.
+- Preview XLSX workbooks across worksheets and edit basic cell values with conflict detection. See [Excel support and limits](doc/transfer.md#excel-preview-and-editing).
 - Share text and images across devices, including screenshot pasting, previews, copying, and downloads. History survives restarts.
 - Simplified Chinese and English interface; uploads continue during in-app navigation.
 - HTTP / HTTPS, YAML and environment configuration, and text / JSON logs.

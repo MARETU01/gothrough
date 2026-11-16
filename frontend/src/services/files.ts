@@ -57,11 +57,32 @@ export const downloadSelectionUrl = (paths: string[]) => {
 };
 
 export interface FilePreviewInfo {
-  kind: 'text' | 'image' | 'pdf' | 'audio' | 'video';
+  kind: 'text' | 'image' | 'pdf' | 'audio' | 'video' | 'spreadsheet';
   mime_type: string;
   text: string;
   version?: string;
 }
+export interface SpreadsheetCell { value: string; raw: string; type: 'text' | 'number' | 'boolean' | 'readonly'; formula?: string }
+export interface SpreadsheetSheet { name: string; rows: number; columns: number; read_only: boolean; cells: Record<string, SpreadsheetCell> }
+export interface SpreadsheetPreview extends FilePreviewInfo { kind: 'spreadsheet'; version: string; sheets: SpreadsheetSheet[] }
+export interface SpreadsheetChange { sheet: string; cell: string; type: 'text' | 'number' | 'boolean' | 'clear'; value: string }
+export interface SpreadsheetSaveAttempt { id: string; version: string; changes: SpreadsheetChange[]; confirmedVersion?: string }
+export interface SpreadsheetSaveResult { status: 'saved' | 'pending' | 'unknown'; version?: string; preview?: SpreadsheetPreview }
+export function createSpreadsheetSaveAttempt(version: string, changes: SpreadsheetChange[]): SpreadsheetSaveAttempt {
+  // getRandomValues also works on HTTP LAN origins where randomUUID is unavailable.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
+  const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return { id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`, version, changes: changes.map(change => ({ ...change })) };
+}
+export const saveSpreadsheetOperation = (name: string, attempt: SpreadsheetSaveAttempt) =>
+  api.put<SpreadsheetSaveResult, SpreadsheetSaveResult>('/spreadsheets/' + encodeURIComponent(name), { operation_id: attempt.id, version: attempt.version, changes: attempt.changes }, { timeout: 0 });
+export const getSpreadsheetSaveStatus = (name: string, id: string, signal?: AbortSignal) =>
+  api.get<SpreadsheetSaveResult, SpreadsheetSaveResult>('/spreadsheet-saves/' + encodeURIComponent(id), { params: { filename: name }, signal });
+export const getSpreadsheetPreview = (name: string, signal?: AbortSignal) =>
+  api.get<SpreadsheetPreview, SpreadsheetPreview>('/files/' + encodeURIComponent(name) + '?preview=info', { signal });
+export const saveSpreadsheet = (name: string, version: string, changes: SpreadsheetChange[]) =>
+  api.put<SpreadsheetPreview, SpreadsheetPreview>('/spreadsheets/' + encodeURIComponent(name), { version, changes }, { timeout: 0 });
 export const previewFileUrl = (name: string) => downloadFileUrl(name) + '?preview=1';
 export const getFilePreview = (name: string, signal?: AbortSignal) =>
   api.get<FilePreviewInfo, FilePreviewInfo>('/files/' + encodeURIComponent(name) + '?preview=info', { signal });

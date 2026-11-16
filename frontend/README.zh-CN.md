@@ -40,6 +40,7 @@ npm run lint
 | `src/config/` | 上传参数及剪贴板刷新间隔 |
 | `src/i18n/` | 翻译资源、语言检测与消息描述 |
 | `src/components/`、`src/styles/` | 公共组件与样式 |
+| `src/components/SpreadsheetPreview.tsx` | 按需加载 XLSX 值预览和编辑、工作表切换、行分页，以及使用 `EditorDraftProvider` 保留单元格草稿 |
 
 新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。
 

@@ -35,6 +35,8 @@ All endpoints use `/api`. With password protection enabled, file, upload, disk, 
 | GET | `/api/files` | List files |
 | GET | `/api/files/*filename` | Download or preview; supports Range |
 | PUT | `/api/files/*filename` | Save text with a version check |
+| PUT | `/api/spreadsheets/*filename` | Save XLSX cell changes with a version check |
+| GET | `/api/spreadsheet-saves/:operation_id?filename=book.xlsx` | Confirm a spreadsheet save operation |
 | GET | `/api/disk-info` | Get disk information |
 | GET | `/api/batch-download?path=a&path=docs` | Stream selected files/folders as ZIP |
 | POST | `/api/batch-delete` | Delete a selection with per-item results |
@@ -73,7 +75,7 @@ ZIPs stream directly without temporary archives, Range support, or source snapsh
 
 ### File preview
 
-`GET /api/files/*filename?preview=info` returns `kind` (`text`, `image`, `pdf`, `audio`, or `video`), `mime_type`, and `text`; text results also include `version`. Text is limited to 1 MiB (413 when exceeded); unsupported types/encodings return 415. HTML, SVG, and code render as plain text without execution.
+`GET /api/files/*filename?preview=info` returns `kind` (`text`, `image`, `pdf`, `audio`, `video`, or `spreadsheet`), `mime_type`, and `text`; text and spreadsheets also include `version`. Text is limited to 1 MiB (413 when exceeded); unsupported types/encodings return 415. HTML, SVG, and code render as plain text without execution.
 
 `?preview=1` serves supported content inline with Range. Both modes reuse download authentication/path checks and disable caching.
 
@@ -86,6 +88,26 @@ Send `PUT /api/files/*filename` with `{"text":"new content","version":"<preview 
 Edits support UTF-8 text up to 1 MiB after encoding, including BOM and line endings. Saves preserve BOM, permissions, and the original first newline style (LF, CRLF, or CR); unchanged text preserves all original bytes. Replacement is atomic, with version checks serialized against in-service edits/deletes. Use one server per data directory and avoid external writes during saves.
 
 Unsaved edits require confirmation before discarding or navigating; navigation waits for pending saves. Failed saves retain drafts. Expired-session drafts remain in page memory and reopen after unlocking with their original version. Refreshing/closing warns about unsaved changes but does not persist drafts.
+
+### Excel preview and editing
+
+XLSX previews return `kind: "spreadsheet"`, an SHA-256 `version` of the original bytes, and `sheets`. Each sheet has `name`, `rows`, `columns`, `read_only`, and sparse `cells` keyed by A1 coordinates. Cells contain formatted `value`, editable `raw`, `type` (`text`, `number`, `boolean`, or `readonly`), and optional `formula`. Switch sheets and browse 25 rows per page; select a cell or enter an address through CV2000 to edit existing or blank cells.
+
+Send `PUT /api/spreadsheets/*filename` with `{"version":"<original version>","changes":[{"sheet":"Sheet1","cell":"B2","type":"number","value":"23.5"}]}`. Values are strings: `text`, finite decimal `number`, `boolean` (`"true"`/`"false"`), or `clear` (empty value). Text starting with `=` remains literal, and text identifiers retain leading zeros. Numeric edits use raw values and preserve number formats, so dates may be edited as Excel serial numbers. Formula/error/ISO-date cells are read-only. Sheets with merges are preview-only; protection, array formulas, or dynamic-array metadata make the entire workbook preview-only. Legacy XLS, encrypted files, macros and digital signatures are unsupported.
+
+Limits: 10 MiB file, 32 MiB uncompressed, 2000 ZIP entries, 20 sheets, 2000 rows/100 columns per sheet, 20000 stored cells, 100000 total rectangular grid positions (sum of each sheet's used row count × maximum used column count), and 2 MiB combined raw/formatted/formula text. Exceeded limits reject the workbook without truncation. Saves accept at most 100 distinct cells, 16 KiB per value, and a 512 KiB JSON body. At most two spreadsheet operations run concurrently per service instance; excess returns 429. Operations observe request cancellation.
+
+Excelize modifies the original workbook outside mutation locks. The server validates the serialized result, then rechecks the version under the shared file coordinator before atomic replacement. All changes succeed together or leave the original untouched; deleted files are not recreated. Success returns the complete updated preview/version; stale versions return 409 `TEXT_CONFLICT`, missing versions 428, invalid edits 400, unsupported workbooks 415 and exceeded limits 413. Permissions and tested unrelated workbook content are retained, but this basic value editor does not render charts/full layout or guarantee round-trip fidelity for every Excel feature. Download a backup before editing complex files. Formulas are not evaluated here; saved workbooks request recalculation when opened in Excel, so cached results may remain stale until then.
+
+Spreadsheet drafts share text editing's discard confirmation, navigation blocking, pending-save protection, and in-memory recovery after authentication expires, retaining the original version. Failed saves retain edits; conflict recovery requires reloading after copying changes to keep. Refreshes do not persist drafts.
+
+The change list shows each worksheet/address, previous raw value, new typed value, and individual undo. Clicking an entry switches sheets/pages, scrolls to the cell and focuses it. Entering a valid address also changes pages and scrolls horizontally, including blank cells outside the currently used area. All values are rendered as text.
+
+Browser saves additionally send a canonical UUID `operation_id`. Their response is `{"status":"saved","version":"<saved version>","preview":{...}}`; an identical retry returns only the original status/version. Reusing an identifier for a different path, base version or payload returns 409 `SPREADSHEET_OPERATION_CONFLICT`. Publication and receipt recording share the file mutation lock. Replays never overwrite later edits or recreate deleted files. Requests omitting `operation_id` retain the legacy complete-preview response.
+
+`GET /api/spreadsheet-saves/:operation_id?filename=<encoded path>` returns `status: "pending"`, `"saved"` (with `version`), or `"unknown"`, with no caching. The service retains at most 256 small receipts for up to one hour, evicting the oldest completed receipt when full; pending operations are not evicted. Receipts contain no workbook/cell payloads and are lost on restart. Unknown does not prove failure: retry only the original operation, changes and base version. If the receipt was lost and the source changed, the original version check still rejects the retry with a conflict.
+
+After a transient write failure, the browser checks status once. Until confirmed, the original operation and edits remain in the typed in-memory spreadsheet draft, editing/undo are locked, and Confirm save result checks or retries the same operation. A confirmed receipt followed by a preview failure retries only preview loading. If the latest preview has a different version, the UI reports a later change instead of presenting it as the result of this save. Explicitly discarding an uncertain draft warns that it does not roll back a server-side save.
 
 ## Clipboard API
 

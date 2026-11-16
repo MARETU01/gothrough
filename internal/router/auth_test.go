@@ -58,6 +58,14 @@ func TestBulkDeletionRejectsCrossOriginRequests(t *testing.T) {
 	}
 }
 
+func TestSpreadsheetRejectsCrossOriginRequests(t *testing.T) {
+	r := SetupRouter(nil, nil, nil, config.DefaultLoggingSettings(), config.AuthSettings{Password: "test-password"})
+	res := authRequest(r, "PUT", "/api/spreadsheets/book.xlsx", `{}`, nil, "https://another.example", false)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin spreadsheet save: %d", res.Code)
+	}
+}
+
 func TestAccessSessionLifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	a := newAccessAuth("test-password")

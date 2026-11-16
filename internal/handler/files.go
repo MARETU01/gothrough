@@ -72,6 +72,10 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 
 // 文件下载
 func (h *FileHandler) DownloadUpload(c *gin.Context) {
+	if c.Query("preview") == "info" && strings.EqualFold(filepath.Ext(c.Param("filename")), ".xlsx") {
+		h.Spreadsheet(c)
+		return
+	}
 	rel := h.uploadRelativePath(c)
 	if rel == "" {
 		return

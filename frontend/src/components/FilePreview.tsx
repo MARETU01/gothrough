@@ -12,8 +12,18 @@ import { ConfirmPanel } from './ConfirmActions';
 import { RefreshButton } from './RefreshButton';
 import { StatusMessage } from './StatusMessage';
 import './FilePreview.css';
+import { lazy, Suspense } from 'react';
+
+const SpreadsheetPreview = lazy(() => import('./SpreadsheetPreview'));
 
 export function FilePreview({ name, onClose, onSaved }: { name: string; onClose: () => void; onSaved?: () => void }) {
+  const { t } = useTranslation();
+  return name.toLowerCase().endsWith('.xlsx')
+    ? <Suspense fallback={<PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} onClose={onClose}><StatusMessage tone="loading">{t('preview.loading')}</StatusMessage></PreviewDialog>}><SpreadsheetPreview name={name} onClose={onClose} onSaved={onSaved} /></Suspense>
+    : <TextMediaPreview name={name} onClose={onClose} onSaved={onSaved} />;
+}
+
+function TextMediaPreview({ name, onClose, onSaved }: { name: string; onClose: () => void; onSaved?: () => void }) {
   const { t } = useTranslation();
   const preserved = useEditorDraft();
   const [restored] = useState(() => preserved.draft?.name === name ? preserved.draft : null);
@@ -154,7 +164,7 @@ export function FilePreview({ name, onClose, onSaved }: { name: string; onClose:
             {draftBytes > 1048576 && <StatusMessage tone="error">{t('errors.TEXT_TOO_LARGE')}</StatusMessage>}
           </> : <pre>{info.text}</pre>}
         </>}
-        {info.kind !== 'text' && <MediaPreview key={url} kind={info.kind} url={url} name={name} />}
+        {info.kind !== 'text' && info.kind !== 'spreadsheet' && <MediaPreview key={url} kind={info.kind} url={url} name={name} />}
       </>}
   </PreviewDialog>;
 }
