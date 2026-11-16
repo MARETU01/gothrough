@@ -38,7 +38,7 @@ All endpoints use `/api`. With password protection enabled, file, upload, disk, 
 | GET | `/api/batch-download?path=a&path=docs` | Stream selected files/folders as ZIP |
 | POST | `/api/batch-delete` | Delete a selection with per-item results |
 
-URL-encode paths and query parameters in URLs; send literal paths in JSON bodies.
+URL-encode paths and query parameters in URLs; send literal paths in JSON bodies. Download headers encode international filenames and retain Range support.
 
 ### File queries
 
@@ -50,7 +50,7 @@ Required response fields are `files` (`name`, `size`, `size_display`, `mtime`, `
 
 Fetch disk information separately through `GET /api/disk-info`: total, used, and free values/displays, `disk_pct`, `disk_pct_warning`, and upload totals.
 
-Listings use `Cache-Control: no-store` and query-specific ETags. Send `If-None-Match` for the same query; unchanged content returns an empty `304`. Reuse only accepted validators; manual refresh fetches full data. Uploads, edits, and deletions invalidate caches; external changes appear after the 2-second scan cache expires. Disk changes do not affect ETags. See [cache architecture](architecture.md#queries-and-http-responses).
+Listings use `Cache-Control: no-store` and query-specific ETags. Send `If-None-Match` for the same query; unchanged content returns an empty `304`. Reuse only accepted validators; manual refresh sends `refresh=1` to revalidate the scan cache and fetch full data. Unchanged scans back off from 2 seconds to at most 30 seconds; changed scans reset to 2 seconds. Uploads, edits, and deletions invalidate caches immediately. External changes appear on the next scan (up to 30 seconds plus polling/scan time); explicit refresh bypasses that wait. Disk changes do not affect ETags. See [cache architecture](architecture.md#queries-and-http-responses).
 
 ### Bulk operations
 
@@ -58,7 +58,7 @@ All deletion uses `POST /api/batch-delete`; a single item also uses the array: `
 
 Valid requests return HTTP `200` with a `results` array. Each item contains `path` and `deleted`; failed items add `code` and `error`. Even single-item callers must check the matching result's `deleted` flag: missing entries use `FILE_INACCESSIBLE`, changed types `SELECTION_CHANGED`, and folders containing unfinished uploads `FOLDER_BUSY`. Other entries continue.
 
-`folder: true` recursively deletes descendants. Symlinks and special entries fail that item and are never followed. Neither batches nor individual recursive deletions are atomic; deleted content is not rolled back. Refresh to inspect failures before retrying.
+`folder: true` recursively deletes descendants. Symlinks and special entries fail that item and are never followed. Neither batches nor individual recursive deletions are atomic; deleted content is not rolled back. Refresh to inspect failures before retrying. Deletion has no fixed frontend timeout; the UI shows pending work and offers Stop deletion. Stopping or leaving the page cancels the request, without restoring deleted content. Transport failures or interruption trigger a background list/disk resync and an unconfirmed-result warning; if resync fails, displayed data is retained.
 
 At most two recursive folder deletions run concurrently; excess items return `DELETION_BUSY` while the batch HTTP status remains 200. Deleting paths are reserved: overlapping upload initialization or text saves return `409 PATH_BUSY`, and deletion items return `PATH_BUSY`. Unrelated paths remain usable; cancellation or failure releases reservations.
 

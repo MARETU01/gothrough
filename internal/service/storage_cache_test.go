@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,6 +37,40 @@ func TestFileCacheExpiryAndCallerIsolation(t *testing.T) {
 	}
 }
 
+func TestUnchangedListingBackoffAndMutationReset(t *testing.T) {
+	s := testService(t)
+	if _, _, err := s.FileListSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	_, generation, _ := s.FileListSnapshot()
+	for _, interval := range []time.Duration{4, 8, 16, 30, 30} {
+		s.listing.expires = time.Time{}
+		_, next, err := s.FileListSnapshot()
+		if err != nil || next != generation || s.listing.interval != interval*time.Second {
+			t.Fatalf("backoff: %v %d %v", s.listing.interval, next, err)
+		}
+	}
+	// A forced refresh bypasses the long-lived cache and resets backoff on change.
+	if err := os.WriteFile(filepath.Join(s.uploadDir, "external.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RefreshFiles(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.listing.files) != 1 || s.listing.interval != fileListingTTL {
+		t.Fatal("external change did not reset backoff")
+	}
+	if err := s.DeleteFile("external.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.FileListSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.listing.files) != 0 || s.listing.interval != fileListingTTL {
+		t.Fatal("mutation did not reset cache")
+	}
+}
+
 // Isolate the cost of acquiring an unchanged listing; no disk scan or JSON.
 func BenchmarkFileListSnapshot(b *testing.B) {
 	s := NewFileService(b.TempDir(), b.TempDir())
@@ -50,6 +85,40 @@ func BenchmarkFileListSnapshot(b *testing.B) {
 		if _, _, err := s.FileListSnapshot(); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// Contrast real tree revalidation with cached browser polling. Setup is excluded.
+func BenchmarkFileBrowserTreeScan(b *testing.B) {
+	s := NewFileService(b.TempDir(), b.TempDir())
+	b.Cleanup(s.Close)
+	for i := range 5000 {
+		if err := os.WriteFile(filepath.Join(s.uploadDir, fmt.Sprintf("file-%05d.txt", i)), []byte("data"), 0600); err != nil {
+			b.Fatal(err)
+		}
+	}
+	query := BrowserQuery{Sort: "mtime_desc", Page: 1, PageSize: 20}
+	if _, _, err := s.FileBrowserSnapshot(query); err != nil {
+		b.Fatal(err)
+	}
+	for _, scan := range []bool{true, false} {
+		name := "cached-poll"
+		if scan {
+			name = "tree-revalidation"
+		}
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				if scan {
+					if err := s.RefreshFiles(); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if _, _, err := s.FileBrowserSnapshot(query); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

@@ -299,5 +299,8 @@
   "batch.deleted_other": "已删除 {{count}} 项",
   "batch.deleted_one": "已删除 {{count}} 项",
   "batch.failed_other": "{{count}} 项删除失败，已保留选择，可重试或清空。",
-  "batch.failed_one": "{{count}} 项删除失败，已保留选择，可重试或清空。"
+  "batch.failed_one": "{{count}} 项删除失败，已保留选择，可重试或清空。",
+  "files.stopDeletion": "中止删除",
+  "files.deletingHint": "正在删除，大目录可能需要较长时间。中止不会恢复已删除的内容。",
+  "files.deleteUnconfirmed": "删除结果未确认，部分内容可能已删除。正在重新同步列表，请确认结果后重试。原因：{{error}}"
 }

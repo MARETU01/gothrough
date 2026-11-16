@@ -18,6 +18,21 @@ it('encodes literal bulk paths and sends typed deletion entries', async () => {
   expect(JSON.parse(adapter.mock.calls[0][0].data)).toEqual({ entries });
 });
 
+it('keeps large deletions cancellable without the default 30-second timeout', async () => {
+  const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => ({ status: 200, statusText: '', data: { results: [] }, headers: new AxiosHeaders(), config }));
+  api.defaults.adapter = adapter;
+  const controller = new AbortController();
+  await deleteSelection([{ path: 'folder', folder: true }], controller.signal);
+  expect(adapter.mock.calls[0][0].timeout).toBe(0);
+  expect(adapter.mock.calls[0][0].signal).toBe(controller.signal);
+});
+
+it('requests a fresh disk scan for explicit refresh', async () => {
+  const adapter = respond(200, emptyList);
+  await listFiles(undefined, undefined, { directory: '', search: '', sort: 'mtime_desc', page: 1, pageSize: 20, refresh: true });
+  expect(new URL(adapter.mock.calls[0][0].url!, 'http://localhost').searchParams.get('refresh')).toBe('1');
+});
+
 const emptyList: FileListData = { files: [], total_size_display: '0 B', directory: '', total: 0,
   folder_count: 0, total_files: 0, page: 1, page_size: 20, total_pages: 1 };
 

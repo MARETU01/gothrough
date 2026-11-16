@@ -41,9 +41,12 @@ export default function FilesPage() {
   usePageTitle(t("已上传文件 - GoThrough"));
   const etag = useRef<string | undefined>(undefined);
   const acceptedKey = useRef('');
+  const forceScan = useRef(false);
   const loadFiles = useCallback(async (signal?: AbortSignal, context?: RemoteLoadContext) => {
+    const revalidate = forceScan.current;
+    forceScan.current = false;
     const result = await listFiles(signal, context?.background && acceptedKey.current === requestKey ? etag.current : undefined,
-      { directory: requestedDirectory, search: query.trim(), sort, page, pageSize: PAGE_SIZE });
+      { directory: requestedDirectory, search: query.trim(), sort, page, pageSize: PAGE_SIZE, ...(revalidate ? { refresh: true } : {}) });
     context?.onAccepted(() => { etag.current = result.etag; acceptedKey.current = requestKey; setAcceptedRequestKey(requestKey); });
     return result.notModified ? NOT_MODIFIED : result;
   }, [requestedDirectory, query, sort, page, requestKey]);
@@ -57,6 +60,8 @@ export default function FilesPage() {
   const { draft: preservedDraft } = useEditorDraft();
   const [previewing, setPreviewing] = useState<string | null>(() => preservedDraft?.name ?? null);
   const deleteInProgress = useRef(false);
+  const deleteController = useRef<AbortController | null>(null);
+  useEffect(() => () => deleteController.current?.abort(), []);
   const selectionScope = JSON.stringify([requestKey, data?.directory, data?.page]);
   const [selection, setSelection] = useState<{ scope: string; entries: BrowserEntry[] }>({ scope: '', entries: [] });
   const selected = selection.scope === selectionScope ? selection.entries : [];
@@ -106,6 +111,7 @@ export default function FilesPage() {
     if (deleteInProgress.current) return;
     clearSelection();
     setConfirming(null);
+    forceScan.current = true;
     void refreshAll();
   }
 
@@ -153,12 +159,14 @@ export default function FilesPage() {
     const name = entries[0].name;
     if (!bulk) clearSelection();
     deleteInProgress.current = true;
+    const controller = new AbortController();
+    deleteController.current = controller;
     setDeleting(bulk ? null : name);
     setBulkDeleting(bulk);
     setError(''); setNotice(''); setBulkFailures([]);
     cancel(); cancelDisk();
     try {
-      const response = await deleteSelection(entries.map(entry => ({ path: entry.name, folder: entry.folder })));
+      const response = await deleteSelection(entries.map(entry => ({ path: entry.name, folder: entry.folder })), controller.signal);
       if (!mounted.current) return;
       const results = new Map(response.results.map(result => [result.path, result]));
       const failed = entries.filter(entry => !results.get(entry.name)?.deleted);
@@ -184,10 +192,14 @@ export default function FilesPage() {
       await Promise.all([refresh({ background: true }), refreshDisk({ background: true })]);
     } catch (err) {
       if (mounted.current) {
-        setError(bulk ? apiErrorDescriptor(err) : message('files.deleteFailed', { name, error: apiErrorDescriptor(err) }));
+        setError(message('files.deleteUnconfirmed', { error: apiErrorDescriptor(err) }));
+        forceScan.current = true;
+        etag.current = undefined;
+        await Promise.all([refresh({ background: true }), refreshDisk({ background: true })]);
         if (bulk) setBulkConfirming(false);
       }
     } finally {
+      deleteController.current = null;
       deleteInProgress.current = false;
       if (mounted.current) { setDeleting(null); setBulkDeleting(false); }
     }
@@ -234,6 +246,7 @@ export default function FilesPage() {
           <span className="files-count">{folderCount > 0 ? t('browser.count', { folders: folderCount, files: totalEntries - folderCount }) : t('files.count', { count: totalEntries })}{searching && data ? t('files.total', { count: totalFiles }) : ''}</span>
         </div>
         {searching && <p className="files-sync-note">{t('browser.searchHint')}</p>}
+        {mutationBusy && <div className="files-deletion-status"><StatusMessage tone="loading" action={<Button type="button" variant="outline" onClick={() => deleteController.current?.abort()}>{t('files.stopDeletion')}</Button>}>{t('files.deletingHint')}</StatusMessage></div>}
         {error && <StatusMessage tone="error" action={<RefreshButton loading={loading} disabled={mutationBusy} onClick={manualRefresh} label={t("重新加载")} />}>{translateMessage(error)}</StatusMessage>}
         <div aria-live="polite">{notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}{loading && <StatusMessage tone="loading">{t("正在加载文件列表…")}</StatusMessage>}</div>
         {(backgroundError || diskBackgroundError) && <p className="files-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}

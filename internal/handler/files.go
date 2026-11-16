@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"mime"
 	"net/http"
 	"path"
 	"path/filepath"
@@ -25,7 +26,7 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 		return
 	}
 	query := service.BrowserQuery{Directory: c.Query("dir"), Search: c.Query("q"), Sort: c.DefaultQuery("sort", "mtime_desc"), Page: 1, PageSize: 20}
-	valid := len(query.Directory) <= 4096 && len(query.Search) <= 1024 && !strings.ContainsAny(query.Directory, "\\\x00") &&
+	valid := (c.Query("refresh") == "" || c.Query("refresh") == "1") && len(query.Directory) <= 4096 && len(query.Search) <= 1024 && !strings.ContainsAny(query.Directory, "\\\x00") &&
 		(query.Directory == "" || (path.Clean(query.Directory) == query.Directory && query.Directory != "." && query.Directory != ".." && !strings.HasPrefix(query.Directory, "../") && !strings.HasPrefix(query.Directory, "/")))
 	for key, target := range map[string]*int{"page": &query.Page, "page_size": &query.PageSize} {
 		if value, exists := c.GetQuery(key); exists {
@@ -45,6 +46,12 @@ func (h *FileHandler) ListFiles(c *gin.Context) {
 	if !valid {
 		respondError(c, nil, http.StatusBadRequest, "INVALID_FILE_QUERY", "文件查询参数无效")
 		return
+	}
+	if c.Query("refresh") == "1" {
+		if err := h.files.RefreshFiles(); err != nil {
+			respondError(c, err, 500, "FILE_LIST_FAILED", "获取文件列表失败，请稍后重试")
+			return
+		}
 	}
 	page, version, err := h.files.FileBrowserSnapshot(query)
 	if err != nil {
@@ -85,7 +92,7 @@ func (h *FileHandler) DownloadUpload(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(rel)))
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(rel)}))
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Accept-Ranges", "bytes")
 

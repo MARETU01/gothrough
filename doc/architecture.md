@@ -36,7 +36,7 @@ Recursive deletion reserves paths under the same `FileService.mu`, scans/removes
 
 ## Queries and HTTP Responses
 
-Services return typed data and a listing generation. `ListingSnapshot` retains an immutable generation without copying entries; `Data()` returns an isolated copy. Unchanged scans retain the generation. Browser queries cache at most 32 pages, retaining only page entries.
+Services return typed data and a listing generation. `ListingSnapshot` retains an immutable generation without copying entries; `Data()` returns an isolated copy. Unchanged scans retain the generation and progressively back off from 2 seconds to a maximum 30-second interval. Changes and mutation invalidation reset the interval; explicit refresh revalidates immediately without discarding an unchanged generation. No background scan workers are created. Browser queries cache at most 32 pages, retaining only page entries.
 
 `FileHandler` caches JSON and query-specific ETags. Hits skip data materialization; misses encode and hash outside the cache lock. Concurrent misses may duplicate encoding, but old generations cannot overwrite newer cached responses. Validators depend on query and content, so unchanged responses retain their ETag across cache invalidation.
 
@@ -48,7 +48,7 @@ See [Transfer and APIs](transfer.md) for wire formats, limits, and recovery rule
 
 ## Frontend State
 
-The file page shares duplicate-request prevention, per-item result handling, and background resync for single and bulk deletion. Resync failures retain completed-action feedback.
+The file page shares duplicate-request prevention, per-item result handling, and background resync for single and bulk deletion. Resync failures retain completed-action feedback. Long deletions have an AbortController, no fixed frontend timeout, and an explicit stop action; leaving the page aborts the request. Unconfirmed results trigger background resync without assuming rollback.
 
 The application-level Provider keeps uploads running across navigation. The queue and engine share `UploadTask`; consumers read its fields and collections, while named lifecycle operations update related fields and notify together. Byte progress is throttled, acknowledgements notify immediately, and clock/speed samples are batched for React snapshots.
 

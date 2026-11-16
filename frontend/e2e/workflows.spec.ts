@@ -212,7 +212,25 @@ test('selects files and folders, downloads a ZIP, and confirms bulk deletion', a
   await expect(confirmation).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const deleted = page.waitForResponse(response => response.url().endsWith('/api/batch-delete') && response.request().method() === 'POST');
-  await confirmation.getByRole('button').first().click();
+  let resume!: () => void;
+  const pending = new Promise<void>(resolve => { resume = resolve; });
+  await page.route('**/api/batch-delete', async route => { await pending; await route.continue(); });
+  try {
+    await confirmation.getByRole('button').first().click();
+    await expect(page.getByText(/Large folders may take a while/)).toBeVisible();
+    const stop = page.getByRole('button', { name: 'Stop deletion', exact: true });
+    for (const [width, height] of [[320, 480], [768, 640], [1280, 800], [844, 390]]) {
+      await page.setViewportSize({ width, height });
+      await expect(stop).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const bounds = await stop.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      if (width === 320 || width === 768) await page.screenshot({ path: testInfo.outputPath(`deleting-${width}.png`), fullPage: true });
+    }
+  } finally {
+    resume();
+  }
   expect((await (await deleted).json()).results.every((result: { deleted: boolean }) => result.deleted)).toBe(true);
   await expect(page.getByText('Deleted 2 items', { exact: true })).toBeVisible();
   await expect(page.getByText('0 selected', { exact: true })).toBeVisible();
