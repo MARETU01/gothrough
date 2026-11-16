@@ -16,6 +16,8 @@
 | `internal/service/file_service.go` | 协调文件修改和共享状态 |
 | `internal/service/upload_session.go`、`completion.go` | 上传会话、分块、完成结果和资源释放 |
 | `internal/service/files.go`、`text.go`、`folder*.go`、`selection*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
+| `internal/service/spreadsheet.go` | 受限 XLSX 解析、单元格类型修改，以及通过共用文件协调器按版本原子发布 |
+| `internal/service/spreadsheet_save.go` | 使用同一协调器管理有界操作回执和幂等表格保存确认 |
 | `internal/service/file_listing.go`、`file_browser.go` | 列表版本、目录查询和磁盘信息 |
 | `internal/service/clipboard*.go` | 剪贴板历史、图片和持久化 |
 | `internal/utils/` | 文件名、磁盘及平台文件系统操作 |
@@ -47,6 +49,10 @@
 接口字段、传输限制和恢复规则见[传输与接口](transfer.zh-CN.md)。
 
 ## 前端状态
+
+`SpreadsheetPreview` 在现有预览弹窗内按需加载，显示分页值网格，单元格修改存入现有编辑草稿 Provider。XLSX 解析和序列化在文件修改锁外执行，使用实例内并发准入；发布按 `FileService.mu → listingMu` 顺序加锁，并在替换前复核源文件版本。协议和限额见传输指南。
+
+编辑草稿区分文本与表格，表格保留有明确类型的修改和不可变保存请求，不再将其编码进文本字段。修改清单和地址栏驱动页码、滚动和焦点更新。工作簿原子发布在同一修改锁内登记有界回执；未确认操作在登录恢复后沿用原标识、版本和内容。回执确认与后续预览加载分开处理，后续修改或预览失败不会触发再次发布。
 
 文件页单项与批量删除共用请求防重、逐项结果处理和后台刷新流程，刷新失败保留已完成操作的提示。长时间删除使用 AbortController，不设前端固定超时并提供中止操作，离开页面也会取消请求；结果未确认时后台重新同步，不假定操作已回滚。
 

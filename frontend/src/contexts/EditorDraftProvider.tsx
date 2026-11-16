@@ -12,7 +12,7 @@ export function EditorDraftProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', warn);
   }, [draft]);
   const remember = useCallback((next: EditorDraft) => {
-    setDraft(next.text === next.info.text ? null : next);
+    setDraft(next.kind === 'spreadsheet' ? (next.changes.length || next.operation ? next : null) : next.text === next.info.text ? null : next);
   }, []);
   const discard = useCallback((name: string) => {
     setDraft(current => current?.name === name ? null : current);

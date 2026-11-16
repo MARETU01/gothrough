@@ -19,22 +19,24 @@ import (
 // Expiration copies session references under mu, then uses lifecycle.TryLock.
 // FileHandler's response cache is independent; it never calls services while locked.
 type FileService struct {
-	mu             sync.RWMutex
-	sessions       map[string]*transferSession
-	completed      map[string]completedSession
-	names          map[string]bool
-	deleting       map[string]bool        // guarded by mu; reservations for recursive deletions
-	createdDirs    map[string]os.FileInfo // guarded by mu; only directories created by this service
-	uploadDir      string
-	tempDir        string
-	slots          chan struct{}
-	diskUsage      func(string) (utils.DiskUsage, error)
-	listingMu      sync.Mutex
-	listing        *fileListing
-	listingVersion uint64
+	mu               sync.RWMutex
+	sessions         map[string]*transferSession
+	completed        map[string]completedSession
+	names            map[string]bool
+	deleting         map[string]bool        // guarded by mu; reservations for recursive deletions
+	createdDirs      map[string]os.FileInfo // guarded by mu; only directories created by this service
+	uploadDir        string
+	tempDir          string
+	slots            chan struct{}
+	spreadsheetSlots chan struct{}
+	spreadsheetSaves map[string]spreadsheetSaveReceipt // guarded by mu
+	diskUsage        func(string) (utils.DiskUsage, error)
+	listingMu        sync.Mutex
+	listing          *fileListing
+	listingVersion   uint64
 }
 
 func NewFileService(uploadDir, tempDir string) *FileService {
 	return &FileService{sessions: make(map[string]*transferSession), completed: make(map[string]completedSession), names: make(map[string]bool), deleting: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
-		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, MaxConcurrentChunks), diskUsage: utils.GetDiskUsage}
+		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, MaxConcurrentChunks), spreadsheetSlots: make(chan struct{}, 2), spreadsheetSaves: make(map[string]spreadsheetSaveReceipt), diskUsage: utils.GetDiskUsage}
 }

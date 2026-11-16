@@ -40,6 +40,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | `src/config/` | Upload settings and clipboard refresh interval |
 | `src/i18n/` | Translation resources, language detection, and message descriptors |
 | `src/components/`, `src/styles/` | Shared components and styles |
+| `src/components/SpreadsheetPreview.tsx` | Lazy XLSX value preview/editor, sheet switching, row pagination, and cell drafts using `EditorDraftProvider` |
 
 Add features to `src/config/features.ts` and the Go SPA fallback allowlist in `internal/router/web.go`; shared definitions store translation keys. Update uploads through named `UploadTask` methods; the task and engine have no React or localization runtime dependencies. See [state ownership](../doc/architecture.md#frontend-state).
 

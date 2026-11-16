@@ -46,6 +46,8 @@ func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard
 		api.POST("/batch-delete", files.DeleteSelection)
 		api.GET("/files/*filename", downloads, files.DownloadUpload)
 		api.PUT("/files/*filename", files.EditText)
+		api.PUT("/spreadsheets/*filename", files.EditSpreadsheet)
+		api.GET("/spreadsheet-saves/:operation_id", files.SpreadsheetSaveStatus)
 		api.GET("/disk-info", files.DiskInfo)
 		api.GET("/clipboard", clipboard.List)
 		api.GET("/clipboard/image-config", clipboard.ImageConfig)
