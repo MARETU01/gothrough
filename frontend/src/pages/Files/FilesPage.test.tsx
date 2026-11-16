@@ -78,6 +78,54 @@ const openPage = (initialEntries = ['/files']) => {
 const advancePoll = (milliseconds = FILES_REFRESH_INTERVAL_MS) =>
   act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
 
+it('shows long deletion progress, allows stopping, and resyncs partial changes', async () => {
+  await openPollingPage();
+  let signal!: AbortSignal;
+  vi.mocked(deleteSelection).mockImplementationOnce((_entries, requestSignal) => new Promise((_resolve, reject) => {
+    signal = requestSignal!;
+    signal.addEventListener('abort', () => {
+      const remaining = makeData();
+      remaining.files = remaining.files.slice(1);
+      listSource.mockResolvedValue(remaining);
+      reject(new Error('cancelled'));
+    }, { once: true });
+  }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
+  await advancePoll(31000);
+  expect(signal.aborted).toBe(false);
+  expect(screen.getByText(/大目录可能需要较长时间/)).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '中止删除' })); });
+  expect(signal.aborted).toBe(true);
+  expect(screen.getByRole('alert').textContent).toContain('部分内容可能已删除');
+  expect(screen.queryByText('文件 01.txt')).toBeNull();
+  expect(screen.queryByRole('button', { name: '中止删除' })).toBeNull();
+  expect(getDiskInfo).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(listFiles).mock.calls.at(-1)?.[2]?.refresh).toBe(true);
+});
+
+it('aborts deletion when leaving the file page', async () => {
+  let signal!: AbortSignal;
+  vi.mocked(deleteSelection).mockImplementationOnce((_entries, requestSignal) => new Promise((_resolve, reject) => {
+    signal = requestSignal!;
+    signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true });
+  }));
+  const view = openPage();
+  await screen.findByText('文件 01.txt');
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除 文件 01.txt' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 01.txt' })); });
+  await act(async () => { view.unmount(); });
+  expect(signal.aborted).toBe(true);
+});
+
+it('bypasses the scan cache only on manual refresh', async () => {
+  openPage();
+  await screen.findByText('文件 01.txt');
+  expect(vi.mocked(listFiles).mock.calls[0][2]?.refresh).toBeUndefined();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '刷新' })); });
+  expect(vi.mocked(listFiles).mock.calls.at(-1)?.[2]?.refresh).toBe(true);
+});
+
 it('selects only the current page and clears selection on pagination, sorting, and search', async () => {
   openPage();
   await screen.findByText('文件 01.txt');
@@ -116,7 +164,7 @@ it('confirms deletion, restores focus on cancel, and retains only failed items f
   await act(async () => { fireEvent.click(trigger); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除' })); });
   await screen.findByText('已删除 1 项');
-  expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 01.txt', folder: false }, { path: '文件 02.txt', folder: false }]);
+  expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 01.txt', folder: false }, { path: '文件 02.txt', folder: false }], expect.any(AbortSignal));
   expect(screen.queryByRole('checkbox', { name: '选择 文件 01.txt' })).toBeNull();
   expect((screen.getByRole('checkbox', { name: '选择 文件 02.txt' }) as HTMLInputElement).checked).toBe(true);
   expect(screen.getByText('已选 1 项')).toBeTruthy();
@@ -142,7 +190,7 @@ it('includes folder contents in confirmed bulk deletion and resets selection thr
   expect(screen.getByText(/所选文件夹及其全部内容/)).toBeTruthy();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除' })); });
   await screen.findByText('已删除 1 项');
-  expect(deleteSelection).toHaveBeenCalledWith([{ path: 'doc', folder: true }]);
+  expect(deleteSelection).toHaveBeenCalledWith([{ path: 'doc', folder: true }], expect.any(AbortSignal));
 });
 
 it('pauses polling while selecting and resumes after clearing the selection', async () => {
@@ -273,7 +321,7 @@ it('opens a linked folder and returns to its surviving parent when its last file
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除 doc/sub/last.txt' })); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 doc/sub/last.txt' })); });
   await screen.findByText('keep.txt');
-  expect(deleteSelection).toHaveBeenCalledWith([{ path: 'doc/sub/last.txt', folder: false }]);
+  expect(deleteSelection).toHaveBeenCalledWith([{ path: 'doc/sub/last.txt', folder: false }], expect.any(AbortSignal));
   expect(screen.getByRole('button', { name: 'doc' }).getAttribute('aria-current')).toBe('page');
   expect(screen.queryByText('last.txt')).toBeNull();
 });
@@ -311,7 +359,7 @@ it('requires confirmation, encodes download paths, and clamps the page after del
   expect(screen.queryByRole('alertdialog')).toBeNull();
   listSource.mockResolvedValue({ ...data, files: data.files.slice(0, 20) });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '确认删除 文件 21.txt' })); });
-  await waitFor(() => expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 21.txt', folder: false }]));
+  await waitFor(() => expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 21.txt', folder: false }], expect.any(AbortSignal)));
   await screen.findByText('文件 01.txt');
   expect(screen.queryByText('文件 21.txt')).toBeNull();
   expect(screen.queryByRole('navigation', { name: '文件列表分页' })).toBeNull();
@@ -585,7 +633,7 @@ for (const results of [
     expect(alert.textContent).not.toContain('private fallback');
     expect(screen.getByText('文件 01.txt')).toBeTruthy();
     expect(screen.queryByText('已删除 文件 01.txt')).toBeNull();
-    expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 01.txt', folder: false }]);
+    expect(deleteSelection).toHaveBeenCalledWith([{ path: '文件 01.txt', folder: false }], expect.any(AbortSignal));
     expect(listFiles).toHaveBeenCalledTimes(1);
   });
 }

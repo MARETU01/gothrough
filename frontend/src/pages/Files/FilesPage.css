@@ -91,3 +91,5 @@
   .files-toolbar input { flex-basis: 100%; }
   .files-pagination button { padding: 8px 10px; }
 }
+.files-deletion-status .app-message { align-items: flex-start; flex-wrap: wrap; }
+.files-deletion-status .app-message > span { flex-basis: 200px; }

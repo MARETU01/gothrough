@@ -299,5 +299,8 @@
   "batch.deleted_other": "Deleted {{count}} items",
   "batch.deleted_one": "Deleted {{count}} item",
   "batch.failed_other": "Could not delete {{count}} items. They remain selected; retry or clear the selection.",
-  "batch.failed_one": "Could not delete {{count}} item. It remains selected; retry or clear the selection."
+  "batch.failed_one": "Could not delete {{count}} item. It remains selected; retry or clear the selection.",
+  "files.stopDeletion": "Stop deletion",
+  "files.deletingHint": "Deleting. Large folders may take a while. Stopping will not restore deleted content.",
+  "files.deleteUnconfirmed": "Deletion could not be confirmed; some content may already be deleted. Resyncing the list; check the results before retrying. Reason: {{error}}"
 }

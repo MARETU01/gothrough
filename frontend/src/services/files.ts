@@ -28,7 +28,7 @@ export interface FileListData {
   total_pages: number;
 }
 
-export interface FileBrowserQuery { directory: string; search: string; sort: string; page: number; pageSize: number }
+export interface FileBrowserQuery { directory: string; search: string; sort: string; page: number; pageSize: number; refresh?: boolean }
 export interface FileBrowserEntry extends UploadedFile { folder: boolean; label: string }
 
 export type FileListResult = (FileListData & { notModified?: false; etag?: string })
@@ -37,6 +37,7 @@ export type FileListResult = (FileListData & { notModified?: false; etag?: strin
 export const listFiles = async (signal?: AbortSignal, etag?: string, query?: FileBrowserQuery): Promise<FileListResult> => {
   const params = query ? new URLSearchParams({ view: 'browser', dir: query.directory, q: query.search,
     sort: query.sort, page: String(query.page), page_size: String(query.pageSize) }) : new URLSearchParams({ view: 'browser' });
+  if (query?.refresh) params.set('refresh', '1');
   const result = await conditionalGet<FileListData>('/files?' + params, signal, etag);
   return result.notModified ? result : { ...result.data, etag: result.etag };
 };
@@ -47,8 +48,8 @@ export const downloadFileUrl = (name: string) => '/api/files/' + encodeURICompon
 
 export interface FileSelection { path: string; folder: boolean }
 export interface DeleteSelectionResult { path: string; deleted: boolean; code?: string; error?: string }
-export const deleteSelection = (entries: FileSelection[]) =>
-  api.post<{ results: DeleteSelectionResult[] }, { results: DeleteSelectionResult[] }>('/batch-delete', { entries });
+export const deleteSelection = (entries: FileSelection[], signal?: AbortSignal) =>
+  api.post<{ results: DeleteSelectionResult[] }, { results: DeleteSelectionResult[] }>('/batch-delete', { entries }, { signal, timeout: 0 });
 export const downloadSelectionUrl = (paths: string[]) => {
   const query = new URLSearchParams();
   paths.forEach(path => query.append('path', path));

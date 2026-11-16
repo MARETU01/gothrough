@@ -8,12 +8,16 @@ import (
 	"github.com/MARETU01/gothrough/internal/utils"
 )
 
-const fileListingTTL = 2 * time.Second
+const (
+	fileListingTTL    = 2 * time.Second
+	maxFileListingTTL = 30 * time.Second
+)
 
 type fileListing struct {
 	files     []model.FileInfo
 	totalSize int64
 	expires   time.Time
+	interval  time.Duration
 	version   uint64
 	browser   *browserIndex
 }
@@ -24,8 +28,19 @@ func (s *FileService) invalidateFiles() {
 	s.listingMu.Unlock()
 }
 
+// RefreshFiles revalidates external changes on explicit user refresh, retaining
+// the generation and browser index when contents have not changed.
+func (s *FileService) RefreshFiles() error {
+	s.listingMu.Lock()
+	defer s.listingMu.Unlock()
+	if s.listing != nil {
+		s.listing.expires = time.Time{}
+	}
+	return s.refreshListingLocked()
+}
+
 // Serialize refreshes so simultaneous list/disk requests share a single scan.
-// A short TTL also discovers changes made outside this process.
+// Unchanged scans back off to reduce tree walks while still discovering external changes.
 func (s *FileService) cachedFiles() ([]model.FileInfo, int64, error) {
 	s.listingMu.Lock()
 	defer s.listingMu.Unlock()
@@ -42,11 +57,12 @@ func (s *FileService) refreshListingLocked() error {
 			return err
 		}
 		if s.listing != nil && s.listing.totalSize == size && slices.Equal(s.listing.files, files) {
-			s.listing.expires = time.Now().Add(fileListingTTL)
+			s.listing.interval = min(maxFileListingTTL, max(fileListingTTL, s.listing.interval)*2)
+			s.listing.expires = time.Now().Add(s.listing.interval)
 			return nil
 		}
 		s.listingVersion++
-		s.listing = &fileListing{files: files, totalSize: size, expires: time.Now().Add(fileListingTTL), version: s.listingVersion}
+		s.listing = &fileListing{files: files, totalSize: size, expires: time.Now().Add(fileListingTTL), interval: fileListingTTL, version: s.listingVersion}
 	}
 	return nil
 }

@@ -9,9 +9,64 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestDownloadPreservesInternationalFilenamesAndRanges(t *testing.T) {
+	_, h := setup(t)
+	names := []string{"中文 文件.txt", "100% complete.txt", "résumé.txt"}
+	if runtime.GOOS != "windows" {
+		names = append(names, `quoted"name.txt`)
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(h.uploadDir, name), []byte("content"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			res := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/files/"+url.PathEscape(name), nil)
+			req.Header.Set("Range", "bytes=0-2")
+			h.ServeHTTP(res, req)
+			disposition, params, err := mime.ParseMediaType(res.Header().Get("Content-Disposition"))
+			if res.Code != 206 || res.Body.String() != "con" || err != nil || disposition != "attachment" || params["filename"] != name {
+				t.Fatalf("download: %d %q %v %v", res.Code, res.Body.String(), res.Header(), err)
+			}
+		})
+	}
+}
+
+func TestManualRefreshDiscoversExternalFilesWithoutChangingUnchangedETags(t *testing.T) {
+	_, h := setup(t)
+	get := func(route, tag string) *httptest.ResponseRecorder {
+		res := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", route, nil)
+		req.Header.Set("If-None-Match", tag)
+		h.ServeHTTP(res, req)
+		return res
+	}
+	initial := get("/api/files", "")
+	tag := initial.Header().Get("ETag")
+	if initial.Code != 200 || tag == "" {
+		t.Fatal(initial.Code, initial.Body.String())
+	}
+	if res := get("/api/files?refresh=1", tag); res.Code != 304 {
+		t.Fatal(res.Code, res.Body.String())
+	}
+	if err := os.WriteFile(filepath.Join(h.uploadDir, "external.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if res := get("/api/files", tag); res.Code != 304 {
+		t.Fatal("cache bypassed", res.Code)
+	}
+	if res := get("/api/files?refresh=1", tag); res.Code != 200 || !strings.Contains(res.Body.String(), "external.txt") || res.Header().Get("ETag") == tag {
+		t.Fatal(res.Code, res.Body.String())
+	}
+	if res := get("/api/files?refresh=invalid", ""); res.Code != 400 {
+		t.Fatal(res.Code)
+	}
+}
 
 func TestArchiveRoutesPreserveNestedFolderContracts(t *testing.T) {
 	_, h := setup(t)
