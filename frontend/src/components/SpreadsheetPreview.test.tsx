@@ -88,19 +88,20 @@ it('locks formula cells and protects unsaved changes during navigation and saves
 it('locates empty distant cells and reviews, jumps to, and undoes changes across sheets', async () => {
   openPreview();
   fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
-  fireEvent.change(screen.getByLabelText('单元格地址'), { target: { value: 'CV100' } });
+  // Keep jsdom's grid small; Playwright covers the full-width CV100 boundary.
+  fireEvent.change(screen.getByLabelText('单元格地址'), { target: { value: 'J100' } });
   expect(screen.getByText('第 4 / 4 页')).toBeTruthy();
-  expect(screen.getByRole('button', { name: '选择单元格 CV100' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '选择单元格 J100' })).toBeTruthy();
   fireEvent.change(screen.getByLabelText('单元格内容'), { target: { value: '<b>safe text</b>' } });
   fireEvent.change(screen.getByLabelText('工作表'), { target: { value: '1' } });
   fireEvent.change(screen.getByLabelText('单元格内容'), { target: { value: 'second edit' } });
   const list = screen.getByRole('region', { name: '修改清单' });
   expect(within(list).getByText('<b>safe text</b>')).toBeTruthy();
   expect(list.querySelector('b')).toBeNull();
-  fireEvent.click(within(list).getByRole('button', { name: 'Sheet1!CV100' }));
+  fireEvent.click(within(list).getByRole('button', { name: 'Sheet1!J100' }));
   expect((screen.getByLabelText('工作表') as HTMLSelectElement).value).toBe('0');
-  expect((screen.getByLabelText('单元格地址') as HTMLInputElement).value).toBe('CV100');
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: '选择单元格 CV100' }));
+  expect((screen.getByLabelText('单元格地址') as HTMLInputElement).value).toBe('J100');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: '选择单元格 J100' }));
   fireEvent.click(within(list).getByRole('button', { name: '撤销 预算!A1 的修改' }));
   expect(within(list).queryByText('second edit')).toBeNull();
   expect(within(list).getByText('<b>safe text</b>')).toBeTruthy();
