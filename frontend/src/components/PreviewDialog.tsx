@@ -1,11 +1,11 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type KeyboardEventHandler, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
 import './PreviewDialog.css';
 
 // Common modal lifecycle: native focus trapping, Escape, scroll lock and focus return.
-export function PreviewDialog({ title, downloadUrl, busy, onClose, children }: {
-  title: string; downloadUrl: string; busy?: boolean; onClose: () => void; children: ReactNode;
+export function PreviewDialog({ title, downloadUrl, busy, onClose, children, onKeyDown }: {
+  title: string; downloadUrl: string; busy?: boolean; onClose: () => void; children: ReactNode; onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
 }) {
   const { t } = useTranslation();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -18,7 +18,7 @@ export function PreviewDialog({ title, downloadUrl, busy, onClose, children }: {
     document.body.style.overflow = 'hidden';
     return () => { element.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
-  return <dialog ref={dialog} className="preview-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+  return <dialog ref={dialog} className="preview-dialog" aria-labelledby={titleId} onKeyDown={onKeyDown} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     <header className="preview-dialog-header">
       <h2 id={titleId}>{title}</h2>
       <div>

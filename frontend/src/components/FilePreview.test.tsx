@@ -127,3 +127,43 @@ it('retries a failed preview metadata request without closing the dialog', async
   fireEvent.click(await screen.findByRole('button', { name: '重试' }));
   expect(await screen.findByText('recovered')).toBeTruthy();
 });
+
+it.each([{ ctrlKey: true }, { metaKey: true }])('saves text using the platform shortcut and ignores repeated presses (%j)', async modifiers => {
+  vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'old', version: 'v1' });
+  let finish!: (result: { status: 'saved'; version: string }) => void;
+  vi.mocked(saveTextOperation).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  renderPreview(<FilePreview name="file.txt" onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
+  const input = screen.getByRole('textbox');
+  fireEvent.keyDown(input, { key: 's', ...modifiers });
+  expect(saveTextOperation).not.toHaveBeenCalled(); // unchanged content
+  fireEvent.change(input, { target: { value: 'shortcut draft' } });
+  fireEvent.keyDown(input, { key: 's', ...modifiers });
+  fireEvent.keyDown(input, { key: 's', ...modifiers, repeat: true });
+  expect(saveTextOperation).toHaveBeenCalledOnce();
+  expect(saveTextOperation).toHaveBeenCalledWith('file.txt', expect.objectContaining({ text: 'shortcut draft', version: 'v1' }));
+  finish({ status: 'saved', version: 'v2' });
+  await screen.findByText('文件已保存');
+});
+
+it('compares a conflict against the original and latest text while retaining the draft and version', async () => {
+  vi.mocked(getFilePreview).mockResolvedValueOnce({ kind: 'text', mime_type: 'text/plain', text: 'original', version: 'v1' })
+    .mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'latest remote', version: 'v2' });
+  const conflict = new AxiosError('conflict');
+  conflict.response = { data: { code: 'TEXT_CONFLICT' }, status: 409, statusText: '', headers: {}, config: {} as never };
+  vi.mocked(saveTextOperation).mockRejectedValue(conflict);
+  renderPreview(<FilePreview name="file.txt" onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
+  const input = screen.getByRole('textbox');
+  fireEvent.change(input, { target: { value: '<b>my draft</b>' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByRole('alert');
+  fireEvent.click(screen.getByRole('button', { name: '对比最新内容' }));
+  expect((await screen.findByText('latest remote')).tagName).toBe('PRE');
+  expect(screen.getByText('original').tagName).toBe('PRE');
+  expect(screen.getByText('<b>my draft</b>', { selector: 'pre' }).tagName).toBe('PRE');
+  expect((input as HTMLTextAreaElement).value).toBe('<b>my draft</b>');
+  fireEvent.keyDown(input, { key: 's', ctrlKey: true });
+  expect(saveTextOperation).toHaveBeenCalledOnce(); // comparison never rebases or overwrites
+  expect(vi.mocked(saveTextOperation).mock.calls[0][1].version).toBe('v1');
+});

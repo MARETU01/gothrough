@@ -22,6 +22,63 @@ function openPreview() {
 beforeEach(() => { vi.mocked(getSpreadsheetPreview).mockResolvedValue(fixture()); vi.mocked(getSpreadsheetSaveStatus).mockResolvedValue({ status: 'unknown' }); });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+it('moves grid focus across page boundaries and opens the focused cell with Enter', async () => {
+  openPreview();
+  const readonly = await screen.findByRole('button', { name: '选择单元格 C1' });
+  readonly.focus(); fireEvent.keyDown(readonly, { key: 'Enter' });
+  expect(screen.queryByLabelText('单元格内容')?.hasAttribute('disabled')).toBe(true);
+  expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy();
+  const number = screen.getByRole('button', { name: '选择单元格 B1' });
+  number.focus(); fireEvent.keyDown(number, { key: 'Enter' });
+  expect((screen.getByLabelText('单元格内容') as HTMLTextAreaElement).value).toBe('12');
+  expect(document.activeElement).toBe(screen.getByLabelText('单元格内容'));
+  fireEvent.click(readonly);
+  expect((screen.getByLabelText('单元格内容') as HTMLTextAreaElement).disabled).toBe(true);
+  number.focus(); fireEvent.keyDown(number, { key: 'Enter' });
+  expect(document.activeElement).toBe(screen.getByLabelText('单元格内容'));
+  fireEvent.change(screen.getByLabelText('单元格地址'), { target: { value: 'A25' } });
+  const last = screen.getByRole('button', { name: '选择单元格 A25' });
+  last.focus(); fireEvent.keyDown(last, { key: 'ArrowDown' });
+  const next = screen.getByRole('button', { name: '选择单元格 A26' });
+  expect(document.activeElement).toBe(next);
+  expect((screen.getByLabelText('单元格地址') as HTMLInputElement).value).toBe('A26');
+  fireEvent.keyDown(next, { key: 'ArrowLeft' });
+  expect(document.activeElement).toBe(next);
+  fireEvent.keyDown(next, { key: 'Enter' });
+  const input = screen.getByLabelText('单元格内容');
+  expect(document.activeElement).toBe(input);
+  fireEvent.keyDown(input, { key: 'ArrowUp' });
+  expect((screen.getByLabelText('单元格地址') as HTMLInputElement).value).toBe('A26');
+  fireEvent.change(input, { target: { value: 'keyboard edit' } });
+  const updated = fixture();
+  vi.mocked(saveSpreadsheetOperation).mockResolvedValue({ status: 'saved', version: updated.version, preview: updated });
+  fireEvent.keyDown(input, { key: 's', metaKey: true });
+  await screen.findByText('文件已保存');
+  expect(saveSpreadsheetOperation).toHaveBeenCalledWith('book.xlsx', expect.objectContaining({ version: 'v1', changes: [{ sheet: 'Sheet1', cell: 'A26', type: 'text', value: 'keyboard edit' }] }));
+});
+
+it('compares only changed cells and preserves a conflicted workbook draft', async () => {
+  openPreview();
+  fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
+  fireEvent.click(screen.getByRole('button', { name: '选择单元格 B1' }));
+  fireEvent.change(screen.getByLabelText('单元格内容'), { target: { value: '23' } });
+  const conflict = new AxiosError('conflict');
+  conflict.response = { data: { code: 'TEXT_CONFLICT' }, status: 409, statusText: '', headers: {}, config: {} as never };
+  vi.mocked(saveSpreadsheetOperation).mockRejectedValue(conflict);
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByRole('alert');
+  const latest = fixture(); latest.version = 'v2'; latest.sheets[0].cells.B1.raw = '99';
+  vi.mocked(getSpreadsheetPreview).mockResolvedValue(latest);
+  fireEvent.click(screen.getByRole('button', { name: '对比最新内容' }));
+  const backup = screen.getByRole('region', { name: '草稿备份与对比' });
+  await within(backup).findByText('99');
+  expect([...backup.querySelectorAll('pre')].map(element => element.textContent)).toEqual(['12', '23', '99']);
+  expect((screen.getByLabelText('单元格内容') as HTMLTextAreaElement).value).toBe('23');
+  fireEvent.keyDown(screen.getByLabelText('单元格内容'), { key: 's', ctrlKey: true });
+  expect(saveSpreadsheetOperation).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveSpreadsheetOperation).mock.calls[0][1].version).toBe('v1');
+});
+
 it('previews sheets safely, pages rows and saves typed changes across worksheets', async () => {
   const result = fixture(); result.version = 'v2'; result.sheets[0].cells.B1 = { value: '23.00', raw: '23', type: 'number' };
   vi.mocked(saveSpreadsheetOperation).mockResolvedValue({ status: 'saved', version: result.version, preview: result });

@@ -42,6 +42,7 @@ npm run lint
 | `src/components/`、`src/styles/` | 公共组件与样式 |
 | `src/components/SpreadsheetPreview.tsx` | 按需加载 XLSX 值预览和编辑、工作表切换、行分页，以及使用 `EditorDraftProvider` 保留单元格草稿 |
 | `src/components/SpreadsheetGrid.tsx` | 缓存行和单元格，按索引读取修改以更新网格 |
+| `src/components/DraftRecovery.tsx` | 草稿复制与导出、手动复制回退及可取消的对比快照，保留编辑器原始版本 |
 | `src/components/FilePreview.tsx`、`MediaPreview.tsx` | 保留可恢复草稿的文本保存确认、可取消的媒体诊断及原地预览重试 |
 
 新增功能先修改 `src/config/features.ts`，再同步 `internal/router/web.go` 的 SPA 回退白名单；共用定义保存翻译 key。上传状态通过 `UploadTask` 的具名方法更新，任务与引擎不依赖 React 或翻译运行时；详细边界见[架构说明](../doc/architecture.zh-CN.md#前端状态)。

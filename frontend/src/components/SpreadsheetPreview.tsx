@@ -13,8 +13,14 @@ import { PreviewDialog } from './PreviewDialog';
 import { StatusMessage } from './StatusMessage';
 import './SpreadsheetPreview.css';
 import { SpreadsheetGrid } from './SpreadsheetGrid';
+import { DraftRecovery } from './DraftRecovery';
 
 const pageSize = 25;
+function columnName(index: number): string {
+  let result = '';
+  for (let n = index; n > 0; n = Math.floor((n - 1) / 26)) result = String.fromCharCode(65 + (n - 1) % 26) + result;
+  return result;
+}
 function coordinate(address: string) {
   const match = /^([A-Z]{1,2})([1-9]\d{0,3})$/.exec(address);
   if (!match) return null;
@@ -54,6 +60,7 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
   const cellInput = useRef<HTMLTextAreaElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const focusLocatedCell = useRef(false);
+  const focusRequestedEditor = useRef(false);
   const dirty = changes.length > 0;
   const blocker = useBlocker(dirty || saving);
   const navigationBlocked = blocker.state === 'blocked';
@@ -73,6 +80,11 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
   const pages = Math.ceil(rowCount / pageSize);
   const currentPage = Math.min(page, pages);
   const selectCell = useCallback((ref: string) => setAddress(ref), []);
+  const exportedDraft = useMemo(() => JSON.stringify({ format: 'gothrough-spreadsheet-draft', format_version: 1, filename: name, base_version: book?.version, changes, operation }, null, 2), [name, book?.version, changes, operation]);
+  const focusEditorInput = useCallback(() => {
+    if (cellInput.current?.disabled) document.getElementById(id + '-type')?.focus();
+    else cellInput.current?.focus();
+  }, [id]);
 
   useEffect(() => {
     alive.current = true;
@@ -82,6 +94,9 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
     if (blocker.state === 'blocked' && !dirty && !saving) blocker.proceed();
   }, [blocker, dirty, saving]);
   useEffect(() => { if (editing && !blocked) cellInput.current?.focus(); }, [editing, blocked]);
+  useEffect(() => {
+    if (focusRequestedEditor.current && editable) { focusRequestedEditor.current = false; focusEditorInput(); }
+  }, [editable, cell, cellType, sheetIndex, focusEditorInput]);
   useEffect(() => {
     if (!coordinate(cell)) return;
     const element = grid.current?.querySelector<HTMLButtonElement>(`button[data-cell="${cell}"]`);
@@ -154,7 +169,7 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
     else requestAction('close');
   }
   async function save() {
-    if (!book || busy.current || blocked || (!operation && (!dirty || invalid || conflict))) return;
+    if (!editing || !book || busy.current || loading || blocked || (!operation && (!dirty || invalid || conflict))) return;
     const attempt = operation ?? createSpreadsheetSaveAttempt(book.version, changes);
     setOperation(attempt); rememberDraft(changes, attempt);
     busy.current = true; setSaving(true); setError(''); setSaved(false);
@@ -197,7 +212,11 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
     } finally { busy.current = false; if (alive.current) setSaving(false); }
   }
 
-  return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving} onClose={close}>
+  return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving} onClose={close} onKeyDown={event => {
+    if (editing && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+      event.preventDefault(); if (!event.repeat && !event.nativeEvent.isComposing) void save();
+    }
+  }}>
     {blocked && <ConfirmPanel message={t(operation ? 'sheet.discardUnconfirmed' : 'edit.discard')} disabled={saving || loading} confirmLabel={t('edit.discardConfirm')} cancelLabel={t('edit.keepEditing')}
       onCancel={() => { if (navigationBlocked) blocker.reset(); setPending(null); }}
       onConfirm={() => {
@@ -218,12 +237,44 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
           <Button disabled={saving || loading || blocked || (!operation && (!dirty || invalid || conflict))} onClick={() => void save()}>{t(saving ? 'edit.saving' : operation ? 'sheet.confirmSave' : 'edit.save')}</Button>
           <Button variant="outline" disabled={saving || loading || blocked} onClick={() => requestAction('cancel')}>{t('edit.cancel')}</Button>
           <span>{t('sheet.changed', { count: changes.length })}</span>
+          <span>{t('edit.saveShortcut')}</span>
         </> : <Button disabled={sheet.read_only || loading || blocked} onClick={() => { setEditing(true); setSaved(false); }}>{t('edit.button')}</Button>}
         <Button variant="outline" disabled={saving || loading || blocked} onClick={() => requestAction('reload')}>{t('sheet.reload')}</Button>
       </div>
+      {dirty && <DraftRecovery hint="sheet.backupHint" text={exportedDraft} filename={name.split(/[\\/]/).pop() + '.draft.json'} disabled={saving || loading || blocked} compare={async signal => {
+        const latest = await getSpreadsheetPreview(name, signal);
+        const describe = (value?: Workbook['sheets'][number]['cells'][string]) => value?.formula ? '=' + value.formula : value?.raw ?? '';
+        return changes.map(change => {
+          const base = book.sheets.find(item => item.name === change.sheet)?.cells[change.cell];
+          const latestSheet = latest.sheets.find(item => item.name === change.sheet);
+          const current = latestSheet?.cells[change.cell];
+          return { title: change.sheet + '!' + change.cell, base: describe(base), draft: change.type === 'clear' ? '' : change.value,
+            latest: latestSheet ? describe(current) : null,
+            changed: !latestSheet || base?.raw !== current?.raw || base?.type !== current?.type || base?.formula !== current?.formula };
+        });
+      }} />}
       {sheet.read_only && <StatusMessage>{t('sheet.readOnly')}</StatusMessage>}
       {invalid && <StatusMessage tone="error">{t('sheet.invalidValue')}</StatusMessage>}
-      <div ref={grid} className="spreadsheet-scroll" tabIndex={0} role="region" aria-label={t('sheet.grid')}>
+      <p className="spreadsheet-hint">{t('sheet.keyboardHint')}</p>
+      <div ref={grid} className="spreadsheet-scroll" tabIndex={0} role="region" aria-label={t('sheet.grid')} onKeyDown={event => {
+        if (saving || loading || blocked || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.nativeEvent.isComposing) return;
+        const source = event.target instanceof HTMLButtonElement ? event.target.dataset.cell : undefined;
+        const position = source ? coordinate(source) : null;
+        if (!position) return;
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (sheet.read_only || sheet.cells[source!]?.type === 'readonly' || operation) return;
+          focusRequestedEditor.current = true;
+          locate(sheet.name, source!);
+          setEditing(true); setSaved(false);
+          if (source === cell && editable) { focusRequestedEditor.current = false; focusEditorInput(); }
+        } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+          event.preventDefault();
+          const col = Math.max(1, Math.min(100, position.col + (event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0)));
+          const row = Math.max(1, Math.min(2000, position.row + (event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0)));
+          locate(sheet.name, columnName(col) + row, true);
+        }
+      }}>
         <SpreadsheetGrid sheet={sheet} columns={columnCount} firstRow={(currentPage - 1) * pageSize + 1} rows={Math.min(pageSize, rowCount - (currentPage - 1) * pageSize)} selected={cell} changes={sheetChanges} disabled={saving || loading || blocked} onSelect={selectCell} />
       </div>
       <div className="spreadsheet-toolbar">
