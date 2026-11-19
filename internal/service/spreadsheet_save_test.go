@@ -91,9 +91,9 @@ func TestSpreadsheetSaveConcurrentRetryAndFailureCleanup(t *testing.T) {
 		t.Fatal("failed operation left a receipt")
 	}
 	s.mu.Lock()
-	receipt := s.spreadsheetSaves[id]
+	receipt := s.saveReceipts[id]
 	receipt.expires = time.Now().Add(-time.Second)
-	s.spreadsheetSaves[id] = receipt
+	s.saveReceipts[id] = receipt
 	s.mu.Unlock()
 	if s.SpreadsheetSaveStatus("book.xlsx", id).Status != "unknown" {
 		t.Fatal("expired receipt retained")
@@ -107,22 +107,22 @@ func TestSpreadsheetSaveReceiptBoundAndPendingStatus(t *testing.T) {
 	s := testService(t)
 	original := workbookFixture(t, s)
 	oldest := uuid.NewV7().String()
-	for index := range maxSpreadsheetSaves {
+	for index := range maxSaveReceipts {
 		id := uuid.NewV7().String()
 		if index == 0 {
 			id = oldest
 		}
-		s.spreadsheetSaves[id] = spreadsheetSaveReceipt{path: "book.xlsx", version: "saved", expires: time.Now().Add(time.Duration(index+1) * time.Minute)}
+		s.saveReceipts[id] = saveReceipt{kind: "spreadsheet", path: "book.xlsx", version: "saved", expires: time.Now().Add(time.Duration(index+1) * time.Minute)}
 	}
 	result, err := s.SaveSpreadsheetOperation(context.Background(), "book.xlsx", TextVersion(original), []SpreadsheetChange{{Sheet: "Sheet1", Cell: "A1", Type: "text", Value: "new save"}}, uuid.NewV7().String())
-	if err != nil || result.Status != "saved" || len(s.spreadsheetSaves) != maxSpreadsheetSaves {
+	if err != nil || result.Status != "saved" || len(s.saveReceipts) != maxSaveReceipts {
 		t.Fatalf("bounded save: %v %v", result, err)
 	}
-	if _, ok := s.spreadsheetSaves[oldest]; ok {
+	if _, ok := s.saveReceipts[oldest]; ok {
 		t.Fatal("oldest receipt not evicted")
 	}
 	pending := uuid.NewV7().String()
-	s.spreadsheetSaves[pending] = spreadsheetSaveReceipt{path: "book.xlsx"}
+	s.saveReceipts[pending] = saveReceipt{kind: "spreadsheet", path: "book.xlsx"}
 	if s.SpreadsheetSaveStatus("book.xlsx", pending).Status != "pending" {
 		t.Fatal("in-flight save reported unknown")
 	}

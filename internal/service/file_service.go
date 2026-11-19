@@ -29,7 +29,7 @@ type FileService struct {
 	tempDir          string
 	slots            chan struct{}
 	spreadsheetSlots chan struct{}
-	spreadsheetSaves map[string]spreadsheetSaveReceipt // guarded by mu
+	saveReceipts     map[string]saveReceipt // guarded by mu
 	diskUsage        func(string) (utils.DiskUsage, error)
 	listingMu        sync.Mutex
 	listing          *fileListing
@@ -38,5 +38,5 @@ type FileService struct {
 
 func NewFileService(uploadDir, tempDir string) *FileService {
 	return &FileService{sessions: make(map[string]*transferSession), completed: make(map[string]completedSession), names: make(map[string]bool), deleting: make(map[string]bool), createdDirs: make(map[string]os.FileInfo),
-		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, MaxConcurrentChunks), spreadsheetSlots: make(chan struct{}, 2), spreadsheetSaves: make(map[string]spreadsheetSaveReceipt), diskUsage: utils.GetDiskUsage}
+		uploadDir: uploadDir, tempDir: tempDir, slots: make(chan struct{}, MaxConcurrentChunks), spreadsheetSlots: make(chan struct{}, 2), saveReceipts: make(map[string]saveReceipt), diskUsage: utils.GetDiskUsage}
 }

@@ -7,7 +7,7 @@ type View = { zoom: number | null; x: number; y: number };
 type Point = { x: number; y: number };
 const initialView: View = { zoom: null, x: 0, y: 0 };
 
-export function ZoomableImage({ url, name, onError }: { url: string; name: string; onError: () => void }) {
+export function ZoomableImage({ url, name, onError, onLoad }: { url: string; name: string; onError: () => void; onLoad?: () => void }) {
   const { t } = useTranslation();
   const stage = useRef<HTMLDivElement>(null);
   const points = useRef(new Map<number, Point>());
@@ -100,7 +100,7 @@ export function ZoomableImage({ url, name, onError }: { url: string; name: strin
       onPointerUp={event => points.current.delete(event.pointerId)}
       onPointerCancel={event => points.current.delete(event.pointerId)}>
       <img src={url} alt={name} draggable={false} onError={onError}
-        onLoad={event => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+        onLoad={event => { setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); onLoad?.(); }}
         style={{ width: natural.width || undefined, height: natural.height || undefined, visibility: loaded ? 'visible' : 'hidden', transform: `translate(-50%, -50%) translate(${displayed.x}px, ${displayed.y}px) scale(${scale})` }} />
     </div>
   </div>;

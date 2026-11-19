@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBlocker } from 'react-router-dom';
 import { useEditorDraft } from '@/contexts/EditorDraftContext';
@@ -12,13 +12,9 @@ import { ConfirmPanel } from './ConfirmActions';
 import { PreviewDialog } from './PreviewDialog';
 import { StatusMessage } from './StatusMessage';
 import './SpreadsheetPreview.css';
+import { SpreadsheetGrid } from './SpreadsheetGrid';
 
 const pageSize = 25;
-function columnName(index: number): string {
-  let result = '';
-  for (let n = index; n > 0; n = Math.floor((n - 1) / 26)) result = String.fromCharCode(65 + (n - 1) % 26) + result;
-  return result;
-}
 function coordinate(address: string) {
   const match = /^([A-Z]{1,2})([1-9]\d{0,3})$/.exec(address);
   if (!match) return null;
@@ -71,12 +67,12 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
   const cellValue = selectedChange?.value ?? original?.raw ?? '';
   const editable = editing && validAddress && !sheet?.read_only && original?.type !== 'readonly' && !saving && !loading && !blocked && !operation;
   const invalid = changes.some(change => !validChange(change));
-  const sheetChanges = changes.filter(change => change.sheet === sheet?.name);
+  const sheetChanges = useMemo(() => changes.filter(change => change.sheet === sheet?.name), [changes, sheet?.name]);
   const rowCount = Math.max(20, sheet?.rows ?? 0, validAddress?.row ?? 0, ...sheetChanges.map(change => coordinate(change.cell)!.row));
   const columnCount = Math.max(8, sheet?.columns ?? 0, validAddress?.col ?? 0, ...sheetChanges.map(change => coordinate(change.cell)!.col));
   const pages = Math.ceil(rowCount / pageSize);
   const currentPage = Math.min(page, pages);
-  const columns = Array.from({ length: columnCount }, (_, index) => columnName(index + 1));
+  const selectCell = useCallback((ref: string) => setAddress(ref), []);
 
   useEffect(() => {
     alive.current = true;
@@ -228,17 +224,7 @@ export default function SpreadsheetPreview({ name, onClose, onSaved }: { name: s
       {sheet.read_only && <StatusMessage>{t('sheet.readOnly')}</StatusMessage>}
       {invalid && <StatusMessage tone="error">{t('sheet.invalidValue')}</StatusMessage>}
       <div ref={grid} className="spreadsheet-scroll" tabIndex={0} role="region" aria-label={t('sheet.grid')}>
-        <table className="spreadsheet-grid"><thead><tr><th scope="col">#</th>{columns.map(col => <th key={col} scope="col">{col}</th>)}</tr></thead>
-          <tbody>{Array.from({ length: Math.min(pageSize, rowCount - (currentPage - 1) * pageSize) }, (_, index) => {
-            const row = (currentPage - 1) * pageSize + index + 1;
-            return <tr key={row}><th scope="row">{row}</th>{columns.map(col => {
-              const ref = col + row;
-              const change = sheetChanges.find(item => item.cell === ref);
-              const value = change ? change.type === 'clear' ? '' : change.value : sheet.cells[ref]?.value ?? '';
-              return <td key={col} data-changed={!!change} data-selected={cell === ref}><button type="button" data-cell={ref} disabled={saving || loading || blocked} aria-label={t('sheet.selectCell', { cell: ref })} aria-pressed={cell === ref} onClick={() => setAddress(ref)}>{value || '\u00a0'}</button></td>;
-            })}</tr>;
-          })}</tbody>
-        </table>
+        <SpreadsheetGrid sheet={sheet} columns={columnCount} firstRow={(currentPage - 1) * pageSize + 1} rows={Math.min(pageSize, rowCount - (currentPage - 1) * pageSize)} selected={cell} changes={sheetChanges} disabled={saving || loading || blocked} onSelect={selectCell} />
       </div>
       <div className="spreadsheet-toolbar">
         <Button variant="outline" disabled={currentPage <= 1 || saving || blocked} onClick={() => setPage(currentPage - 1)}>{t('sheet.previous')}</Button>

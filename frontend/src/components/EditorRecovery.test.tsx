@@ -4,22 +4,24 @@ import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { AccessGate } from './AccessGate';
 import { EditorDraftProvider } from '@/contexts/EditorDraftProvider';
 import FilesPage from '@/pages/Files/FilesPage';
-import { getFilePreview, saveFileText } from '@/services/files';
+import { getFilePreview, saveTextOperation, getTextSaveStatus } from '@/services/files';
 import { responseApi } from '@/services/http';
 import { AxiosError } from 'axios';
 
-vi.mock('@/services/http', () => ({ responseApi: { get: vi.fn(), post: vi.fn() } }));
-vi.mock('@/services/files', () => ({
+vi.mock('@/services/http', () => ({ default: {}, responseApi: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('@/services/files', async original => ({
+  ...await original<typeof import('@/services/files')>(),
   listFiles: vi.fn(async () => ({ files: [{ name: 'edit.txt', folder: false, label: 'edit.txt', size: 3, size_display: '3 B', mtime: '2026-11-07T00:00:00Z' }], total_size_display: '3 B', directory: '', total: 1, folder_count: 0, total_files: 1, page: 1, page_size: 20, total_pages: 1 })),
   getDiskInfo: vi.fn(async () => ({ disk_pct: 0, disk_pct_warning: false, disk_free_display: '1 GB', disk_used_display: '0 B', disk_total_display: '1 GB' })),
-  getFilePreview: vi.fn(), saveFileText: vi.fn(), deleteSelection: vi.fn(),
+  getFilePreview: vi.fn(), saveTextOperation: vi.fn(), getTextSaveStatus: vi.fn(), deleteSelection: vi.fn(),
   downloadFileUrl: (name: string) => '/api/files/' + name,
   previewFileUrl: (name: string) => '/api/files/' + name + '?preview=1',
   downloadSelectionUrl: vi.fn(() => '/api/batch-download'),
 }));
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  vi.mocked(getTextSaveStatus).mockResolvedValue({ status: 'unknown' });
   vi.mocked(responseApi.get).mockResolvedValue({ data: { enabled: true, authenticated: true } });
   vi.mocked(responseApi.post).mockResolvedValue({ data: { enabled: true, authenticated: true } });
   vi.mocked(getFilePreview).mockResolvedValue({ kind: 'text', mime_type: 'text/plain', text: 'old', version: 'v1' });
@@ -53,7 +55,7 @@ it('blocks browser-style back navigation, keeps edits on cancel, and discards on
 
 it('restores an expired-session draft with its original version and keeps unload protection while locked', async () => {
   await openEditor();
-  vi.mocked(saveFileText).mockImplementationOnce(async () => {
+  vi.mocked(saveTextOperation).mockImplementationOnce(async () => {
     window.dispatchEvent(new Event('gothrough:auth-required'));
     throw new Error('expired');
   });
@@ -71,20 +73,20 @@ it('restores an expired-session draft with its original version and keeps unload
   expect(getFilePreview).toHaveBeenCalledTimes(1);
   const conflict = new AxiosError('conflict');
   conflict.response = { status: 409, statusText: '', headers: {}, config: {} as never, data: { code: 'TEXT_CONFLICT' } };
-  vi.mocked(saveFileText).mockRejectedValueOnce(conflict);
-  fireEvent.click(screen.getByRole('button', { name: '保存' }));
-  await waitFor(() => expect(saveFileText).toHaveBeenLastCalledWith('edit.txt', 'my draft', 'v1'));
+  vi.mocked(saveTextOperation).mockRejectedValueOnce(conflict);
+  fireEvent.click(screen.getByRole('button', { name: '确认保存结果' }));
+  await waitFor(() => expect(saveTextOperation).toHaveBeenLastCalledWith('edit.txt', expect.objectContaining({ text: 'my draft', version: 'v1' })));
   expect((await screen.findByRole('alert')).textContent).toContain('文件已被其他操作修改');
 });
 
 it('waits for an in-flight save before allowing blocked navigation to proceed', async () => {
   const router = await openEditor();
-  let finish!: (value: { version: string }) => void;
-  vi.mocked(saveFileText).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let finish!: (value: { status: 'saved'; version: string }) => void;
+  vi.mocked(saveTextOperation).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await act(async () => { await router.navigate(-1); });
   expect((screen.getByRole('button', { name: '放弃修改' }) as HTMLButtonElement).disabled).toBe(true);
-  await act(async () => { finish({ version: 'v2' }); });
+  await act(async () => { finish({ status: 'saved', version: 'v2' }); });
   await screen.findByText('Other page');
   expect(router.state.location.pathname).toBe('/other');
   const leaving = new Event('beforeunload', { cancelable: true });

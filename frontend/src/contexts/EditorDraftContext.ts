@@ -1,11 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { FilePreviewInfo, SpreadsheetChange, SpreadsheetPreview, SpreadsheetSaveAttempt } from '@/services/files';
+import type { FilePreviewInfo, SpreadsheetChange, SpreadsheetPreview, SpreadsheetSaveAttempt, TextSaveAttempt } from '@/services/files';
 
 interface TextEditorDraft {
   kind?: 'text';
   name: string;
   info: FilePreviewInfo;
   text: string;
+  operation?: TextSaveAttempt;
 }
 
 interface SpreadsheetEditorDraft {
