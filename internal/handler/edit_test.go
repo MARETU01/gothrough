@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"uuid"
 )
 
 func TestTextEditHTTP(t *testing.T) {
@@ -48,5 +49,46 @@ func TestTextEditHTTP(t *testing.T) {
 	data, _ := os.ReadFile(path)
 	if string(data) != "\ufeffnew\r\n" {
 		t.Fatalf("saved %q", data)
+	}
+}
+
+func TestTextSaveOperationHTTP(t *testing.T) {
+	_, h := setup(t)
+	if err := os.WriteFile(filepath.Join(h.uploadDir, "file.txt"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	preview := httptest.NewRecorder()
+	h.ServeHTTP(preview, httptest.NewRequest("GET", "/api/files/file.txt?preview=info", nil))
+	var info struct{ Version string }
+	if err := json.Unmarshal(preview.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.NewV7().String()
+	body, _ := json.Marshal(map[string]string{"operation_id": id, "version": info.Version, "text": "new"})
+	for range 2 {
+		res := httptest.NewRecorder()
+		req := httptest.NewRequest("PUT", "/api/files/file.txt", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		h.ServeHTTP(res, req)
+		if res.Code != 200 || !strings.Contains(res.Body.String(), `"status":"saved"`) {
+			t.Fatalf("save: %d %s", res.Code, res.Body.String())
+		}
+	}
+	for _, tc := range []struct {
+		url     string
+		status  int
+		content string
+	}{
+		{"/api/text-saves/" + id + "?filename=file.txt", 200, `"status":"saved"`},
+		{"/api/text-saves/" + id + "?filename=other.txt", 200, `"status":"unknown"`},
+		{"/api/spreadsheet-saves/" + id + "?filename=file.txt", 200, `"status":"unknown"`},
+		{"/api/text-saves/invalid?filename=file.txt", 409, `TEXT_OPERATION_CONFLICT`},
+		{"/api/text-saves/" + id + "?filename=../file.txt", 409, `TEXT_OPERATION_CONFLICT`},
+	} {
+		res := httptest.NewRecorder()
+		h.ServeHTTP(res, httptest.NewRequest("GET", tc.url, nil))
+		if res.Code != tc.status || !strings.Contains(res.Body.String(), tc.content) || res.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s: %d %s", tc.url, res.Code, res.Body.String())
+		}
 	}
 }

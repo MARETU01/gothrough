@@ -17,7 +17,7 @@
 | `internal/service/upload_session.go`、`completion.go` | 上传会话、分块、完成结果和资源释放 |
 | `internal/service/files.go`、`text.go`、`folder*.go`、`selection*.go` | 安全文件操作、编辑、目录管理和 ZIP 生成 |
 | `internal/service/spreadsheet.go` | 受限 XLSX 解析、单元格类型修改，以及通过共用文件协调器按版本原子发布 |
-| `internal/service/spreadsheet_save.go` | 使用同一协调器管理有界操作回执和幂等表格保存确认 |
+| `internal/service/save_operation.go`、`spreadsheet_save.go`、`text.go` | 在文件修改协调器下共用有界回执及文本、表格的幂等保存 |
 | `internal/service/file_listing.go`、`file_browser.go` | 列表版本、目录查询和磁盘信息 |
 | `internal/service/clipboard*.go` | 剪贴板历史、图片和持久化 |
 | `internal/utils/` | 文件名、磁盘及平台文件系统操作 |
@@ -51,6 +51,8 @@
 ## 前端状态
 
 `SpreadsheetPreview` 在现有预览弹窗内按需加载，显示分页值网格，单元格修改存入现有编辑草稿 Provider。XLSX 解析和序列化在文件修改锁外执行，使用实例内并发准入；发布按 `FileService.mu → listingMu` 顺序加锁，并在替换前复核源文件版本。协议和限额见传输指南。
+
+`SpreadsheetGrid` 缓存行和单元格，按行和地址索引修改。`MediaPreview` 管理可取消的诊断探测，每次重试重置查看器状态。文本与表格草稿均保留不可变保存请求，共用回执存储及发布协调，各自处理预览加载界面。
 
 编辑草稿区分文本与表格，表格保留有明确类型的修改和不可变保存请求，不再将其编码进文本字段。修改清单和地址栏驱动页码、滚动和焦点更新。工作簿原子发布在同一修改锁内登记有界回执；未确认操作在登录恢复后沿用原标识、版本和内容。回执确认与后续预览加载分开处理，后续修改或预览失败不会触发再次发布。
 

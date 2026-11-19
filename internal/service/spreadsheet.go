@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/MARETU01/gothrough/internal/utils"
@@ -610,11 +609,7 @@ func (s *FileService) replaceSpreadsheet(ctx context.Context, filename, version 
 		return err
 	}
 	if len(operationIDs) > 0 && operationIDs[0] != "" {
-		id := operationIDs[0]
-		receipt := s.spreadsheetSaves[id]
-		receipt.version = TextVersion(updated)
-		receipt.expires = time.Now().Add(spreadsheetSaveLifetime)
-		s.spreadsheetSaves[id] = receipt
+		s.confirmSaveOperation(operationIDs[0], TextVersion(updated))
 	}
 	s.listing = nil
 	return nil

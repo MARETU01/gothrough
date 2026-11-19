@@ -68,13 +68,23 @@ export interface SpreadsheetPreview extends FilePreviewInfo { kind: 'spreadsheet
 export interface SpreadsheetChange { sheet: string; cell: string; type: 'text' | 'number' | 'boolean' | 'clear'; value: string }
 export interface SpreadsheetSaveAttempt { id: string; version: string; changes: SpreadsheetChange[]; confirmedVersion?: string }
 export interface SpreadsheetSaveResult { status: 'saved' | 'pending' | 'unknown'; version?: string; preview?: SpreadsheetPreview }
-export function createSpreadsheetSaveAttempt(version: string, changes: SpreadsheetChange[]): SpreadsheetSaveAttempt {
+function createSaveID() {
   // getRandomValues also works on HTTP LAN origins where randomUUID is unavailable.
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 15) | 64; bytes[8] = (bytes[8] & 63) | 128;
   const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
-  return { id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`, version, changes: changes.map(change => ({ ...change })) };
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+export function createSpreadsheetSaveAttempt(version: string, changes: SpreadsheetChange[]): SpreadsheetSaveAttempt {
+  return { id: createSaveID(), version, changes: changes.map(change => ({ ...change })) };
+}
+export interface TextSaveAttempt { id: string; version: string; text: string; confirmedVersion?: string }
+export type TextSaveResult = Pick<SpreadsheetSaveResult, 'status' | 'version'>;
+export const createTextSaveAttempt = (version: string, text: string): TextSaveAttempt => ({ id: createSaveID(), version, text });
+export const saveTextOperation = (name: string, attempt: TextSaveAttempt) =>
+  api.put<TextSaveResult, TextSaveResult>('/files/' + encodeURIComponent(name), { operation_id: attempt.id, version: attempt.version, text: attempt.text }, { timeout: 0 });
+export const getTextSaveStatus = (name: string, id: string, signal?: AbortSignal) =>
+  api.get<TextSaveResult, TextSaveResult>('/text-saves/' + encodeURIComponent(id), { params: { filename: name }, signal });
 export const saveSpreadsheetOperation = (name: string, attempt: SpreadsheetSaveAttempt) =>
   api.put<SpreadsheetSaveResult, SpreadsheetSaveResult>('/spreadsheets/' + encodeURIComponent(name), { operation_id: attempt.id, version: attempt.version, changes: attempt.changes }, { timeout: 0 });
 export const getSpreadsheetSaveStatus = (name: string, id: string, signal?: AbortSignal) =>

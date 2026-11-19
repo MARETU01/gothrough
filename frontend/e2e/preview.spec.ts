@@ -31,7 +31,19 @@ async function mockPreview(page: Page, kind: 'image' | 'pdf', failure?: number) 
   });
   await page.goto('/files');
   await page.getByRole('button', { name: `Preview ${filename}`, exact: true }).click();
+  return (status?: number) => { failure = status; };
 }
+
+test('retries a missing image in place when the resource becomes available', async ({ page }) => {
+  const recover = await mockPreview(page, 'image', 404);
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('alert')).toContainText('file no longer exists');
+  recover();
+  await dialog.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Actual size', exact: true })).toBeEnabled();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  expect(await dialog.locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(1800);
+});
 
 test('image zoom, original size, drag, keyboard and responsive layout', async ({ page, browserName, isMobile }) => {
   await mockPreview(page, 'image');

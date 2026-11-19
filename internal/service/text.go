@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -73,6 +74,10 @@ func encodeEditedText(text string, original []byte) []byte {
 }
 
 func (s *FileService) SaveText(filename, version, text string) (string, error) {
+	return s.saveText(context.Background(), filename, version, text, "")
+}
+
+func (s *FileService) saveText(ctx context.Context, filename, version, text, operationID string) (string, error) {
 	if !IsTextFile(filename) {
 		return "", ErrTextType
 	}
@@ -86,6 +91,9 @@ func (s *FileService) SaveText(filename, version, text string) (string, error) {
 	// Serialize version comparison and replacement with other edits and deletes.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.deletionOverlaps(filepath.ToSlash(rel)) {
 		return "", ErrPathDeleting
 	}
@@ -124,6 +132,7 @@ func (s *FileService) SaveText(filename, version, text string) (string, error) {
 		return "", err
 	}
 	if bytes.Equal(updated, data) {
+		s.confirmSaveOperation(operationID, version)
 		return version, nil
 	}
 	// Hide the temporary file from cached listings until publication completes.
@@ -146,9 +155,34 @@ func (s *FileService) SaveText(filename, version, text string) (string, error) {
 	if err != nil {
 		return "", utils.StorageError("保存文本失败", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if err := root.Rename(tempName, rel); err != nil {
 		return "", utils.StorageError("替换文本失败", err)
 	}
 	s.listing = nil
-	return TextVersion(updated), nil
+	newVersion := TextVersion(updated)
+	s.confirmSaveOperation(operationID, newVersion)
+	return newVersion, nil
+}
+
+func (s *FileService) SaveTextOperation(ctx context.Context, filename, version, text, id string) (*SaveOperationStatus, error) {
+	status, cleanup, err := s.beginSaveOperation("text", filename, version, text, id)
+	if err != nil {
+		return nil, err
+	}
+	if status.Status == "saved" {
+		return &status, nil
+	}
+	defer cleanup()
+	newVersion, err := s.saveText(ctx, filename, version, text, id)
+	if err != nil {
+		return nil, err
+	}
+	return &SaveOperationStatus{Status: "saved", Version: newVersion}, nil
+}
+
+func (s *FileService) TextSaveStatus(filename, id string) SaveOperationStatus {
+	return s.saveOperationStatus("text", filename, id)
 }

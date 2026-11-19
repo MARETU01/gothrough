@@ -17,7 +17,7 @@ English | [简体中文](architecture.zh-CN.md)
 | `internal/service/upload_session.go`, `completion.go` | Upload sessions, chunks, receipts, and resource release |
 | `internal/service/files.go`, `text.go`, `folder*.go`, `selection*.go` | Confined file operations, editing, directory management, and ZIP generation |
 | `internal/service/spreadsheet.go` | Bounded XLSX parsing, typed cell changes, and versioned atomic publication using the shared file coordinator |
-| `internal/service/spreadsheet_save.go` | Bounded operation receipts and idempotent spreadsheet save confirmation under the same coordinator |
+| `internal/service/save_operation.go`, `spreadsheet_save.go`, `text.go` | Shared bounded receipts and idempotent text/spreadsheet saves under the file mutation coordinator |
 | `internal/service/file_listing.go`, `file_browser.go` | Listing generations, directory queries, and disk information |
 | `internal/service/clipboard*.go` | Clipboard history, images, and persistence |
 | `internal/utils/` | Filename, disk, and platform filesystem operations |
@@ -51,6 +51,8 @@ See [Transfer and APIs](transfer.md) for wire formats, limits, and recovery rule
 ## Frontend State
 
 `SpreadsheetPreview` loads on demand inside the existing preview dialog, renders paginated value grids, and stores cell changes in the existing editor draft provider. XLSX parsing and serialization run outside mutation locks with instance-local admission; publication acquires `FileService.mu` then `listingMu` and rechecks the source version before replacement. Protocol and limits are documented in the transfer guide.
+
+`SpreadsheetGrid` memoizes rows/cells and indexes changes by row and address. `MediaPreview` owns cancellable diagnostic probes and resets viewer state for each retry. Text and spreadsheet drafts retain immutable save attempts; both share receipt storage and publication coordination while keeping their own preview-loading UI.
 
 Editor drafts distinguish text from spreadsheet data; spreadsheet drafts retain typed changes and the immutable save attempt instead of JSON encoded into text. The change list and address field drive page/scroll/focus updates. Atomic workbook publication records a bounded receipt under the same mutation lock; uncertain saves retain the original identifier/version/payload across authentication recovery. Receipt confirmation and subsequent preview loading are separate, so later edits or preview failures cannot trigger another publication.
 
