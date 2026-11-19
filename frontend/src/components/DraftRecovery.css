@@ -1,0 +1,12 @@
+.draft-recovery { min-width: 0; margin: 12px 0; }
+.draft-recovery-hint { font-size: 13px; overflow-wrap: anywhere; }
+.draft-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.draft-recovery textarea { display: block; width: 100%; font-family: monospace; }
+.draft-comparison { max-height: 45dvh; overflow: auto; border: 1px solid #b4d5d0; border-radius: 6px; padding: 12px; }
+.draft-comparison article + article { margin-top: 16px; border-top: 1px solid #b4d5d0; padding-top: 8px; }
+.draft-comparison h3, .draft-comparison h4 { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
+.draft-comparison p { margin: 0 0 8px; font-size: 13px; }
+.draft-comparison-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.draft-comparison-values > div { min-width: 0; }
+.draft-comparison-values pre { max-height: 28dvh; overflow: auto; padding: 8px; background: #f1f7f5; }
+@media (max-width: 600px) { .draft-comparison-values { grid-template-columns: minmax(0, 1fr); } }

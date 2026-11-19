@@ -12,6 +12,7 @@ import { MediaPreview } from './MediaPreview';
 import { ConfirmPanel } from './ConfirmActions';
 import { RefreshButton } from './RefreshButton';
 import { StatusMessage } from './StatusMessage';
+import { DraftRecovery } from './DraftRecovery';
 import './FilePreview.css';
 import { lazy, Suspense } from 'react';
 
@@ -99,7 +100,7 @@ function TextMediaPreview({ name, onClose, onSaved }: { name: string; onClose: (
   }
 
   async function save() {
-    if (busy.current || hasPendingAction || !info?.version || (!operation && (draftBytes > 1048576 || conflict))) return;
+    if (!editing || busy.current || reloading || hasPendingAction || !info?.version || (!operation && (!dirty || draftBytes > 1048576 || conflict))) return;
     const attempt = operation ?? createTextSaveAttempt(info.version, draft);
     const remember = (next?: TextSaveAttempt) => preserved.remember({ name, info, text: draft, operation: next });
     setOperation(attempt); remember(attempt);
@@ -177,7 +178,11 @@ function TextMediaPreview({ name, onClose, onSaved }: { name: string; onClose: (
   }, [name, restored, loadAttempt]);
 
   const url = previewFileUrl(name);
-  return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving || reloading} onClose={close}>
+  return <PreviewDialog title={name} downloadUrl={downloadFileUrl(name)} busy={saving || reloading} onClose={close} onKeyDown={event => {
+    if (editing && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+      event.preventDefault(); if (!event.repeat && !event.nativeEvent.isComposing) void save();
+    }
+  }}>
       {hasPendingAction && <ConfirmPanel message={t(operation ? 'edit.discardUnconfirmed' : 'edit.discard')} disabled={saving || reloading} confirmLabel={t('edit.discardConfirm')} cancelLabel={t('edit.keepEditing')} onConfirm={confirmDiscard} onCancel={keepEditing} />}
       {error ? <StatusMessage tone="error" action={<Button variant="outline" onClick={() => { setError(''); setLoadAttempt(value => value + 1); }}>{t('preview.retry')}</Button>}>{translateMessage(error)}</StatusMessage> : !info ? <StatusMessage tone="loading">{t('preview.loading')}</StatusMessage> : <>
         {info.kind === 'text' && <>
@@ -186,10 +191,16 @@ function TextMediaPreview({ name, onClose, onSaved }: { name: string; onClose: (
               <Button disabled={saving || reloading || hasPendingAction || (!operation && (!dirty || conflict || draftBytes > 1048576))} onClick={() => void save()}>{t(saving ? 'edit.saving' : operation ? 'edit.confirmSave' : 'edit.save')}</Button>
               <Button variant="outline" disabled={saving || reloading || hasPendingAction} onClick={() => requestAction('cancel')}>{t('edit.cancel')}</Button>
               <span>{t('edit.bytes', { count: draftBytes })}</span>
+              <span>{t('edit.saveShortcut')}</span>
             </> : <Button variant="outline" disabled={!info.version || reloading} onClick={() => { setDraft(info.text); setEditing(true); setEditError(''); setSaved(false); }}>{t('edit.button')}</Button>}
             {conflict && <RefreshButton loading={reloading} disabled={saving || hasPendingAction} onClick={() => requestAction('reload')} label={t('edit.reload')} />}
           </div>
           {editError && <StatusMessage tone="error">{translateMessage(editError)}</StatusMessage>}
+          {dirty && <DraftRecovery text={draft} filename={name.split(/[\\/]/).pop() + '.draft.txt'} disabled={hasPendingAction || saving || reloading} compare={async signal => {
+            const latest = await getFilePreview(name, signal);
+            if (latest.kind !== 'text') throw new Error('edit.compareTypeChanged');
+            return [{ title: name, base: info.text, draft, latest: latest.text, changed: latest.version !== info.version }];
+          }} />}
           {saved && <StatusMessage tone="success">{t('edit.saved')}</StatusMessage>}
           {saved && savedThenChanged && <StatusMessage>{t('edit.savedThenChanged')}</StatusMessage>}
           {operation && !saving && (!editError || !operation.confirmedVersion) && <StatusMessage>{t(operation.confirmedVersion ? 'edit.savedPreviewUnavailable' : 'edit.unconfirmed')}</StatusMessage>}
