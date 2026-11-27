@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,7 +17,13 @@ type StoragePaths struct {
 	UploadDir    string
 	TempDir      string
 	ClipboardDir string
+	lock         *os.File
 }
+
+var ErrStorageInUse = errors.New("数据目录已被另一个 GoThrough 进程使用")
+
+// Close releases the directory lock after the application has stopped using it.
+func (p StoragePaths) Close() error { return p.lock.Close() }
 
 // PrepareStorage performs startup-only filesystem work after config validation.
 func PrepareStorage(dataDir string) (StoragePaths, error) {
@@ -27,13 +34,30 @@ func PrepareStorage(dataDir string) (StoragePaths, error) {
 	if err != nil {
 		return StoragePaths{}, fmt.Errorf("解析数据目录: %w", err)
 	}
+	if err := os.MkdirAll(base, 0755); err != nil {
+		return StoragePaths{}, utils.StorageError("创建数据目录失败", err)
+	}
+	lock, err := os.OpenFile(filepath.Join(base, ".gothrough.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return StoragePaths{}, utils.StorageError("打开数据目录锁失败", err)
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			_ = lock.Close()
+		}
+	}()
+	// Keep the lock file in place. Closing the handle releases the OS lock.
+	if err := lockStorage(lock); err != nil {
+		return StoragePaths{}, fmt.Errorf("锁定数据目录 %q: %w", base, err)
+	}
 	upload := filepath.Join(base, "uploads")
 	temp := filepath.Join(base, "temp_uploads")
 	clipboard := filepath.Join(base, "clipboard")
 	for _, dir := range []struct {
 		path string
 		mode os.FileMode
-	}{{upload, 0755}, {temp, 0700}, {clipboard, 0700}} {
+	}{{upload, 0755}, {temp, 0700}} {
 		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
 			return StoragePaths{}, utils.StorageError("创建数据目录失败", err)
 		}
@@ -45,8 +69,9 @@ func PrepareStorage(dataDir string) (StoragePaths, error) {
 	if err := cleanupTempUploads(temp); err != nil {
 		return StoragePaths{}, err
 	}
-	paths := StoragePaths{BaseDir: base, UploadDir: upload, TempDir: temp, ClipboardDir: clipboard}
+	paths := StoragePaths{BaseDir: base, UploadDir: upload, TempDir: temp, ClipboardDir: clipboard, lock: lock}
 	slog.Info("数据目录已初始化", "event", "storage.ready", "data_dir", base, "upload_dir", upload, "temp_dir", temp, "clipboard_dir", clipboard)
+	ready = true
 	return paths, nil
 }
 

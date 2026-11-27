@@ -26,7 +26,7 @@ English | [简体中文](architecture.zh-CN.md)
 
 ## Startup and Storage
 
-Startup follows `config.Load → app.PrepareStorage → services → handlers → router`. Validate configuration and certificates before preparing or cleaning storage. Pass paths through constructors; `PrepareStorage` runs only at startup.
+Startup follows `config.Load → app.PrepareStorage → services → handlers → router`. After validating configuration and certificates, reserve the listen port before preparing storage. `PrepareStorage` acquires the data root's exclusive OS lock before checking storage and cleaning temporary uploads. The application holds the lock through shutdown. Clipboard initialization is independent of file storage. If it fails, only clipboard routes return `503 CLIPBOARD_UNAVAILABLE`.
 
 Services own path validation, `os.Root` confinement, and regular-file checks. Download handlers call the service's `OpenFile`, close its handle, and handle headers, Range, and previews. Upload and file handlers share one `FileService` so publication, reservations, editing, deletion, and directory cleanup remain coordinated.
 
@@ -60,4 +60,4 @@ The file page shares duplicate-request prevention, per-item result handling, and
 
 The application-level Provider keeps uploads running across navigation. The queue and engine share `UploadTask`; consumers read its fields and collections, while named lifecycle operations update related fields and notify together. Byte progress is throttled, acknowledgements notify immediately, and clock/speed samples are batched for React snapshots.
 
-Retain late initialization receipts for cancellation cleanup. Uncertain completion retries the original session without re-uploading. The Hook owns React updates, timing, notices, and unmount handling. See [frontend development](../frontend/README.md) for entry points and localization, and [transfer](transfer.md) for protocol and recovery rules.
+The queue lives above the access gate. Authentication expiry aborts active requests and pauses scheduling while keeping the original files and session IDs. Unlocking reconciles active transfers against server chunk state and resumes scheduling. Explicit logout clears the queue. Retain late initialization receipts for cleanup or recovery. Uncertain completion retries the original session. A definitive missing-chunk response allows one repair pass per attempt. The Hook owns React updates, timing, notices, and unmount handling. See [frontend development](../frontend/README.md) and [transfer](transfer.md).

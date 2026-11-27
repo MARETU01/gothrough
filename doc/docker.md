@@ -45,7 +45,7 @@ The image's environment variable takes precedence over `storage.data_dir` in YAM
 
 **Mount the entire `/data` directory as one volume.** Do not mount `uploads` and `temp_uploads` as separate volumes or put the temporary directory alone on tmpfs; publishing uploads requires hard links between the two directories. Startup and upload initialization check write access and hard-link support and report errors early if these requirements are not met. Startup still cleans up temporary uploads; uploads cannot resume after a container restart.
 
-A Docker-managed named volume is recommended by default. For a host bind mount, ensure UID/GID `10001:10001` can create, read, and write the data subdirectories beforehand. The image does not automatically change host directory permissions at startup. Do not share the same volume between multiple application instances at the same time.
+A Docker-managed named volume is recommended by default. For a host bind mount, ensure UID/GID `10001:10001` can write the data root and read and write the data subdirectories. The service holds an exclusive lock on `/data/.gothrough.lock`. A second instance using the same volume fails before cleaning temporary uploads. Set permissions on the host before starting the container.
 
 ## Configuration and Environment Variables
 

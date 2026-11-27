@@ -96,6 +96,7 @@ func (h *UploadHandler) writeChunk(c *gin.Context, id string, index int, body io
 
 // 查询上传进度
 func (h *UploadHandler) UploadStatus(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	sessionID := c.Param("session_id")
 	withUploadSession(c, sessionID)
 	state, err := h.files.LookupUpload(sessionID)
@@ -149,19 +150,14 @@ func (h *UploadHandler) UploadComplete(c *gin.Context) {
 	finalFilename, actualSize, err := h.files.CompleteSession(sessionID)
 	if err != nil {
 		_ = c.Error(err)
-		if errors.Is(err, service.ErrMissingChunks) {
-			missing := []int{}
-			for i := 0; i < session.TotalChunks; i++ {
-				if !session.HasChunk(i) {
-					missing = append(missing, i)
-				}
-			}
+		var missing *service.MissingChunksError
+		if errors.As(err, &missing) {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":           "MISSING_CHUNKS",
 				"error":          "缺少分块",
-				"missing_chunks": missing,
-				"total_chunks":   session.TotalChunks,
-				"received":       session.ReceivedCount(),
+				"missing_chunks": missing.Indexes,
+				"total_chunks":   missing.Total,
+				"received":       missing.Total - len(missing.Indexes),
 			})
 			return
 		}

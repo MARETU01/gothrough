@@ -1,12 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { UploadTask } from './task';
 import { cleanupSession, transferFile } from './engine';
-import { cancelUpload, completeUpload, initUpload, uploadChunk } from '@/services/upload';
+import { cancelUpload, completeUpload, getUploadStatus, initUpload, uploadChunk } from '@/services/upload';
 import { createUploadSnapshot } from '@/utils/upload';
 import type { UploadController, UploadViewItem } from '@/types/upload';
 
 vi.mock('@/services/upload', () => ({
-  cancelUpload: vi.fn(), completeUpload: vi.fn(), initUpload: vi.fn(), uploadChunk: vi.fn(),
+  cancelUpload: vi.fn(), completeUpload: vi.fn(), getUploadStatus: vi.fn(), initUpload: vi.fn(), uploadChunk: vi.fn(),
 }));
 
 beforeEach(() => vi.resetAllMocks());
@@ -77,4 +77,29 @@ it.each([undefined, ''])('does not substitute a filename when the completion rec
   expect(upload.state).not.toBe('success');
   expect(upload.completionPending).toBe(true);
   expect(upload.session?.sessionId).toBe('session');
+});
+
+it('bounds automatic repair and keeps the session available for a later retry', async () => {
+  const session = { session_id: 'original', total_chunks: 2, chunk_size: 3, final_filename: 'file.txt' };
+  const missing = { isAxiosError: true, response: { status: 400, data: { code: 'MISSING_CHUNKS', missing_chunks: [1] } } };
+  vi.mocked(initUpload).mockResolvedValue(session);
+  vi.mocked(uploadChunk).mockResolvedValue({ received: 2 });
+  vi.mocked(completeUpload).mockRejectedValueOnce(missing).mockRejectedValueOnce(missing)
+    .mockResolvedValueOnce({ status: 'success', saved_filename: session.final_filename });
+  const upload = item();
+  const control = { isStopped: () => false, isPaused: () => false, waitForChange: async () => {} };
+  await expect(transferFile(upload, { cancelled: false, abort: new AbortController() }, control))
+    .rejects.toMatchObject({ count: 1 });
+  expect(uploadChunk).toHaveBeenCalledTimes(3);
+  expect(completeUpload).toHaveBeenCalledTimes(2);
+  expect(upload.completionPending).toBe(false);
+  expect(upload.loadedBytes).toBe(3);
+  expect(upload.session?.sessionId).toBe('original');
+
+  vi.mocked(getUploadStatus).mockResolvedValue({ ...session, status: 'uploading', received_chunks: [0] });
+  await transferFile(upload, { cancelled: false, abort: new AbortController() }, control);
+  expect(uploadChunk).toHaveBeenCalledTimes(4);
+  expect(vi.mocked(uploadChunk).mock.calls.map(([options]) => options.chunkIndex)).toEqual([0, 1, 1, 1]);
+  expect(initUpload).toHaveBeenCalledOnce();
+  expect(upload.state).toBe('success');
 });

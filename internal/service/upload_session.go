@@ -41,6 +41,17 @@ type transferSession struct {
 	touched   time.Time
 }
 
+type MissingChunksError struct {
+	Indexes []int
+	Total   int
+}
+
+func (e *MissingChunksError) Error() string {
+	return fmt.Sprintf("%s: 总数=%d, 已收=%d", ErrMissingChunks, e.Total, e.Total-len(e.Indexes))
+}
+
+func (e *MissingChunksError) Unwrap() error { return ErrMissingChunks }
+
 func (s *FileService) InitSession(req model.InitRequest) (*model.UploadSession, error) {
 	if len(req.Filename) > 4096 {
 		return nil, ErrPath
@@ -255,11 +266,19 @@ func (s *FileService) CompleteSession(id string) (string, int64, error) {
 		return "", 0, ErrSession
 	}
 	entry.mu.Lock()
+	total := entry.info.TotalChunks
 	count := entry.info.ReceivedCount()
-	entry.mu.Unlock()
-	if count != entry.info.TotalChunks {
-		return "", 0, fmt.Errorf("%w: 总数=%d, 已收=%d", ErrMissingChunks, entry.info.TotalChunks, count)
+	if count != total {
+		missing := make([]int, 0, total-count)
+		for index := range total {
+			if !entry.info.HasChunk(index) {
+				missing = append(missing, index)
+			}
+		}
+		entry.mu.Unlock()
+		return "", 0, &MissingChunksError{Indexes: missing, Total: total}
 	}
+	entry.mu.Unlock()
 	stat, err := entry.file.Stat()
 	if err != nil {
 		return "", 0, utils.StorageError("读取上传临时文件信息失败", err)

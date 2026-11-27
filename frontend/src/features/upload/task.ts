@@ -38,9 +38,8 @@ export class UploadTask implements UploadItem {
 
   beginAttempt(): boolean {
     const confirming = this.completionPending && this.session !== null;
-    if (!confirming) {
+    if (!this.session) {
       this.resetProgress();
-      this.data.session = null;
       this.data.savedFilename = '';
       this.data.completionPending = false;
     }
@@ -95,13 +94,16 @@ export class UploadTask implements UploadItem {
 
   // Cleanup is owned by the queue; uncertain publication keeps its receipt and
   // progress for another confirmation attempt, including after cancellation.
-  fail(error: Message) { this.finishFailure('error', error); }
+  fail(error: Message, keepSession = false) { this.finishFailure('error', error, keepSession); }
   interrupt() { this.finishFailure('pending', ''); }
+  suspend() { this.finishFailure('pending', '', true); }
 
-  private finishFailure(state: 'error' | 'pending', error: Message) {
-    if (!this.completionPending) {
+  private finishFailure(state: 'error' | 'pending', error: Message, keepSession = false) {
+    if (!this.completionPending && !keepSession) {
       this.data.session = null;
       this.data.loadedBytes = 0;
+    } else if (keepSession) {
+      this.data.loadedBytes = this.confirmedBytes;
     }
     this.data.inflightBytes.clear();
     this.data.state = state;
@@ -131,6 +133,21 @@ export class UploadTask implements UploadItem {
   recordTransferred(bytes: number) { this.data.transferredBytes += bytes; }
   setInflight(index: number, bytes: number) { this.data.inflightBytes.set(index, bytes); }
   discardInflight(index: number) { this.data.inflightBytes.delete(index); }
+
+  reconcileChunks(received: Iterable<number>) {
+    const session = this.session!;
+    this.data.inflightBytes.clear();
+    this.data.confirmedChunks.clear();
+    this.data.confirmedBytes = 0;
+    for (const index of received) {
+      this.data.confirmedChunks.add(index);
+      this.data.confirmedBytes += Math.min(session.chunkSize, this.file.size - index * session.chunkSize);
+    }
+    this.data.session = { ...session, receivedChunks: this.confirmedChunks.size };
+    this.data.loadedBytes = this.confirmedBytes;
+    this.data.completionPending = false;
+    this.changed();
+  }
 
   confirmChunk(index: number, bytes: number) {
     if (this.data.confirmedChunks.has(index)) return;

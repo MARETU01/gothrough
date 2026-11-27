@@ -31,7 +31,7 @@ npm run lint
 | --- | --- |
 | `src/pages/`、`src/router.tsx` | 页面及路由 |
 | `src/config/features.ts` | 懒加载路由、导航入口和首页卡片共用的功能定义 |
-| `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，支持站内切换页面后继续上传 |
+| `src/contexts/UploadQueueProvider.tsx` | 应用级上传队列，跨页面导航和登录过期时保留任务 |
 | `src/hooks/useUploadQueue.ts` | 队列调度、React 快照、计时与页面生命周期 |
 | `src/features/upload/task.ts` | 拥有任务状态修改和通知，对外提供只读状态及进度集合 |
 | `src/features/upload/engine.ts` | 不使用 React 的单文件协议、分块并发、重试和完成确认 |

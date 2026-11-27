@@ -67,7 +67,7 @@ On the same LAN, open `http://<server-IP>:9815`. Internet access requires a publ
 
 ## Shared Clipboard
 
-Publish text, paste screenshots, or select PNG/JPEG files on the clipboard page for other devices using the same service. The app never automatically reads or publishes the system clipboard. One-click copying requires HTTPS or localhost and browser permission; otherwise copy text manually or download images. See [image limits and backups](doc/configuration.md#image-clipboard) and [clipboard APIs](doc/transfer.md#clipboard-api).
+Publish text, paste screenshots, or select PNG/JPEG files on the clipboard page for other devices using the same service. The app receives clipboard content when you paste it, and shares it when you publish it. One-click copying requires HTTPS or localhost and browser permission. When the clipboard API is unavailable, the page offers manual copying for text and open/download actions for images. See [image limits and backups](doc/configuration.md#image-clipboard) and [clipboard APIs](doc/transfer.md#clipboard-api).
 
 ## Limitations
 

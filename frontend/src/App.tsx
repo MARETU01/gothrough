@@ -6,7 +6,7 @@ import { EditorDraftProvider } from '@/contexts/EditorDraftProvider';
 
 // A data router provides blockers for browser Back/Forward as well as links.
 const router = createBrowserRouter([{ path: '*', element:
-  <AccessGate><UploadQueueProvider><AppRoutes /></UploadQueueProvider></AccessGate>,
+  <UploadQueueProvider><AccessGate><AppRoutes /></AccessGate></UploadQueueProvider>,
 }]);
 
 const App: React.FC = () => {

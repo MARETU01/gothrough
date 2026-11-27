@@ -101,15 +101,66 @@ test('uploads, previews, edits, and downloads a file, then publishes clipboard t
   await row.getByRole('button', { name: '确认删除 ' + name, exact: true }).click();
   expect((await (await deletion).json()).results).toEqual([{ path: name, deleted: true }]);
   await expect(row).toHaveCount(0);
+  // Simulate a browser that does not expose the Clipboard API before the page renders.
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
   await navigate(page, '/clipboard');
   const text = `Shared from ${testInfo.project.name} ${Date.now()}`;
   await page.getByLabel('输入或粘贴文本', { exact: true }).fill(text);
   await page.getByRole('button', { name: '发布', exact: true }).click();
   await expect(page.locator('.clipboard-entry pre').filter({ hasText: text })).toBeVisible();
-  // Exercise the supported manual-copy fallback deterministically.
-  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
-  await page.getByRole('button', { name: '复制记录 1', exact: true }).click();
+  await page.getByRole('button', { name: '手动复制记录 1', exact: true }).click();
   await expect(page.locator('#clipboard-manual-text')).toHaveValue(text);
+});
+
+test('resumes the same upload after unlocking and skips chunks already stored', async ({ page }, testInfo) => {
+  const name = `resume-${testInfo.project.name}-${Date.now()}.txt`;
+  const content = Buffer.from('stored before the response');
+  let chunkRequests = 0;
+  let initRequests = 0;
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/api/upload/init') initRequests++;
+  });
+  await page.route('**/api/upload/chunk?*', async route => {
+    if (++chunkRequests !== 1) return route.continue();
+    // WebKit interception does not retain the body of Blob uploads.
+    const response = await route.fetch({ postData: content });
+    expect(response.status()).toBe(200);
+    await route.fulfill({ status: 401, json: { code: 'AUTH_REQUIRED' } });
+  });
+  await navigate(page, '/upload');
+  await page.getByLabel('上传文件', { exact: true }).setInputFiles({ name, mimeType: 'text/plain', buffer: content });
+  await page.getByRole('button', { name: '开始上传', exact: true }).click();
+  await expect(page.getByText('上传队列已保留，重新解锁后可继续上传。')).toBeVisible();
+  await page.getByLabel('访问口令', { exact: true }).fill('e2e-only-password');
+  const status = page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/upload/status/'));
+  await page.getByRole('button', { name: '解锁空间' }).click();
+  expect((await (await status).json()).received_chunks).toEqual([0]);
+  await expect(page.getByText('上传成功', { exact: true })).toBeVisible();
+  expect(initRequests).toBe(1);
+  expect(chunkRequests).toBe(1);
+});
+
+test('repairs a missing chunk within the original upload session', async ({ page }, testInfo) => {
+  const name = `repair-${testInfo.project.name}-${Date.now()}.txt`;
+  const sessions: string[] = [];
+  let initRequests = 0;
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/api/upload/init') initRequests++;
+  });
+  await page.route('**/api/upload/chunk?*', async route => {
+    const url = new URL(route.request().url());
+    sessions.push(url.searchParams.get('session_id')!);
+    if (sessions.length === 1) await route.fulfill({ json: { received: 1 } });
+    else await route.continue();
+  });
+  await navigate(page, '/upload');
+  await page.getByLabel('上传文件', { exact: true }).setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from('stored on repair') });
+  const rejection = page.waitForResponse(response => new URL(response.url()).pathname === '/api/upload/complete' && response.status() === 400);
+  await page.getByRole('button', { name: '开始上传', exact: true }).click();
+  expect(await (await rejection).json()).toMatchObject({ code: 'MISSING_CHUNKS', missing_chunks: [0] });
+  await expect(page.getByText('上传成功', { exact: true })).toBeVisible();
+  expect(initRequests).toBe(1);
+  expect(sessions).toEqual([sessions[0], sessions[0]]);
 });
 
 test('keeps active transfers when logout is cancelled and locks after confirmation', async ({ page }) => {

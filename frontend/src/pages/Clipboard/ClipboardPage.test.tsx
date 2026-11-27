@@ -23,6 +23,7 @@ const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard'
 const originalVisibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
 
 beforeEach(() => {
+  vi.stubGlobal('isSecureContext', true);
   vi.mocked(getClipboardImageSettings).mockResolvedValue({ enabled: true, max_size_mb: 10, max_pixels: 20000000, max_total_size_mb: 200 });
   history = [];
   let nextEntryId = 0;
@@ -300,14 +301,40 @@ it.each(['denied', 'unavailable'])('selects a manual copy field when clipboard a
   else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
   render(createElement(ClipboardPage));
   await screen.findByRole('article', { name: '记录 1' });
-  fireEvent.click(screen.getByRole('button', { name: '复制记录 1' }));
-  const field = await screen.findByLabelText(/无法自动复制/) as HTMLTextAreaElement;
+  const trigger = screen.getByRole('button', { name: kind === 'denied' ? '复制记录 1' : '手动复制记录 1' });
+  fireEvent.click(trigger);
+  const field = await screen.findByLabelText(/复制下方已选中的文本/) as HTMLTextAreaElement;
   expect(field.value).toBe(history[0].text);
   expect(field.selectionStart).toBe(0);
   expect(field.selectionEnd).toBe(history[0].text.length);
   expect(document.activeElement).toBe(field);
   fireEvent.click(screen.getByRole('button', { name: '关闭' }));
-  await waitFor(() => expect(screen.queryByLabelText(/无法自动复制/)).toBeNull());
+  await waitFor(() => expect(screen.queryByLabelText(/复制下方已选中的文本/)).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('shows the available actions immediately in an insecure context', async () => {
+  vi.stubGlobal('isSecureContext', false);
+  history = [record(), imageRecord()];
+  render(createElement(ClipboardPage));
+  await screen.findByRole('article', { name: '记录 2' });
+  expect(screen.queryByRole('button', { name: /^复制记录/ })).toBeNull();
+  expect(screen.getByRole('button', { name: '手动复制记录 1' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: '下载图片' }).getAttribute('href')).toBe('/api/clipboard/image-1/image?download=1');
+  fireEvent.click(screen.getByRole('button', { name: '打开图片 2' }));
+  expect(screen.getByRole('dialog', { name: '共享图片 2' })).toBeTruthy();
+  expect(fetchClipboardImage).not.toHaveBeenCalled();
+});
+
+it('shows a single unavailable message and disables clipboard mutations', async () => {
+  const unavailable = { isAxiosError: true, response: { status: 503, data: { code: 'CLIPBOARD_UNAVAILABLE' } } };
+  vi.mocked(listClipboard).mockRejectedValue(unavailable);
+  vi.mocked(getClipboardImageSettings).mockRejectedValue(unavailable);
+  render(createElement(ClipboardPage));
+  expect((await screen.findByRole('alert')).textContent).toContain('剪贴板暂不可用');
+  expect(screen.getByRole('button', { name: '发布' })).toHaveProperty('disabled', true);
+  expect(screen.getByRole('button', { name: '全部删除' })).toHaveProperty('disabled', true);
+  expect(screen.queryByText('无法读取图片配置。')).toBeNull();
 });
 
 const advancePoll = (milliseconds = CLIPBOARD_REFRESH_INTERVAL_MS) =>
@@ -444,7 +471,7 @@ it.each(['single', 'all', 'copy'])('pauses background updates during %s confirma
   expect(listClipboard).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('article', { name: '记录 1' })).toBeTruthy();
   if (kind === 'copy') {
-    const input = screen.getByLabelText(/无法自动复制/) as HTMLTextAreaElement;
+    const input = screen.getByLabelText(/复制下方已选中的文本/) as HTMLTextAreaElement;
     expect(input.selectionEnd - input.selectionStart).toBe(input.value.length);
   }
   fireEvent.click(screen.getByRole('button', { name: kind === 'copy' ? '关闭' : '取消' }));
