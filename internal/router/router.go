@@ -50,14 +50,15 @@ func SetupRouter(h *handler.UploadHandler, files *handler.FileHandler, clipboard
 		api.PUT("/spreadsheets/*filename", files.EditSpreadsheet)
 		api.GET("/spreadsheet-saves/:operation_id", files.SpreadsheetSaveStatus)
 		api.GET("/disk-info", files.DiskInfo)
-		api.GET("/clipboard", clipboard.List)
-		api.GET("/clipboard/image-config", clipboard.ImageConfig)
-		api.POST("/clipboard/image", clipboard.CreateImage)
-		api.GET("/clipboard/:id/image", downloads, clipboard.Image)
-		api.POST("/clipboard", clipboard.Create)
-		api.DELETE("/clipboard", clipboard.Clear)
-		api.DELETE("/clipboard/:id", clipboard.Delete)
 	}
+	clipboardAPI := api.Group("/clipboard", clipboard.RequireAvailable)
+	clipboardAPI.GET("", clipboard.List)
+	clipboardAPI.GET("/image-config", clipboard.ImageConfig)
+	clipboardAPI.POST("/image", clipboard.CreateImage)
+	clipboardAPI.GET("/:id/image", downloads, clipboard.Image)
+	clipboardAPI.POST("", clipboard.Create)
+	clipboardAPI.DELETE("", clipboard.Clear)
+	clipboardAPI.DELETE("/:id", clipboard.Delete)
 
 	setupWeb(r)
 	return r

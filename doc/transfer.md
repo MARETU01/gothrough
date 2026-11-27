@@ -10,7 +10,7 @@ English | [简体中文](transfer.zh-CN.md)
 - File lists refresh 3 seconds after each request; disk information refreshes independently every 15 seconds. Updates retain data and filters, pause during deletion confirmation/requests and previews/editing, and skip selected text. Hidden pages cancel background requests and refresh when visible. Failures retain data and action feedback; manual refresh and successful edits/deletions refresh both resources.
 - Previews support images, UTF-8 text, PDFs, and browser-supported media, with download fallback. Escape closes the dialog; phones use a full-screen view. Clipboard images share the dialog and pause automatic updates while open.
 - File and clipboard images support zoom buttons, wheel/pinch zoom, dragging, fit-to-window and actual size. Double-click toggles fit and actual size; focus the image area to use +/−, arrow keys, 0 (fit), or 1 (actual size). Media failures check for expired authentication; PDF availability is checked before opening the browser viewer. PDF rendering and media codecs still depend on the browser.
-- Signing out with unfinished uploads requires confirmation. Confirming interrupts transfers and clears the queue; cancelling keeps it running. Refreshing the browser or restarting the server cannot resume uploads.
+- If login expires during an upload, the queue pauses and resumes from the original session after unlocking on the same page. Signing out with unfinished uploads requires confirmation. Confirming interrupts transfers and clears the queue. Browser refresh or server restart requires a new upload.
 - Select files/folders to download a ZIP or delete them. Select current page covers at most 20 entries; directory, search, sort, page changes, and manual refresh clear selection. Selection pauses polling. Deletion confirms count, names, and recursive scope; cancellation keeps the selection, and partial failures retain failed items for retry.
 
 ## Authentication
@@ -138,6 +138,8 @@ Publication returns the created entry with `id`, `created_at`, and an explicit `
 
 PNG thumbnails have a maximum edge of 320 pixels; copying/downloading uses originals. Thumbnail caches are released on deletion/eviction and rebuilt after restart. See [image configuration](configuration.md#image-clipboard) for limits, persistence, and recovery.
 
+When the browser lacks the clipboard-writing API, the history shows a manual copy action for text and open/download actions for images. If clipboard storage fails to initialize, all clipboard endpoints return `503 CLIPBOARD_UNAVAILABLE` with no caching. File endpoints remain available.
+
 When existing clipboard history omits text entry types, the server normalizes them to `type: "text"` in memory without rewriting history at startup. The next normal mutation saves explicit types. IDs, contents, and creation times are preserved; responses always include explicit types.
 
 ## Upload Flow
@@ -157,7 +159,9 @@ The frontend retries transient failures at most twice with backoff and `Retry-Af
 
 Completion is idempotent: up to 4096 receipts survive for up to one hour, retaining no payload/chunk maps. Repeating completion or status queries returns the original filename/size with `status: "success"`, even if the file was later deleted; it never recreates the file. Receipts are lost on restart.
 
-After a transient completion failure, the frontend checks status before retrying; manual retry keeps the original session without re-uploading. If the receipt expired or the server restarted, check the file list before starting again. Folder uploads use `relative_path` (for example `docs/photos/image.jpg`); empty folders are omitted and conflicting names are renamed without overwrite.
+After a transient completion failure, the frontend checks status before retrying. When the result is uncertain, manual retry confirms the original session. A `400 MISSING_CHUNKS` response with valid `missing_chunks` IDs prompts one automatic repair pass in the same session. If the server still reports missing chunks, the user can retry that session. After reauthentication, an interrupted transfer queries `received_chunks` and sends the remaining chunks. If a completion receipt expired or the server restarted, check the file list before starting again.
+
+Folder uploads use `relative_path` (for example `docs/photos/image.jpg`). Empty folders are omitted and conflicting names are renamed without overwrite.
 
 ## Limits and Errors
 

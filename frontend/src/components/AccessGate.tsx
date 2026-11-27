@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LockKeyhole, ArrowRight, ShieldCheck } from 'lucide-react';
 import { responseApi } from '@/services/http';
 import { AccessContext } from '@/contexts/AccessContext';
 import { useEditorDraft } from '@/contexts/EditorDraftContext';
+import { UploadQueueContext } from '@/contexts/UploadQueueContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { Button } from './ui/button';
 import { StatusMessage } from './StatusMessage';
@@ -15,6 +16,9 @@ type AccessState = { enabled: boolean; authenticated: boolean };
 export function AccessGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { draft: preservedDraft } = useEditorDraft();
+  const queue = useContext(UploadQueueContext);
+  const suspendForAuth = queue?.suspendForAuth;
+  const discardForLogout = queue?.discardForLogout;
   const [access, setAccess] = useState<AccessState | null>(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -39,10 +43,14 @@ export function AccessGate({ children }: { children: ReactNode }) {
     // Cleanup requests may receive 401 after a deliberate logout. They must
     // not turn the already locked page into a spurious session-expired error.
     if (!access?.authenticated) return;
-    const lock = () => { setAccess({ enabled: true, authenticated: false }); setError('auth.expired'); };
+    const lock = () => {
+      suspendForAuth?.();
+      setAccess({ enabled: true, authenticated: false });
+      setError('auth.expired');
+    };
     window.addEventListener('gothrough:auth-required', lock);
     return () => window.removeEventListener('gothrough:auth-required', lock);
-  }, [access?.authenticated]);
+  }, [access?.authenticated, suspendForAuth]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -53,23 +61,26 @@ export function AccessGate({ children }: { children: ReactNode }) {
       const response = await responseApi.post<AccessState>('/auth/login', { password });
       setPassword('');
       setAccess(response.data);
+      if (response.data.authenticated) queue?.resumeAfterAuth();
     } catch (cause) {
       const status = (cause as { response?: { status?: number } }).response?.status;
       setError(status === 401 ? 'auth.invalid' : status === 429 ? 'auth.rateLimited' : 'auth.unavailable');
     } finally { setBusy(false); }
   }
 
-  async function logout() {
+  const logout = useCallback(async () => {
     setError('');
     try {
       await responseApi.post('/auth/logout');
       setPassword('');
       setAccess({ enabled: true, authenticated: false });
+      discardForLogout?.();
     } catch { setError('auth.unavailable'); }
-  }
+  }, [discardForLogout]);
+  const accessContext = useMemo(() => ({ enabled: access?.enabled ?? false, logout }), [access?.enabled, logout]);
 
   if (access?.authenticated) {
-    return <AccessContext.Provider value={{ enabled: access.enabled, logout }}>
+    return <AccessContext.Provider value={accessContext}>
       {error && <div className="access-session-error"><StatusMessage tone="error">{t(error)}</StatusMessage></div>}
       {children}
     </AccessContext.Provider>;
@@ -83,6 +94,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
       <h1 id="access-title">{t('auth.title')}</h1>
       <p className="access-description">{t('auth.description')}</p>
       {preservedDraft && <StatusMessage>{t('auth.draftPreserved')}</StatusMessage>}
+      {queue?.items.some(item => item.state !== 'success') && <StatusMessage>{t('auth.uploadsPreserved')}</StatusMessage>}
       {access ? <form onSubmit={event => void login(event)}>
         <label htmlFor="access-password">{t('auth.password')}</label>
         <input id="access-password" type="password" autoComplete="current-password" autoFocus maxLength={256} placeholder={t('auth.placeholder')} value={password} onChange={event => setPassword(event.target.value)} required disabled={busy} aria-describedby={error ? 'access-error' : undefined} aria-invalid={error === 'auth.invalid'} />

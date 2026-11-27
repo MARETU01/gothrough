@@ -42,6 +42,16 @@ export interface CompleteUploadResponse {
   saved_filename: string;
 }
 
+export interface ActiveUploadResponse extends InitUploadResponse {
+  status: 'uploading';
+  received_chunks: number[];
+}
+
+export function getUploadStatus(sessionId: string, signal?: AbortSignal) {
+  type UploadStatus = CompleteUploadResponse | ActiveUploadResponse;
+  return api.get<UploadStatus, UploadStatus>('/upload/status/' + encodeURIComponent(sessionId), { signal });
+}
+
 export interface CancelUploadResponse {
   status: 'cancelled';
 }
@@ -101,8 +111,7 @@ export async function completeUpload(sessionId: string, signal?: AbortSignal): P
       if (abort.aborted || uploadRetryDelay(error, 0) === null) throw error;
       // The publication may have succeeded even though its response was lost.
       try {
-        const result = await api.get<CompleteUploadResponse | { status: 'uploading' }, CompleteUploadResponse | { status: 'uploading' }>(
-          '/upload/status/' + encodeURIComponent(sessionId), { signal: abort });
+        const result = await getUploadStatus(sessionId, abort);
         if (result.status === 'success') return result;
       } catch { /* Preserve the original failure if confirmation also fails. */ }
       if (abort.aborted) throw error;

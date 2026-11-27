@@ -56,13 +56,21 @@ func run() (runErr error) {
 }
 
 func serve(ctx context.Context, settings *config.Settings) error {
+	address := settings.Server.Address()
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+
 	paths, err := app.PrepareStorage(settings.Storage.DataDir)
 	if err != nil {
 		return err
 	}
+	defer paths.Close()
 	clipboardService, err := service.NewClipboardService(paths.ClipboardDir, settings.Clipboard.Image)
 	if err != nil {
-		return err
+		slog.Error("剪贴板存储不可用", "event", "clipboard.unavailable", "error", err)
 	}
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
 	files := service.NewFileService(paths.UploadDir, paths.TempDir)
@@ -86,15 +94,9 @@ func serve(ctx context.Context, settings *config.Settings) error {
 	clipboardHandler := handler.NewClipboardHandler(clipboardService)
 	r := router.SetupRouter(uploadHandler, handler.NewFileHandler(files), clipboardHandler, settings.Logging, settings.Auth)
 
-	address := settings.Server.Address()
 	server := &http.Server{Addr: address, Handler: r,
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Minute, IdleTimeout: 90 * time.Second,
 		ErrorLog: slog.NewLogLogger(slog.Default().With("event", "server.http_error").Handler(), slog.LevelError)}
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
 	protocol := "http"
 	if settings.Server.TLS.Enabled {
 		protocol = "https"

@@ -16,6 +16,14 @@ func NewClipboardHandler(s *service.ClipboardService) *ClipboardHandler {
 	return &ClipboardHandler{service: s}
 }
 
+func (h *ClipboardHandler) RequireAvailable(c *gin.Context) {
+	if h == nil || h.service == nil {
+		c.Header("Cache-Control", "no-store")
+		respondError(c, nil, http.StatusServiceUnavailable, "CLIPBOARD_UNAVAILABLE", "剪贴板暂不可用，请联系服务管理员")
+		c.Abort()
+	}
+}
+
 func (h *ClipboardHandler) List(c *gin.Context) {
 	body, etag := h.service.Snapshot()
 	if respondNotModified(c, etag) {

@@ -78,7 +78,7 @@ The `logging` section controls log levels, text or JSON format, successful-reque
 
 If neither the configuration file nor the environment specifies a data directory, the executable's directory is used. When using `go run`, set a data directory through configuration or the environment to avoid writing beside the temporary executable. Empty or whitespace-only data directory values are rejected.
 
-Override the directory with `GOTHROUGH_DATA_DIR`, for example `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd` in Git Bash. Changing the directory does not migrate existing data. Stop the server and move the data yourself, or keep using the original directory. Each data root must be used by only one server process.
+Override the directory with `GOTHROUGH_DATA_DIR`, for example `GOTHROUGH_DATA_DIR="D:/GoThroughData" go run ./cmd` in Git Bash. To migrate existing data, stop the server and move the data to the new directory. The process must be able to create and lock `.gothrough.lock` in the data root. A second instance using the same data root fails before cleaning temporary uploads. The lock file may remain on disk after shutdown. Its OS lock is released when the process closes the file. Keep the file in place while the service runs.
 
 ## Environment Variables
 
@@ -139,7 +139,7 @@ The frontend reads the actual limits from the API. Restart the server for config
 
 Text and image metadata are stored in `clipboard/history.json` under the data root; images are in `clipboard/images/`. They are separate from uploaded files and do not appear in the file list. Stop the service and handle the entire `clipboard/` directory when backing up, restoring, or migrating. Use each data root with only one server process.
 
-Startup validates history and images. Corrupted history, missing images, or image metadata mismatches cause startup to fail while preserving the history file. Inspect logs and restore a backup. After history loads successfully, unreferenced application-owned image files are removed.
+Startup validates history and images. If clipboard storage cannot be opened or validated, clipboard APIs return `503 CLIPBOARD_UNAVAILABLE` and file transfers remain available. The application preserves the history and images and logs `clipboard.unavailable`. Inspect the log, stop the server, restore the complete clipboard backup, and restart. Orphan images are cleaned only after history loads successfully.
 
 Images are converted to PNG without source metadata, including JPEG EXIF orientation. Deletion, clearing, and automatic eviction beyond the latest 100 entries also remove the corresponding images.
 

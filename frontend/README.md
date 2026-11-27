@@ -31,7 +31,7 @@ Tests use Vitest, jsdom, and React Testing Library. See [checks and CI](../doc/b
 | --- | --- |
 | `src/pages/`, `src/router.tsx` | Pages and routing |
 | `src/config/features.ts` | Shared feature definitions for lazy routes, navigation entries, and home cards |
-| `src/contexts/UploadQueueProvider.tsx` | Application-level queue that continues across in-app navigation |
+| `src/contexts/UploadQueueProvider.tsx` | Application-level queue that survives in-app navigation and session expiry |
 | `src/hooks/useUploadQueue.ts` | Queue scheduling, React snapshots, clocks, and page lifecycle |
 | `src/features/upload/task.ts` | Own task mutations and notifications; expose read-only state and progress collections |
 | `src/features/upload/engine.ts` | Single-file protocol, chunk concurrency, retries, and completion without React |

@@ -45,16 +45,22 @@ export default function ClipboardPage() {
   const [manualCopy, setManualCopy] = useState<ClipboardEntry | null>(null);
   const [previewing, setPreviewing] = useState<ClipboardEntry | null>(null);
   const [copying, setCopying] = useState(false);
+  const copyTrigger = useRef<HTMLButtonElement | null>(null);
   const copyInProgress = useRef(false);
   const operation = useRef(false);
   const byteLength = new Blob([text]).size;
   const tooLarge = byteLength > CLIPBOARD_MAX_BYTES;
+  const clipboardUnavailable = [error, backgroundError, imageSettingsError].some(
+    value => typeof value === 'object' && value.key === 'errors.CLIPBOARD_UNAVAILABLE',
+  );
+  const canCopyText = window.isSecureContext && typeof navigator.clipboard?.writeText === 'function';
+  const canCopyImage = window.isSecureContext && typeof navigator.clipboard?.write === 'function' && typeof ClipboardItem === 'function';
   const autoPaused = busy || confirming !== null || confirmingAll || copying || manualCopy !== null || previewing !== null;
   const autoRefresh = useCallback(async () => {
     if (operation.current || copyInProgress.current || window.getSelection()?.isCollapsed === false) return;
     await reload({ background: true });
   }, [reload]);
-  useAutoRefresh(autoRefresh, CLIPBOARD_REFRESH_INTERVAL_MS, !loading && !autoPaused, cancelBackground);
+  useAutoRefresh(autoRefresh, CLIPBOARD_REFRESH_INTERVAL_MS, !loading && !autoPaused && !clipboardUnavailable, cancelBackground);
   const selectManualCopy = useCallback((node: HTMLTextAreaElement | null) => {
     if (node) { node.focus(); node.select(); }
   }, []);
@@ -69,7 +75,7 @@ export default function ClipboardPage() {
     onSuccess: (result: T) => void,
     successMessage: Message,
   ) => {
-    if (operation.current) return;
+    if (operation.current || clipboardUnavailable) return;
     operation.current = true;
     cancel();
     setBusy(true);
@@ -123,7 +129,26 @@ export default function ClipboardPage() {
       setManualCopy(null);
     }, message("全部记录已删除。"));
 
-  const copy = async (entry: ClipboardEntry) => {
+  const showManualCopy = (entry: ClipboardEntry, trigger: HTMLButtonElement) => {
+    cancelBackground();
+    setNotice('');
+    copyTrigger.current = trigger;
+    setManualCopy(entry);
+  };
+
+  const closeManualCopy = () => {
+    setManualCopy(null);
+    copyTrigger.current?.focus();
+    copyTrigger.current = null;
+  };
+
+  const openImage = (entry: ClipboardEntry, trigger: HTMLButtonElement) => {
+    trigger.focus();
+    cancelBackground();
+    setPreviewing(entry);
+  };
+
+  const copy = async (entry: ClipboardEntry, trigger: HTMLButtonElement) => {
     if (copyInProgress.current) return;
     copyInProgress.current = true;
     cancelBackground();
@@ -146,7 +171,7 @@ export default function ClipboardPage() {
         setNotice(message("已复制到剪贴板。"));
       }
     } catch {
-      if (mounted.current) setManualCopy(entry);
+      if (mounted.current) showManualCopy(entry, trigger);
     } finally {
       copyInProgress.current = false;
       if (mounted.current) setCopying(false);
@@ -155,7 +180,7 @@ export default function ClipboardPage() {
 
   return (
     <main className="clipboard-page content-page" onPaste={event => {
-      if (busy) return;
+      if (busy || clipboardUnavailable) return;
       const file = Array.from(event.clipboardData.items).find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
       if (file) { event.preventDefault(); setImageFile(file); }
     }}>
@@ -170,15 +195,15 @@ export default function ClipboardPage() {
         <form className="clipboard-composer" onSubmit={event => { event.preventDefault(); void publish(); }}>
           <div className="clipboard-compose-header">
             <label htmlFor="clipboard-text">{t("输入或粘贴文本")}</label>
-            <Button type="submit" disabled={busy || (imageFile ? !imageSettings?.enabled || imageInvalid : !text.trim() || tooLarge)}>
+            <Button type="submit" disabled={busy || clipboardUnavailable || (imageFile ? !imageSettings?.enabled || imageInvalid : !text.trim() || tooLarge)}>
               <Send aria-hidden="true" />{busy ? t("处理中…") : t("发布")}
             </Button>
           </div>
-          <textarea id="clipboard-text" value={text} disabled={busy} rows={6}
+          <textarea id="clipboard-text" value={text} disabled={busy || clipboardUnavailable} rows={6}
             placeholder={t("在这里输入或粘贴文本……")} aria-describedby="clipboard-limit"
             aria-invalid={tooLarge} onChange={event => setText(event.target.value)} />
-          <ClipboardImageComposer file={imageFile} onSelect={setImageFile} busy={busy}
-            settings={imageSettings} error={imageSettingsError} invalid={imageInvalid} onRetry={() => void reloadImageSettings()} />
+          <ClipboardImageComposer file={imageFile} onSelect={setImageFile} busy={busy || clipboardUnavailable}
+            settings={imageSettings} error={clipboardUnavailable ? '' : imageSettingsError} invalid={imageInvalid} onRetry={() => void reloadImageSettings()} />
           <div className="clipboard-compose-actions">
             <p id="clipboard-limit" className={!imageFile && tooLarge ? 'clipboard-limit-error' : ''}>
               {imageFile ? t("本次发布图片，文本草稿将保留。移除图片后可发布文本。")
@@ -187,21 +212,22 @@ export default function ClipboardPage() {
           </div>
         </form>
 
-        {error && <StatusMessage tone="error">{translateMessage(error)}</StatusMessage>}
+        {clipboardUnavailable ? <StatusMessage tone="error">{t('errors.CLIPBOARD_UNAVAILABLE')}</StatusMessage>
+          : error && <StatusMessage tone="error">{translateMessage(error)}</StatusMessage>}
         {notice && <StatusMessage tone="success">{translateMessage(notice)}</StatusMessage>}
-        {manualCopy && <section className="clipboard-manual" aria-label={t("手动复制")}>
+        {manualCopy && <section key={manualCopy.id} className="clipboard-manual" aria-label={t("手动复制")}>
           {manualCopy.type === 'image' ? <>
             <p>{t("无法直接复制图片，请使用 HTTPS 或 localhost 并允许剪贴板权限；也可以打开或下载图片后手动复制。")}</p>
             <div className="clipboard-entry-actions">
-              <Button variant="outline" onClick={event => { event.currentTarget.focus(); cancelBackground(); setPreviewing(manualCopy); }}>{t("打开图片")}</Button>
+              <Button variant="outline" onClick={event => openImage(manualCopy, event.currentTarget)}>{t("打开图片")}</Button>
               <Button asChild variant="outline"><a href={`${manualCopy.image?.url}?download=1`} download><Download aria-hidden="true" />{t("下载图片")}</a></Button>
             </div>
           </> : <>
-          <label htmlFor="clipboard-manual-text">{t("无法自动复制，请复制下方已选中的文本（Ctrl+C / ⌘C，或长按复制）。")}</label>
+          <label htmlFor="clipboard-manual-text">{t('clipboard.manualInstructions')}</label>
           <textarea id="clipboard-manual-text" readOnly rows={4} value={manualCopy.text}
             ref={selectManualCopy} />
           </>}
-          <Button variant="outline" onClick={() => setManualCopy(null)}>{t("关闭")}</Button>
+          <Button variant="outline" onClick={closeManualCopy}>{t("关闭")}</Button>
         </section>}
 
         <section aria-labelledby="clipboard-history-title" aria-busy={loading}>
@@ -209,21 +235,24 @@ export default function ClipboardPage() {
             <div>
               <h2 id="clipboard-history-title">{t("最近内容")}</h2>
               <p>{t("最多保留 100 条，超出后自动淘汰最旧记录。")}</p>
-              <p>{autoPaused ? t("操作期间暂停自动更新") : t('clipboard.interval', { seconds: CLIPBOARD_REFRESH_INTERVAL_MS / 1000 })}</p>
+              {!clipboardUnavailable && <p>{autoPaused ? t("操作期间暂停自动更新") : t('clipboard.interval', { seconds: CLIPBOARD_REFRESH_INTERVAL_MS / 1000 })}</p>}
             </div>
             <div className="clipboard-entry-actions">
-              <RefreshButton loading={loading} disabled={busy} onClick={() => void refresh()} />
-              <DeleteButton all disabled={loading || busy || !entries.length}
+              <RefreshButton loading={loading} disabled={busy} onClick={() => {
+                if (imageSettingsError) void reloadImageSettings();
+                void refresh();
+              }} />
+              <DeleteButton all disabled={loading || busy || clipboardUnavailable || !entries.length}
                 onClick={() => { cancelBackground(); setConfirming(null); setConfirmingAll(true); }} />
             </div>
           </div>
-          {backgroundError && <p className="clipboard-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
-          {confirmingAll && <ConfirmPanel message={t("确定删除所有设备共享的全部记录？删除后无法恢复。")} disabled={busy || loading} onConfirm={() => void clearAll()} onCancel={() => setConfirmingAll(false)} confirmLabel={t("确认全部删除")} />}
-          {!loading && !entries.length && !error && <p className="clipboard-empty">{t("还没有共享内容，发布第一段文本吧。")}</p>}
+          {backgroundError && !clipboardUnavailable && <p className="clipboard-sync-note" role="status">{t("自动更新暂不可用，已保留当前内容，将稍后重试。")}</p>}
+          {confirmingAll && <ConfirmPanel message={t("确定删除所有设备共享的全部记录？删除后无法恢复。")} disabled={busy || loading || clipboardUnavailable} onConfirm={() => void clearAll()} onCancel={() => setConfirmingAll(false)} confirmLabel={t("确认全部删除")} />}
+          {!loading && !entries.length && !error && !clipboardUnavailable && <p className="clipboard-empty">{t("还没有共享内容，发布第一段文本吧。")}</p>}
           <ul className="clipboard-list">
             {entries.map((entry, index) => <li key={entry.id}>
               <article className="clipboard-entry" aria-label={t('clipboard.entry', { number: index + 1 })}>
-                {entry.type === 'image' && entry.image ? <button type="button" className="clipboard-image-preview" aria-label={t('preview.open', { name: t('clipboard.image', { number: index + 1 }) })} onClick={event => { event.currentTarget.focus(); cancelBackground(); setPreviewing(entry); }}>
+                {entry.type === 'image' && entry.image ? <button type="button" className="clipboard-image-preview" aria-label={t('preview.open', { name: t('clipboard.image', { number: index + 1 }) })} onClick={event => openImage(entry, event.currentTarget)}>
                   <img className="clipboard-history-image" src={`${entry.image.url}?thumbnail=1`} alt={t('clipboard.image', { number: index + 1 })} loading="lazy" decoding="async"
                     onError={event => {
                       if (event.currentTarget.getAttribute('src') !== entry.image?.url) event.currentTarget.src = entry.image!.url;
@@ -233,9 +262,14 @@ export default function ClipboardPage() {
                 <footer>
                   <Timestamp value={entry.created_at} />
                   <div className="clipboard-entry-actions">
-                    <Button variant="outline" disabled={copying} onClick={() => void copy(entry)} aria-label={t('clipboard.copy', { number: index + 1 })}><Copy aria-hidden="true" />{t("复制")}</Button>
+                    {(entry.type === 'image' ? canCopyImage : canCopyText) &&
+                      <Button variant="outline" disabled={copying} onClick={event => void copy(entry, event.currentTarget)} aria-label={t('clipboard.copy', { number: index + 1 })}><Copy aria-hidden="true" />{t("复制")}</Button>}
+                    {entry.type === 'text' && !canCopyText &&
+                      <Button variant="outline" disabled={copying} onClick={event => showManualCopy(entry, event.currentTarget)} aria-label={t('clipboard.manualCopy', { number: index + 1 })}><Copy aria-hidden="true" />{t("手动复制")}</Button>}
+                    {entry.type === 'image' && entry.image && !canCopyImage &&
+                      <Button variant="outline" onClick={event => openImage(entry, event.currentTarget)} aria-label={t('clipboard.openImage', { number: index + 1 })}>{t("打开图片")}</Button>}
                     {entry.type === 'image' && entry.image && <Button asChild variant="outline"><a href={`${entry.image.url}?download=1`} download><Download aria-hidden="true" />{t("下载图片")}</a></Button>}
-                    <DeleteAction confirming={confirming === entry.id} disabled={busy} label={t('clipboard.delete', { number: index + 1 })} confirmLabel={t('clipboard.confirmDelete', { number: index + 1 })} onRequest={() => { cancelBackground(); setConfirming(entry.id); }} onConfirm={() => void removeEntry(entry.id)} onCancel={() => setConfirming(null)} />
+                    <DeleteAction confirming={confirming === entry.id} disabled={busy || clipboardUnavailable} label={t('clipboard.delete', { number: index + 1 })} confirmLabel={t('clipboard.confirmDelete', { number: index + 1 })} onRequest={() => { cancelBackground(); setConfirming(entry.id); }} onConfirm={() => void removeEntry(entry.id)} onCancel={() => setConfirming(null)} />
                   </div>
                 </footer>
               </article>

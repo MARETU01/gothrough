@@ -27,6 +27,7 @@ export interface UploadSession {
 /** 单文件上传控制器：取消标志 + AbortController */
 export interface UploadController {
   cancelled: boolean;
+  authInterrupted?: boolean;
   /** 取消时立即中断进行中的 axios 分块请求 */
   abort: AbortController;
 }

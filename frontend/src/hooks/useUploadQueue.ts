@@ -1,7 +1,7 @@
 import { message } from '@/i18n/messages';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { UploadTask } from '@/features/upload/task';
-import { cleanupSession, stopItem, transferFile } from '@/features/upload/engine';
+import { cleanupSession, stopItem, suspendItemForAuth, transferFile, UploadMissingChunksError } from '@/features/upload/engine';
 import { apiErrorDescriptor, getErrorBody } from "@/services/errors";
 import type {
   UploadController,
@@ -20,8 +20,10 @@ import { collectDroppedFiles } from "@/utils/droppedFiles";
 export const useUploadQueue = () => {
   const itemsRef = useRef<UploadTask[]>([]);
   const globalPausedRef = useRef(false);
+  const authPaused = useRef(false);
   const mountedRef = useRef(true);
-  const runRef = useRef<{ cancelled: boolean } | null>(null);
+  const runRef = useRef<{ cancelled: boolean; discarded: boolean } | null>(null);
+  const queueGeneration = useRef(0);
   const wakeWaiters = useRef(new Set<() => void>());
   const wakeWorkers = useCallback(() => {
     for (const wake of wakeWaiters.current) wake();
@@ -74,6 +76,38 @@ export const useUploadQueue = () => {
     if (!paused) wakeWorkers();
     if (mountedRef.current) setGlobalPausedState(paused);
   }, [wakeWorkers]);
+  const suspendForAuth = useCallback(() => {
+    if (authPaused.current) return;
+    authPaused.current = true;
+    queueClockRef.current?.pause();
+    for (const item of itemsRef.current) {
+      clocksRef.current.get(item)?.pause();
+      suspendItemForAuth(item);
+    }
+  }, []);
+  const resumeAfterAuth = useCallback(() => {
+    if (!authPaused.current) return;
+    authPaused.current = false;
+    if (runRef.current && !runRef.current.cancelled && !globalPausedRef.current) queueClockRef.current?.resume();
+    wakeWorkers();
+  }, [wakeWorkers]);
+  const discardForLogout = useCallback(() => {
+    queueGeneration.current++;
+    if (runRef.current) {
+      runRef.current.cancelled = true;
+      runRef.current.discarded = true;
+    }
+    itemsRef.current.forEach(stopItem);
+    itemsRef.current = [];
+    queueClockRef.current = null;
+    authPaused.current = false;
+    setQueueElapsedMs(null);
+    setGlobalPaused(false);
+    setDragOver(false);
+    setReadingDrops(0);
+    setStatus(null);
+    refreshFileList();
+  }, [refreshFileList, setGlobalPaused]);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -142,21 +176,24 @@ export const useUploadQueue = () => {
     setStatus(null);
   };
   const handleDrop = async (data: DataTransfer) => {
+    const generation = queueGeneration.current;
     setReadingDrops(count => count + 1);
     setStatus(null);
     try {
       const files = await collectDroppedFiles(data);
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || queueGeneration.current !== generation) return;
       handleSelection(files);
       if (!files.length) setStatus({ text: message("upload.emptyFolder"), type: "error" });
     } catch (err) {
-      if (mountedRef.current) setStatus({ text: message('upload.readFolderFailed', { error: errorMessage(err) }), type: "error" });
+      if (mountedRef.current && queueGeneration.current === generation)
+        setStatus({ text: message('upload.readFolderFailed', { error: errorMessage(err) }), type: "error" });
     } finally {
-      if (mountedRef.current) setReadingDrops(count => count - 1);
+      if (mountedRef.current && queueGeneration.current === generation) setReadingDrops(count => count - 1);
     }
   };
   const uploadFileChunked = useCallback(
     async (item: UploadTask, run: { cancelled: boolean }) => {
+      const resuming = item.session !== null;
       const controller: UploadController = {
         cancelled: false,
         abort: new AbortController(),
@@ -178,19 +215,22 @@ export const useUploadQueue = () => {
         });
       } catch (err) {
         clock.pause();
-        if (!item.completionPending) {
+        const body = getErrorBody<{ code?: string }>(err);
+        const keepSession = !isStopped() && (err instanceof UploadMissingChunksError ||
+          (resuming && body?.code !== 'INVALID_SESSION'));
+        const interruptedByAuth = () => controller.authInterrupted && !isStopped();
+        if (!interruptedByAuth() && !item.completionPending && !keepSession) {
           await cleanupSession(item);
+        }
+        if (interruptedByAuth()) {
+          item.suspend();
+          return true;
         }
         if (isStopped()) item.interrupt();
         else {
-          const body = getErrorBody<{
-            error?: string;
-            missing_chunks?: number[];
-          }>(err);
-          const failure = item.completionPending ? message('upload.confirmationPending') : body?.missing_chunks
-            ? message('upload.missingChunks', { count: body.missing_chunks.length })
-            : apiErrorDescriptor(err);
-          item.fail(failure);
+          const failure = err instanceof UploadMissingChunksError ? message('upload.missingChunks', { count: err.count })
+            : item.completionPending ? message('upload.confirmationPending') : apiErrorDescriptor(err);
+          item.fail(failure, keepSession);
           if (mountedRef.current)
             setStatus({
               text: message('upload.failed', { name: item.file.name, error: failure }),
@@ -201,19 +241,20 @@ export const useUploadQueue = () => {
         clock.pause();
         item.endAttempt();
       }
+      return false;
     },
     [waitForChange],
   );
   const startUploads = useCallback(
     async (fileKey?: string) => {
-      if (runRef.current) return;
+      if (runRef.current || authPaused.current) return;
       const pending = itemsRef.current.filter(
         (i) =>
           (i.state === "pending" || i.state === "error") &&
           (fileKey === undefined || getFileKey(i.file) === fileKey),
       );
       if (!pending.length) return;
-      const run = { cancelled: false, nextFileIndex: 0 };
+      const run = { cancelled: false, discarded: false, nextFileIndex: 0 };
       queueClockRef.current = createElapsedClock();
       queueClockRef.current.resume();
       setQueueElapsedMs(0);
@@ -223,13 +264,14 @@ export const useUploadQueue = () => {
       setStatus(null);
       const worker = async () => {
         while (!run.cancelled && mountedRef.current && run.nextFileIndex < pending.length) {
-          if (globalPausedRef.current) {
-            await waitForChange();
-            continue;
-          }
           const item = pending[run.nextFileIndex++];
-          if (!itemsRef.current.includes(item)) continue;
-          await uploadFileChunked(item, run);
+          while (!run.cancelled && mountedRef.current && itemsRef.current.includes(item)) {
+            if (authPaused.current || globalPausedRef.current) {
+              await waitForChange();
+              continue;
+            }
+            if (!await uploadFileChunked(item, run)) break;
+          }
         }
       };
       try {
@@ -244,7 +286,7 @@ export const useUploadQueue = () => {
           setRunning(false);
           setCanceling(false);
         }
-        if (mountedRef.current && run.cancelled)
+        if (mountedRef.current && run.cancelled && !run.discarded)
           setStatus({ text: message('upload.canceled'), type: "success" });
       }
     },
@@ -280,6 +322,9 @@ export const useUploadQueue = () => {
       stopItem(item);
       if (item.uploadController) {
         item.markCanceling();
+      } else if (item.session && !item.completionPending && item.state !== 'success') {
+        void cleanupSession(item);
+        item.interrupt();
       }
     });
     setGlobalPaused(false);
@@ -288,7 +333,7 @@ export const useUploadQueue = () => {
   };
   const resetAll = () => {
     if (runRef.current) return;
-    itemsRef.current.forEach(item => { if (item.completionPending) void cleanupSession(item); });
+    itemsRef.current.forEach(item => { if (item.state !== 'success') void cleanupSession(item); });
     itemsRef.current = [];
     queueClockRef.current = null;
     setQueueElapsedMs(null);
@@ -306,10 +351,11 @@ export const useUploadQueue = () => {
       clocksRef.current.get(item)?.pause();
       stopItem(item);
       itemsRef.current.splice(index, 1);
-      if (item.completionPending && !item.uploadController) void cleanupSession(item);
+      if (item.session && item.state !== 'success' && !item.uploadController) void cleanupSession(item);
+      wakeWorkers();
       refreshFileList();
     },
-    [refreshFileList],
+    [refreshFileList, wakeWorkers],
   );
   const retryItem = useCallback(
     (fileKey: string) => startUploads(fileKey),
@@ -336,6 +382,9 @@ export const useUploadQueue = () => {
     cancelAll,
     resetAll,
     removeItem,
+    suspendForAuth,
+    resumeAfterAuth,
+    discardForLogout,
     handleSelection,
     handleDrop,
     readingFolders: readingDrops > 0,

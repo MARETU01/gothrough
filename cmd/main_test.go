@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -46,7 +47,11 @@ func (w *lifecycleCapture) events(t *testing.T) []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	var events []string
-	for _, line := range bytes.Split(bytes.TrimSpace(w.data.Bytes()), []byte("\n")) {
+	logs := bytes.TrimSpace(w.data.Bytes())
+	if len(logs) == 0 {
+		return nil
+	}
+	for _, line := range bytes.Split(logs, []byte("\n")) {
 		var record struct {
 			Event string `json:"event"`
 		}
@@ -143,7 +148,7 @@ func TestServerShutdownLogsAndSessionCleanup(t *testing.T) {
 	}
 }
 
-func TestBindFailureStopsBackgroundCleanup(t *testing.T) {
+func TestBindFailurePreservesTemporaryUploads(t *testing.T) {
 	preserveLogger(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -151,6 +156,10 @@ func TestBindFailureStopsBackgroundCleanup(t *testing.T) {
 	}
 	defer listener.Close()
 	settings := &config.Settings{Server: config.ServerSettings{Host: "127.0.0.1", Port: listener.Addr().(*net.TCPAddr).Port}, Storage: config.StorageSettings{DataDir: t.TempDir()}, Logging: config.DefaultLoggingSettings()}
+	session := filepath.Join(settings.Storage.DataDir, "temp_uploads", "active-session")
+	if err := os.MkdirAll(session, 0700); err != nil {
+		t.Fatal(err)
+	}
 	capture := &lifecycleCapture{started: make(chan string, 1)}
 	settings.Logging.Format = "json"
 	logger, _, err := logging.New(settings.Logging, capture)
@@ -173,6 +182,101 @@ func TestBindFailureStopsBackgroundCleanup(t *testing.T) {
 	for _, event := range capture.events(t) {
 		if event == "server.started" {
 			t.Fatal("logged startup before successful bind")
+		}
+	}
+	if _, err := os.Stat(session); err != nil {
+		t.Fatalf("bind failure touched a temporary upload: %v", err)
+	}
+}
+
+func TestClipboardFailureKeepsFileServiceAvailable(t *testing.T) {
+	preserveLogger(t)
+	dir := t.TempDir()
+	clipboardDir := filepath.Join(dir, "clipboard")
+	images := filepath.Join(clipboardDir, "images")
+	if err := os.MkdirAll(images, 0700); err != nil {
+		t.Fatal(err)
+	}
+	history := filepath.Join(clipboardDir, "history.json")
+	orphan := filepath.Join(images, ".image-review.tmp")
+	for _, name := range []string{history, orphan} {
+		if err := os.WriteFile(name, []byte("invalid history fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	settings := &config.Settings{Server: config.ServerSettings{Host: "127.0.0.1"}, Storage: config.StorageSettings{DataDir: dir}, Logging: config.DefaultLoggingSettings()}
+	capture := &lifecycleCapture{started: make(chan string, 1)}
+	settings.Logging.Format = "json"
+	logger, _, err := logging.New(settings.Logging, capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slog.SetDefault(logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var serveErr error
+	go func() {
+		defer close(done)
+		serveErr = serve(ctx, settings)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+			if serveErr != nil {
+				t.Error(serveErr)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("server did not stop")
+		}
+	})
+	var address string
+	select {
+	case address = <-capture.started:
+	case <-done:
+		t.Fatalf("server did not start: %v", serveErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not start")
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	for _, test := range []struct {
+		method string
+		path   string
+		status int
+	}{
+		{http.MethodGet, "/api/files", http.StatusOK},
+		{http.MethodGet, "/api/clipboard", http.StatusServiceUnavailable},
+		{http.MethodPost, "/api/clipboard", http.StatusServiceUnavailable},
+		{http.MethodDelete, "/api/clipboard", http.StatusServiceUnavailable},
+		{http.MethodGet, "/api/clipboard/image-config", http.StatusServiceUnavailable},
+		{http.MethodGet, "/api/clipboard/fixture/image", http.StatusServiceUnavailable},
+	} {
+		req, err := http.NewRequest(test.method, "http://"+address+test.path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Close = true
+		response, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode == http.StatusServiceUnavailable {
+			var body struct{ Code string }
+			if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.Code != "CLIPBOARD_UNAVAILABLE" {
+				_ = response.Body.Close()
+				t.Fatalf("unexpected degraded response: %v, %v", body, err)
+			}
+		}
+		_, _ = io.Copy(io.Discard, response.Body)
+		_ = response.Body.Close()
+		if response.StatusCode != test.status {
+			t.Errorf("%s %s: got %d, want %d", test.method, test.path, response.StatusCode, test.status)
+		}
+	}
+	for _, name := range []string{history, orphan} {
+		data, err := os.ReadFile(name)
+		if err != nil || string(data) != "invalid history fixture" {
+			t.Fatalf("degraded startup changed clipboard data: %q, %v", data, err)
 		}
 	}
 }
